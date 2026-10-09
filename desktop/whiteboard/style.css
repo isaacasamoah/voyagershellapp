@@ -1,0 +1,168 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #f6f4ee;
+  color: #273d3b;
+  font:
+    15px system-ui,
+    sans-serif;
+}
+header {
+  padding: 28px 36px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+h1 {
+  font-size: 28px;
+  letter-spacing: -1px;
+  margin: 7px 0;
+}
+.eyebrow {
+  font: 11px monospace;
+  letter-spacing: 2px;
+  color: #5d7771;
+}
+.badge {
+  padding: 8px 12px;
+  border: 1px solid #ccd5cc;
+  border-radius: 18px;
+  font-size: 12px;
+}
+main {
+  padding: 0 36px 24px;
+}
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+button,
+.file {
+  border: 1px solid #ccd5cc;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fffdf7;
+  color: #273d3b;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover,
+.file:hover {
+  background: #e6eee5;
+}
+button[aria-pressed='true'] {
+  background: #285d51;
+  color: white;
+  border-color: #285d51;
+}
+button:focus-visible,
+input:focus-visible,
+.file:focus-within {
+  outline: 3px solid #db8b43;
+  outline-offset: 2px;
+}
+.toolbar label {
+  margin-left: auto;
+  font-size: 12px;
+}
+input {
+  border: 1px solid #ccd5cc;
+  padding: 10px;
+  border-radius: 8px;
+  font: inherit;
+  background: #fffdf7;
+  max-width: 190px;
+}
+.sheet {
+  background: #fffdf7;
+  border: 1px solid #ccd5cc;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px #243a3210;
+}
+svg {
+  display: block;
+  width: 100%;
+  max-height: 64vh;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+svg text {
+  font: 18px system-ui;
+  fill: #273d3b;
+}
+svg [data-node] {
+  cursor: pointer;
+}
+.status {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+  font-size: 12px;
+  color: #5c716c;
+}
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #dce1d7;
+  padding-top: 18px;
+}
+footer p,
+.note {
+  color: #5c716c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+footer p {
+  margin: 4px 0;
+}
+.exports {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.file {
+  position: relative;
+  overflow: hidden;
+}
+.file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  cursor: pointer;
+}
+.note {
+  max-width: 900px;
+}
+.sheet:fullscreen {
+  display: grid;
+  place-items: center;
+  background: #fffdf7;
+}
+.sheet:fullscreen svg {
+  max-height: 100vh;
+  height: 100vh;
+}
+@media (max-width: 800px) {
+  header,
+  main {
+    padding: 16px;
+  }
+  footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .badge {
+    display: none;
+  }
+}
