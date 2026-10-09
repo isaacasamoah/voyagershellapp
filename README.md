@@ -26,7 +26,11 @@ Persistence initially means surviving client disconnect. It does not mean preser
 
 ## Status
 
-Two Linux mechanism probes run: cooperative PTY handoff and separate synthetic event capture. Eight black-box fixture tests pass on Fedora 43. There is no installed service, native agent adapter, Electron integration or knowledge graph yet. The receiver forwards PTY output for inspection; it is not a reconnectable interactive terminal client.
+A minimal Rust service now registers an existing Codex app-server thread, sends messages and records future conversation/lifecycle events in a private SQLite database. A CLI watcher displays them as they arrive. Codex continues owning its session; Voyager does not take over its process or terminal.
+
+Read [running the service](docs/service.md) for the commands and current limits. The current adapter needs an already-running Codex app server reachable over a local Unix socket. A standalone CLI without that connection is not supported yet. There is no Electron client or knowledge graph in this slice.
+
+The earlier [mechanism experiments](docs/experiments.md) remain reproducible: cooperative PTY handoff and independent synthetic capture. They do not establish arbitrary live-terminal adoption.
 
 ## Try the experiments
 

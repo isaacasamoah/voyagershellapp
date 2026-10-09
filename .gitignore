@@ -1,5 +1,6 @@
 /target/
 /.state/
+__pycache__/
 /.env
 /.env.*
 *.log
