@@ -7,6 +7,13 @@ let audio;
 let lastRows;
 let creating = false;
 const pendingActions = new Map();
+api.onDrawingCommand((command) =>
+  window.dispatchEvent(new CustomEvent('whiteboard-command', { detail: command })),
+);
+window.addEventListener('whiteboard-report', (event) => api.drawingReport(event.detail));
+window.addEventListener('keydown', (event) => {
+  if (view === 'panel' && event.key === 'Escape') api.whiteboard({ action: 'hide' });
+});
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -58,6 +65,36 @@ api.onState((value) => {
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
   if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
+  const drawing = value.whiteboard;
+  $('wb-toggle').setAttribute('aria-expanded', String(value.whiteboardExpanded));
+  $('wb-tools').hidden = !value.whiteboardExpanded;
+  if (drawing) {
+    document.body.dataset.drawing = String(drawing.active);
+    $('drawing').hidden = !drawing.active;
+    const bounds = drawing.sidebar;
+    Object.assign(
+      $('voyager-ui').style,
+      drawing.active
+        ? {
+            left: `${bounds.x}px`,
+            top: `${bounds.y}px`,
+            width: `${bounds.width}px`,
+            height: `${bounds.height}px`,
+          }
+        : { left: '0', top: '0', width: '100%', height: '100%' },
+    );
+    for (const button of document.querySelectorAll('[data-drawing-tool]'))
+      button.setAttribute(
+        'aria-pressed',
+        String(drawing.active && drawing.tool === button.dataset.drawingTool),
+      );
+    $('wb-delete').disabled = !drawing.selectedCount;
+    $('wb-undo').disabled = !drawing.canUndo;
+    $('wb-hide').disabled = !drawing.active;
+    $('wb-status').textContent = drawing.active
+      ? 'Escape or Done returns to your apps.'
+      : 'Draw and type on your desktop.';
+  }
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
   if (rows === lastRows) return;
   lastRows = rows;
@@ -202,6 +239,17 @@ $('avatar').addEventListener('keydown', (event) => {
   }
 });
 $('quit').onclick = () => api.quit();
+$('wb-toggle').onclick = () =>
+  api.expandWhiteboard($('wb-toggle').getAttribute('aria-expanded') !== 'true');
+for (const button of document.querySelectorAll('[data-drawing-tool]'))
+  button.onclick = () => api.whiteboard({ action: 'tool', tool: button.dataset.drawingTool });
+for (const [id, action] of Object.entries({
+  'wb-hide': 'hide',
+  'wb-undo': 'undo',
+  'wb-clear': 'clear',
+  'wb-delete': 'delete',
+}))
+  $(id).onclick = () => api.whiteboard({ action });
 api.ready();
 
 function showError(message) {

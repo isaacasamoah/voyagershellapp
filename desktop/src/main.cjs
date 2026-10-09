@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
+const { createWhiteboard } = require('./whiteboard.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
@@ -25,7 +26,14 @@ const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
 app.commandLine.appendSwitch('ozone-platform', 'x11');
-app.setPath('userData', path.join(stateDir, 'desktop-profile'));
+const whiteboardProof = process.argv.includes('--whiteboard-proof');
+app.setPath(
+  'userData',
+  path.join(
+    stateDir,
+    whiteboardProof ? 'desktop-whiteboard-proof-profile' : 'desktop-whiteboard-glass-profile',
+  ),
+);
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 
@@ -56,6 +64,9 @@ let dockHovered = false,
   panelHovered = false,
   hoverBusy = false,
   lastHoverProbe = 0;
+let whiteboard,
+  whiteboardState = null,
+  whiteboardExpanded = false;
 
 async function rpc(...args) {
   try {
@@ -175,6 +186,8 @@ function sendState() {
   syncLayer();
   const state = {
     expanded,
+    whiteboard: whiteboardState,
+    whiteboardExpanded,
     seated,
     dockHovered,
     panelHovered,
@@ -212,12 +225,13 @@ function setBoundsIfChanged(client, bounds) {
   if (Object.keys(bounds).some((key) => previous[key] !== bounds[key])) client.setBounds(bounds);
 }
 function placePanel() {
+  if (whiteboardState?.active) return;
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
   const height = Math.min(
     area.height,
-    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
+    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0) + 44 + (whiteboardExpanded ? 110 : 0),
   );
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
@@ -237,6 +251,7 @@ function setSeated(value) {
   if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
 }
 async function setExpanded(value) {
+  if (!value) whiteboard?.command({ action: 'hide' });
   expanded = value;
   if (value) {
     if (binding) {
@@ -334,6 +349,7 @@ function advanceDrag(p, now = performance.now()) {
     sendState();
   }
   if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
+    whiteboard?.command({ action: 'hide' });
     dragging.moved = true;
     const wasAttached = seated || Boolean(binding);
     setSeated(false);
@@ -459,7 +475,7 @@ async function dock(id) {
   return true;
 }
 function follow() {
-  if (!binding || dragging || seated) return;
+  if (!binding || dragging || seated || whiteboardState?.active) return;
   const w = binding.window;
   const anchor = screen.screenToDipPoint({
     x: Math.round(w.x + w.width / 2),
@@ -567,10 +583,24 @@ app.whenReady().then(async () => {
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('move', () => {
-    if (!expanded || !seated || dragging) return;
+    if (!expanded || !seated || dragging || whiteboardState?.active) return;
     const panel = panelWin.getBounds();
     setBoundsIfChanged(avatarWin, { x: panel.x + 100, y: panel.y + 36 });
   });
+  whiteboard = createWhiteboard(
+    panelWin,
+    (bounds, active) => {
+      const avatarBounds = avatarWin.getBounds();
+      avatarWin.setParentWindow(null);
+      panelWin.setBounds(bounds);
+      avatarWin.setBounds(avatarBounds);
+      avatarWin.setParentWindow(active || seated ? panelWin : null);
+    },
+    (value) => {
+      whiteboardState = value;
+      sendState();
+    },
+  );
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
@@ -586,6 +616,14 @@ app.whenReady().then(async () => {
       }
     });
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('whiteboard', [panelWin], (message) => whiteboard.command(message));
+  handle('whiteboard-expand', [panelWin], (value) => {
+    if (typeof value !== 'boolean') throw Error('Invalid whiteboard expansion');
+    if (!value) whiteboard.command({ action: 'hide' });
+    whiteboardExpanded = value;
+    placePanel();
+    sendState();
+  });
   handle('ready', [avatarWin, panelWin], sendState);
   handle('select', [panelWin], (id) => {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown session');
@@ -646,6 +684,7 @@ app.whenReady().then(async () => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
+    whiteboard.command({ action: 'hide' });
     dragging = {
       x,
       y,
@@ -737,6 +776,22 @@ app.whenReady().then(async () => {
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
+  if (whiteboardProof) {
+    require('../test/whiteboard-proof.cjs')
+      .run({
+        win: panelWin,
+        avatarWin,
+        whiteboard,
+        setExpanded,
+        rpc,
+        inventory,
+      })
+      .then(() => app.quit())
+      .catch((error) => {
+        console.error(error);
+        app.exit(1);
+      });
+  }
   if (
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||

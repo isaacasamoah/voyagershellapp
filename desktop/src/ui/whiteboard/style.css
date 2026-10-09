@@ -1,0 +1,55 @@
+#board {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+#board [data-node] {
+  cursor: pointer;
+}
+#hint {
+  position: fixed;
+  left: 24px;
+  bottom: 22px;
+  padding: 9px 14px;
+  border: 1px solid #ffffff40;
+  border-radius: 10px;
+  color: #eef7f3;
+  background: #16202cee;
+  font: 12px system-ui;
+  pointer-events: none;
+}
+
+#editor {
+  position: absolute;
+  box-sizing: border-box;
+  border: 3px solid #56c5ff;
+  border-radius: 12px;
+  background: #eef3e8;
+  color: #273d3b;
+  font: 18px sans-serif;
+  text-align: center;
+  z-index: 2;
+}
+#editor[data-kind='text'] {
+  background: transparent;
+  color: #fffdf7;
+  text-shadow:
+    -1px -1px #183c34,
+    1px -1px #183c34,
+    -1px 1px #183c34,
+    1px 1px #183c34;
+}
+[data-resize='nw'],
+[data-resize='se'] {
+  cursor: nwse-resize;
+}
+[data-resize='ne'],
+[data-resize='sw'] {
+  cursor: nesw-resize;
+}
+[hidden] {
+  display: none !important;
+}

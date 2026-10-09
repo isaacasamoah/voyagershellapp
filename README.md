@@ -28,6 +28,11 @@ process. Persistence covers client disconnection, not daemon crashes or reboots.
 Captain/crew authority, supervisor priority, automatic native voice, knowledge
 extraction and shared graphs are later work. Voyager is an experimental prototype.
 
+The [desktop whiteboard experiment](docs/whiteboard.md) adds collapsible drawing
+controls to the glass panel, with direct text editing and group selection. Agent
+MCP tools and board persistence are still planned.
+
+
 ## Try it
 
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
