@@ -30,9 +30,9 @@ A minimal Rust service now registers an existing Codex app-server thread, launch
 
 Read [running the service](docs/service.md) and [the worker experiment](docs/workers.md) for commands and measured limits. A CLI watcher offers JSONL or readable You/Agent output. Registering an existing lead requires its app server's local Unix socket; arbitrary standalone CLI adoption remains unsupported.
 
-The [desktop experiment](docs/desktop.md) adds the existing astronaut design and a
-live status panel. Its first window binding is deliberately narrow: dedicated
-Ghostty XWayland windows opened for an already registered worker. It does not yet
+The [desktop experiment](docs/desktop.md) adds the astronaut, a compact glass
+panel and plain agent connection status. It recognises already-open dedicated
+Ghostty XWayland windows for a registered worker by native process/session identity. It does not yet
 attach arbitrary existing terminals, support native Wayland docking, or build a
 knowledge graph.
 

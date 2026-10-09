@@ -1,8 +1,8 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
-const { execFile, spawn } = require('node:child_process');
+const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { processIdentity, directChildren, resolveWindow, windowAt } = require('./binding.cjs');
+const { processIdentity, identifyTerminal, resolveWindow, windowAt } = require('./binding.cjs');
 const exec = promisify(execFile);
 const root = path.resolve(__dirname, '..');
 const stateDir = process.env.VOYAGER_STATE;
@@ -10,6 +10,9 @@ if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
 const binary = path.join(root, 'target/debug/voyager');
 const probe = path.join(root, 'target/debug/voyager-windows');
+const avatarSize = 104,
+  margin = 8,
+  collapsedSize = avatarSize + margin * 2;
 // The first platform adapter is explicitly XWayland; native Wayland needs GNOME.
 app.commandLine.appendSwitch('ozone-platform', 'x11');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
@@ -23,17 +26,14 @@ let win,
   dragging = null,
   binding = null;
 let sessions = [],
-  events = [],
-  cursor = 0,
   selected = null,
   windows = [],
   records = [];
 let service = null,
   serviceError = 'Connecting…',
   platformError = null,
-  notice = 'Click for sessions · drag to dock';
-let busy = false,
-  opening = false;
+  dockError = '';
+let busy = false;
 
 async function rpc(...args) {
   const result = await exec(binary, ['--state', stateDir, ...args], {
@@ -57,42 +57,58 @@ async function identities() {
   }
   return result;
 }
+async function discoverTerminals() {
+  const found = [];
+  for (const session of sessions.filter(
+    (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
+  )) {
+    const info = await rpc('attach-info', session.id);
+    for (const pid of new Set(windows.map((w) => w.pid))) {
+      try {
+        const record = await identifyTerminal(pid, session.id, info);
+        if (record) found.push(record);
+      } catch {
+        /* Window or native client exited during inventory. */
+      }
+    }
+  }
+  records = found;
+}
 function sendState() {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('state', {
     expanded,
     dragging: Boolean(dragging?.moved),
     docked: binding?.session.id ?? null,
-    sessions: sessions.map(({ id, native_thread_id, cwd, ownership, capture, worker_state }) => ({
+    sessions: sessions.map(({ id, cwd, ownership, capture, worker_state }) => ({
       id,
-      native_thread_id,
       cwd,
       ownership,
       capture,
       worker_state,
     })),
-    events: events.filter((e) => e.session_id === selected).slice(-16),
     service,
     serviceError,
     platformError,
-    notice,
+    dockError,
     selected,
-    opening,
-    targets: windows
-      .filter((w) => w.visible && records.some((r) => r.pid === w.pid))
-      .map((w) => ({ id: w.id, title: w.title })),
   });
 }
 function avatarPosition() {
   const b = win.getBounds();
-  return { x: b.x + b.width - 144, y: b.y + 8 };
+  return { x: b.x + (b.width - avatarSize) / 2, y: b.y + margin };
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
-  const width = expanded ? 390 : 144,
-    height = expanded ? 580 : 144;
-  const left = Math.max(area.x, Math.min(area.x + area.width - width, x - width + 144));
-  const top = Math.max(area.y, Math.min(area.y + area.height - height, y - 8));
+  const width = expanded ? 320 : collapsedSize,
+    height = expanded
+      ? Math.min(area.height, 192 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0))
+      : collapsedSize;
+  const left = Math.max(
+    area.x,
+    Math.min(area.x + area.width - width, x - (width - avatarSize) / 2),
+  );
+  const top = Math.max(area.y, Math.min(area.y + area.height - height, y - margin));
   win.setBounds({ x: Math.round(left), y: Math.round(top), width, height });
 }
 function setExpanded(value) {
@@ -104,12 +120,12 @@ function setExpanded(value) {
 function park() {
   const area = screen.getPrimaryDisplay().workArea;
   expanded = false;
-  placeAvatar(area.x + area.width - 166, area.y + 28);
+  placeAvatar(area.x + area.width - avatarSize - 24, area.y + 28);
   sendState();
 }
-function undock(message = 'Undocked · service and agents keep running') {
+function undock(message = '') {
   binding = null;
-  notice = message;
+  dockError = message;
   sendState();
 }
 async function dock(id) {
@@ -117,6 +133,7 @@ async function dock(id) {
   windows = await inventory();
   // Fresh service acknowledgement and fresh process/window identities before joining.
   sessions = await rpc('list');
+  await discoverTerminals();
   const result = resolveWindow(
     windows.find((w) => w.id === id),
     windows,
@@ -131,7 +148,7 @@ async function dock(id) {
   }
   binding = result;
   selected = result.session.id;
-  notice = 'Docked to the window opened for this worker';
+  dockError = '';
   follow();
   sendState();
   return true;
@@ -143,33 +160,29 @@ function follow() {
     x: w.x + w.width,
     y: Math.round(w.y + w.height * 0.65),
   });
-  placeAvatar(anchor.x - 144, anchor.y - 64);
+  placeAvatar(anchor.x - avatarSize - margin, anchor.y - avatarSize / 2);
 }
 async function refresh() {
   if (busy) return;
   busy = true;
   try {
-    const [nextService, nextSessions, page] = await Promise.all([
-      rpc('status'),
-      rpc('list'),
-      rpc('events', String(cursor)),
-    ]);
+    const [nextService, nextSessions] = await Promise.all([rpc('status'), rpc('list')]);
     service = nextService;
     sessions = nextSessions;
     serviceError = null;
-    events = [...events, ...page.events].slice(-400);
-    cursor = page.cursor;
     if (!selected)
       selected = sessions.find((s) => s.ownership === 'managed')?.id ?? sessions[0]?.id ?? null;
   } catch {
-    serviceError = 'Service unreachable · displayed sessions may be stale';
+    serviceError = 'Voyager is offline. Your agents may still be running.';
   }
   try {
     windows = await inventory();
+    if (!serviceError) await discoverTerminals();
+    else records = [];
     platformError = null;
   } catch {
     windows = [];
-    platformError = 'Window connection unavailable · this demo requires XWayland';
+    platformError = 'Docking isn’t available on this desktop right now.';
   }
   if (binding) {
     const result = resolveWindow(
@@ -186,71 +199,17 @@ async function refresh() {
     }
   }
   busy = false;
-  sendState();
-}
-async function openTerminal(sessionId) {
-  if (opening) throw Error('A terminal is already opening');
-  if (!sessions.some((s) => s.id === sessionId && s.ownership === 'managed'))
-    throw Error('This first demo opens only Voyager-managed worker terminals');
-  opening = true;
-  sendState();
-  try {
-    const info = await rpc('attach-info', sessionId);
-    const child = spawn(
-      '/usr/bin/ghostty',
-      [
-        '--gtk-single-instance=false',
-        '--title=Voyager terminal',
-        '-e',
-        binary,
-        '--state',
-        stateDir,
-        'attach',
-        sessionId,
-      ],
-      { env: { ...process.env, GDK_BACKEND: 'x11' }, detached: true, stdio: 'ignore' },
-    );
-    await new Promise((resolve, reject) => {
-      child.once('spawn', resolve);
-      child.once('error', reject);
-    });
-    child.unref();
-    const terminal = await processIdentity(child.pid);
-    // Bind only the direct native child created by our exact attach command.
-    // Neither title nor a nearest-ancestor guess is used.
-    for (let n = 0; n < 60; n++) {
-      const children = await directChildren(child.pid);
-      for (const pid of children) {
-        let frontend;
-        try {
-          frontend = await processIdentity(pid);
-        } catch {
-          continue;
-        }
-        if (
-          frontend.argv[0] !== info.executable ||
-          JSON.stringify(frontend.argv.slice(1)) !== JSON.stringify(info.args)
-        )
-          continue;
-        records.push({ ...terminal, frontend, sessionId, nativeId: info.native_thread_id });
-        selected = sessionId;
-        notice = 'Terminal ready · drag the avatar onto it';
-        return { terminalPid: child.pid, frontendPid: pid, sessionId };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw Error('Opened terminal could not be verified; it remains unbound');
-  } finally {
-    opening = false;
-    sendState();
+  if (expanded && !dragging) {
+    const p = avatarPosition();
+    placeAvatar(p.x, p.y);
   }
+  sendState();
 }
-
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
   win = new BrowserWindow({
-    width: 144,
-    height: 144,
+    width: collapsedSize,
+    height: collapsedSize,
     frame: false,
     transparent: true,
     resizable: false,
@@ -276,7 +235,7 @@ app.whenReady().then(async () => {
       try {
         return await fn(...args);
       } catch (error) {
-        notice = error.message;
+        dockError = 'Couldn’t connect to this terminal.';
         sendState();
         return { error: error.message };
       }
@@ -289,11 +248,9 @@ app.whenReady().then(async () => {
     selected = id;
     sendState();
   });
-  handle('open-terminal', openTerminal);
-  handle('dock', (id) => dock(Number(id)));
   handle('quit-ui', () => app.quit());
   handle('begin-drag', (x, y) => {
-    if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > 144 || y > 144)
+    if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
     dragging = {
       x,
@@ -327,7 +284,7 @@ app.whenReady().then(async () => {
     const target = windowAt(windows, point, process.pid);
     if (target) await dock(target.id);
     else {
-      undock('No supported window here · work continues');
+      undock();
     }
     sendState();
   });
@@ -335,6 +292,7 @@ app.whenReady().then(async () => {
   park();
   win.showInactive();
   await refresh();
+  if (process.argv.includes('--expanded')) setExpanded(true);
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(() => {
     if (!dragging) return;
@@ -343,7 +301,7 @@ app.whenReady().then(async () => {
       dragging.moved = true;
       binding = null;
       expanded = false;
-      notice = 'Release over a verified terminal';
+      dockError = '';
       sendState();
     }
     if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
@@ -355,12 +313,11 @@ app.whenReady().then(async () => {
         win,
         rpc,
         refresh,
-        openTerminal,
         dock,
         undock,
         setExpanded,
         park,
-        getState: () => ({ sessions, events, cursor, windows, records, binding, serviceError }),
+        getState: () => ({ sessions, windows, records, binding, serviceError }),
         stateDir,
       })
       .catch((error) => {
