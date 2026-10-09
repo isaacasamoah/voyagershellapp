@@ -16,8 +16,10 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  -webkit-app-region: no-drag;
 }
-button:focus-visible {
+button:focus-visible,
+.avatar:active {
   outline: 2px solid #bbd7ff;
   outline-offset: 2px;
 }
@@ -34,6 +36,8 @@ body[data-view='panel'] #avatar {
 }
 .avatar,
 #panel {
+  -webkit-app-region: drag;
+  user-select: none;
   border: 1px solid #ffffff9c;
   background: linear-gradient(145deg, #f9fdffba, #eaf6ff80 50%, #f4fbff9c);
   box-shadow:

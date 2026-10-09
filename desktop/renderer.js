@@ -92,11 +92,13 @@ $('avatar').addEventListener('pointerup', (event) => {
   if (!pointer) return;
   pointer = false;
   $('avatar').releasePointerCapture(event.pointerId);
+  $('avatar').blur();
   api.endDrag();
 });
 $('avatar').addEventListener('pointercancel', () => {
   if (!pointer) return;
   pointer = false;
+  $('avatar').blur();
   api.cancelDrag();
 });
 $('avatar').addEventListener('keydown', (event) => {
@@ -106,6 +108,7 @@ $('avatar').addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape' && pointer) {
     pointer = false;
+    $('avatar').blur();
     api.cancelDrag();
   }
 });

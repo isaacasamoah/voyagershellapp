@@ -88,6 +88,10 @@ exports.run = async ({
     window.voyager.onUndock(() => window.undockCount++);
   `);
   const soundCount = () => avatarWin.webContents.executeJavaScript('window.undockCount');
+  const outline = () =>
+    avatarWin.webContents.executeJavaScript(
+      "getComputedStyle(document.getElementById('avatar')).outlineStyle",
+    );
   const clickAvatar = async () => {
     await pointer('mouseDown');
     await delay(40);
@@ -105,6 +109,7 @@ exports.run = async ({
     'Toggling never resizes the avatar window',
   );
   assert.equal(await soundCount(), 0, 'Clicking is silent');
+  assert.equal(await outline(), 'none', 'A released click must not leave a focus ring');
   receipts.push('Clicks toggled the separate panel without resizing the avatar');
 
   setExpanded(true);
@@ -112,6 +117,7 @@ exports.run = async ({
   const panelBefore = panelWin.getBounds();
   await pointer('mouseDown');
   await delay(450);
+  assert.notEqual(await outline(), 'none', 'Holding highlights the astronaut');
   assert(panelWin.isVisible(), 'Holding must leave the panel visible');
   assert(getState().seated, 'Holding alone must not lift the astronaut');
   assert.equal(getState().binding?.session.id, worker.id);
@@ -119,6 +125,7 @@ exports.run = async ({
   await delay(100);
   assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
   assert.equal(await soundCount(), 0, 'A stationary hold is silent');
+  assert.equal(await outline(), 'none', 'Releasing the hold clears its highlight');
 
   await pointer('mouseDown');
   await delay(50);
@@ -134,11 +141,23 @@ exports.run = async ({
     'The panel stays put when the astronaut leaves',
   );
   assert.equal(await soundCount(), 1, 'Exactly one undock cue is emitted per departure');
+  // Settle the synthetic pointer at the actual cursor before moving the panel independently.
+  advanceDrag(start);
+  await delay(50);
+  const detachedAvatar = avatarWin.getBounds();
+  panelWin.setPosition(panelBefore.x - 24, panelBefore.y + 24);
+  await delay(100);
+  assert.deepEqual(
+    avatarWin.getBounds(),
+    detachedAvatar,
+    'Moving the panel leaves a detached avatar alone',
+  );
   avatarWin.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   avatarWin.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await delay(150);
   await pointer('mouseUp');
   assert(getState().seated && panelWin.isVisible());
+  assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
   assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
   receipts.push(
     'Hold stayed seated and silent; movement left the panel in place and cued once; Escape restored',
@@ -147,8 +166,17 @@ exports.run = async ({
   undock();
   park();
   setExpanded(true);
-  await avatarWin.webContents.executeJavaScript('document.activeElement?.blur()');
   await delay(350);
+  const beforeMove = panelWin.getBounds();
+  panelWin.setPosition(beforeMove.x - 24, beforeMove.y + 24);
+  await delay(100);
+  await refresh();
+  const afterMove = panelWin.getBounds();
+  assert.equal(afterMove.x, beforeMove.x - 24, 'Refresh must not undo a panel move');
+  assert.equal(afterMove.y, beforeMove.y + 24);
+  assert.equal(avatarWin.getBounds().x, afterMove.x + 100);
+  assert.equal(avatarWin.getBounds().y, afterMove.y + 36);
+  receipts.push('Panel movement carried a seated astronaut and left a detached one independent');
   const ui = await panelWin.webContents.executeJavaScript(`({
     text:document.body.innerText,
     hasEvents:Boolean(document.getElementById('events')),

@@ -275,6 +275,11 @@ app.whenReady().then(async () => {
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
   panelWin.on('focus', () => avatarWin.moveTop());
+  panelWin.on('move', () => {
+    if (!expanded || !seated || dragging) return;
+    const panel = panelWin.getBounds();
+    setBoundsIfChanged(avatarWin, { x: panel.x + 100, y: panel.y + 36 });
+  });
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))

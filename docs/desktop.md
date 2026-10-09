@@ -9,6 +9,8 @@ The seated avatar has no separate background or circular rim.
 Avatar and panel share the same translucent material.
 The floating avatar keeps its circular highlights without an outer shadow;
 the transparent native window also disables its shadow.
+Drag the panel background to move it around the screen. A seated astronaut moves
+with it; a detached astronaut stays independent. Buttons remain clickable.
 
 The panel shows **Online / Offline**, agent/project names and connection status.
 It grows to fit the current list, within the display height. No event feed,
@@ -47,6 +49,7 @@ change those permissions. `npm start -- --expanded` opens the panel immediately.
    panel visible; moving lifts it out with one short undock tone. The panel stays
    where it was. A quick click opens or closes the panel; releasing a stationary
    hold (350 ms or longer) does neither. Escape during the gesture puts it back.
+   The outline appears while pressed and clears on release or cancellation.
    Drag the avatar onto that terminal. The app matches a known worker session,
    then follows its window. An unrelated window with the same title is refused.
 4. Drag away or choose Detach. Quit with × when finished. The service and native
@@ -115,8 +118,8 @@ fit without scrolling, and internal IDs/event feed were absent. The updated
 gesture keeps the panel visible during a hold; movement detaches the avatar and
 Escape restores the prior attachment. The final pointer-use preview has a
 continuous curved glass panel with
-no separate banner fill or seated-avatar rim; keyboard focus still has a visible
-outline.
+no separate banner fill or seated-avatar rim. Pointer highlights clear on release;
+keyboard navigation still has a visible focus outline.
 
 Verdict: **surface** for physical drag and final desktop appearance. Renderer
 input and programmatic window matching do not prove the compositor delivers a
