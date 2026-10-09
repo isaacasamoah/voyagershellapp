@@ -6,7 +6,6 @@ let canvasSize = { width: innerWidth, height: innerHeight };
 let board = emptyBoard(),
   history = [],
   tool = 'pen',
-  label = 'An idea',
   gesture = null,
   from = null;
 let nodes = new Set(),
@@ -111,6 +110,7 @@ function render() {
         'paint-order': 'stroke',
         'font-size': 18,
         'font-family': 'sans-serif',
+        visibility: editing?.id === n.id ? 'hidden' : 'visible',
       },
       n.label,
     );
@@ -165,7 +165,6 @@ function render() {
         strokes: board.strokes.length,
         canUndo: history.length > 0,
         selectedCount: count(),
-        selectedLabel: single()?.label ?? null,
       },
     }),
   );
@@ -183,18 +182,44 @@ function cancelGesture() {
 }
 function commitEditor() {
   if (!editing) return;
-  const n = board.nodes.find((n) => n.id === editing);
+  const n = board.nodes.find((n) => n.id === editing.id);
+  const created = editing.created;
   editing = null;
   editor.hidden = true;
   if (n && n.label !== editor.value) {
-    checkpoint();
+    if (!created) checkpoint();
     n.label = editor.value;
-    label = n.label;
   }
   render();
 }
+function startEditor(id, created = false) {
+  commitEditor();
+  cancelGesture();
+  const n = board.nodes.find((n) => n.id === id);
+  if (!n) return;
+  clearSelection();
+  nodes.add(id);
+  editing = { id, created };
+  editor.value = n.label;
+  editor.placeholder = 'Type here…';
+  editor.dataset.kind = n.kind;
+  editor.hidden = false;
+  Object.assign(editor.style, {
+    left: `${n.x - n.width / 2}px`,
+    top: `${n.y - n.height / 2}px`,
+    width: `${n.width}px`,
+    height: `${n.height}px`,
+  });
+  render();
+  editor.focus();
+  editor.select();
+  hint('Type directly here · Enter or click outside to finish · double-click to edit again');
+}
 window.whiteboard = {
-  snapshot: () => structuredClone(board),
+  snapshot: () => {
+    commitEditor();
+    return structuredClone(board);
+  },
   image: () =>
     new Promise((resolve, reject) => {
       const copy = svg.cloneNode(true);
@@ -227,17 +252,8 @@ window.whiteboard = {
     from = null;
     if (command.action === 'tool') {
       tool = command.tool;
-      label = command.label;
       canvasSize = command.canvas;
       clearSelection();
-    }
-    if (command.action === 'label') {
-      label = command.label;
-      const n = single();
-      if (n && n.label !== label) {
-        checkpoint();
-        n.label = label;
-      }
     }
     if (command.action === 'undo' && history.length) {
       board = history.pop();
@@ -324,22 +340,19 @@ svg.addEventListener('pointerdown', (event) => {
   }
   clearSelection();
   if (tool === 'box' || tool === 'text') {
-    if (!label.trim()) {
-      hint('Give this idea a label first.');
-      return;
-    }
+    event.preventDefault();
     checkpoint();
     const n = {
       id: `n${crypto.randomUUID()}`,
       kind: tool,
-      label: label.trim(),
+      label: '',
       x: Math.max(100, Math.min(innerWidth - 100, p[0])),
       y: Math.max(32, Math.min(innerHeight - 32, p[1])),
       width: 200,
       height: 64,
     };
     board.nodes.push(n);
-    render();
+    startEditor(n.id, true);
     return;
   }
   const before = structuredClone(board);
@@ -448,21 +461,7 @@ svg.addEventListener('mousedown', (event) => {
         y <= n.y + n.height / 2,
     );
   if (!n) return;
-  const id = n.id;
-  clearSelection();
-  nodes.add(id);
-  editing = id;
-  editor.value = n.label;
-  editor.hidden = false;
-  Object.assign(editor.style, {
-    left: `${n.x - n.width / 2}px`,
-    top: `${n.y - n.height / 2}px`,
-    width: `${n.width}px`,
-    height: `${n.height}px`,
-  });
-  editor.focus();
-  editor.select();
-  render();
+  startEditor(n.id);
 });
 editor.addEventListener('blur', commitEditor);
 editor.addEventListener('keydown', (event) => {

@@ -18,11 +18,12 @@ collapsed. Choose Pen, Box, Text, Connect or Select under **Desktop whiteboard**
 A transparent drawing layer covers the display containing the sidebar.
 
 - Pen: drag directly over your desktop and application windows.
-- Box: enter the label in the sidebar, then click the desktop to place a labelled rectangle.
-- Text: place plain text directly on the desktop. Its editing outline appears only when selected.
+- Box: click the desktop to place a rectangle and type directly inside it.
+- Text: click the desktop and type plain text. Its editing outline appears only when selected.
 - Connect: click two labelled items in order.
-- Click a labelled item to select it. Drag its corner handles to resize it; change
-  its label in the sidebar or double-click it to edit directly. Enter finishes editing.
+- Enter or clicking outside finishes typing. Double-click an existing item to edit
+  its text in place. Undo treats placement and the initial text as one action.
+- Click an item to select it; drag its corner handles to resize it.
 - Select: drag around items to select them together. Shift-click adds or removes
   boxes, text items or pen strokes. Drag a selected item to move the group; connections follow.
 - Delete selected or the Delete key: remove the selection and its connections. Undo restores it.
@@ -76,8 +77,8 @@ it does not take the main docking client's single-instance lock. Keep micro-proj
 on their own branch and worktree; run the prototype from that worktree.
 
 The opt-in proof uses another separate UI profile and the existing service. It sends
-pointer events through the shared window, exercising each drawing tool, sidebar label
-editing, inline editing, resizing, marquee and Shift-click selection, group movement,
+pointer events through the shared window, exercising each drawing tool, typing directly
+in new and existing items, resizing, marquee and Shift-click selection, group movement,
 deletion, file export/import, malformed-import refusal, undo, hide/reopen, Escape and
 sidebar collapse. Its known-broken control places the drawing above the sidebar and
 confirms the tool click fails before restoring the correct stacking. It checks

@@ -33,10 +33,6 @@ api.onState((value) => {
       height: `${bounds.height}px`,
     });
     $('wb-delete').disabled = !drawing.selectedCount;
-    $('wb-label').disabled = drawing.selectedCount > 1;
-    if (document.activeElement !== $('wb-label'))
-      $('wb-label').value = drawing.selectedLabel ?? drawing.label;
-
     for (const b of document.querySelectorAll('[data-drawing-tool]')) {
       b.setAttribute(
         'aria-pressed',
@@ -148,7 +144,6 @@ $('undock').onclick = () => api.undock();
 $('quit').onclick = () => api.quit();
 for (const b of document.querySelectorAll('[data-drawing-tool]'))
   b.onclick = () => api.whiteboard({ action: 'tool', tool: b.dataset.drawingTool });
-$('wb-label').oninput = (event) => api.whiteboard({ action: 'label', label: event.target.value });
 for (const [id, action] of Object.entries({
   'wb-hide': 'hide',
   'wb-undo': 'undo',

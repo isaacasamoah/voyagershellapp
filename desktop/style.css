@@ -275,19 +275,6 @@ footer {
   background: #385e55;
   border-color: #9bd5bc;
 }
-#whiteboard-tools input {
-  background: #0c101a;
-  color: #e4eaf2;
-  border: 1px solid #ffffff26;
-  border-radius: 5px;
-  padding: 6px;
-  font: inherit;
-  width: 100%;
-}
-#whiteboard-tools label {
-  font-size: 10px;
-  color: #a2b2c6;
-}
 #wb-status {
   margin: 0;
   color: #b7c5d8;

@@ -48,10 +48,14 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
     await button(`[data-drawing-tool="${name}"]`);
     assert.equal(whiteboard.getState().tool, name);
   }
-  async function typeLabel(text) {
-    await button('#wb-label');
-    await panel(`document.querySelector('#wb-label').select()`);
+  async function typeInline(text, finish = true) {
+    assert.equal(await drawing('document.activeElement.id'), 'editor');
+    assert.equal(await drawing(`document.querySelector('#editor').hidden`), false);
     await win.webContents.insertText(text);
+    if (finish) {
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+    }
     await delay(100);
   }
   async function drag(a, b) {
@@ -101,13 +105,22 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
   await panel(`document.querySelector('#drawing').style.zIndex=''`);
   await tool('box');
   await button('#wb-clear');
-  await typeLabel('Desktop sketch');
+  assert.equal(await panel(`document.querySelector('#wb-label')`), null);
   await click(200, 200);
-  await typeLabel('Agent planning');
+  await typeInline('Desktop sketch');
+  assert.equal((await snapshot()).nodes[0].label, 'Desktop sketch');
+  await button('#wb-undo');
+  assert.equal((await snapshot()).nodes.length, 0, 'Undo removes a newly labelled box in one step');
+  await click(200, 200);
+  await typeInline('Desktop sketch');
   await click(550, 200);
+  await typeInline('Agent planning', false);
+  // Switching tools commits in-place text without needing Enter first.
   await tool('text');
-  await typeLabel('A shared thought');
+  assert.equal((await snapshot()).nodes[1].label, 'Agent planning');
   await click(850, 360);
+  await typeInline('A shared thought');
+  await tool('arrow');
   const textId = (await snapshot()).nodes[2].id;
   assert.deepEqual(
     await drawing(
@@ -116,7 +129,6 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
     ['transparent', 'none'],
     'Text must render without a card background or outline',
   );
-  await tool('arrow');
   await click(200, 200);
   await click(550, 200);
   assert.equal((await snapshot()).edges.length, 1);
@@ -126,9 +138,6 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
   await tool('select');
   await click(200, 200);
   assert.equal(whiteboard.getState().selectedCount, 1);
-  // Text edit using the sidebar after a canvas selection.
-  await typeLabel('Plan together');
-  assert.equal((await snapshot()).nodes[0].label, 'Plan together');
   // Bottom-right resize handle must change the box rather than move it.
   await drag([300, 232], [350, 272]);
   let board = await snapshot();
@@ -137,13 +146,15 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
   // Double-click opens direct text editing inside the box.
   await click(225, 220);
   await click(225, 220, 2);
-  assert.equal(await drawing(`document.querySelector('#editor').hidden`), false);
-  assert.equal(await drawing('document.activeElement.id'), 'editor');
-  await win.webContents.insertText('Direct edit');
-  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
-  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
-  await delay(100);
+  await typeInline('Direct edit');
   assert.equal((await snapshot()).nodes[0].label, 'Direct edit');
+  await button('#wb-undo');
+  assert.equal((await snapshot()).nodes[0].label, 'Desktop sketch');
+  assert.equal(
+    (await snapshot()).nodes[0].width,
+    250,
+    'Undo text editing preserves the resized box',
+  );
   // Marquee two boxes, move together, and undo as one operation.
   await drag([80, 130], [680, 300]);
   assert.equal(whiteboard.getState().selectedCount, 2);
@@ -256,7 +267,9 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
           'one native window for sidebar and canvas',
           'pointer clicks detect deliberate canvas-over-sidebar bug',
           'Pen Box Text Connect Select all reachable while drawing',
-          'single box text edit via sidebar and inline editor',
+          'new boxes and text receive keyboard focus directly on the canvas',
+          'creation and initial label undo together; later text edits undo separately',
+          'tool switching commits inline text; no sidebar label field',
           'box resize',
           'marquee select and group move with undo',
           'Shift-click extends selection to boxes and strokes',

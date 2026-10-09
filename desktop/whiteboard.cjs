@@ -7,13 +7,11 @@ exports.createWhiteboard = async (panel, changed) => {
   let state = {
     active: false,
     tool: 'pen',
-    label: 'An idea',
     nodes: 0,
     edges: 0,
     strokes: 0,
     canUndo: false,
     selectedCount: 0,
-    selectedLabel: null,
     notice: 'Draw over your desktop. Escape returns to your apps.',
   };
   let sidebarBounds = null;
@@ -42,7 +40,6 @@ exports.createWhiteboard = async (panel, changed) => {
       strokes: value.strokes,
       canUndo: Boolean(value.canUndo),
       selectedCount: Number.isInteger(value.selectedCount) ? value.selectedCount : 0,
-      selectedLabel: typeof value.selectedLabel === 'string' ? value.selectedLabel : null,
     });
     update();
   };
@@ -82,15 +79,8 @@ exports.createWhiteboard = async (panel, changed) => {
           ? 'Escape or Use desktop returns to your apps.'
           : 'Use desktop returns to your apps. Escape works when the drawing layer is focused.';
       }
-      send({ action: 'tool', tool: state.tool, label: state.label, canvas: state.canvas });
+      send({ action: 'tool', tool: state.tool, canvas: state.canvas });
       update();
-      return;
-    }
-    if (message.action === 'label') {
-      if (typeof message.label !== 'string' || message.label.length > 120)
-        throw Error('Invalid label');
-      state.label = message.label;
-      send({ action: 'label', label: state.label });
       return;
     }
     if (['undo', 'clear', 'delete'].includes(message.action)) {
