@@ -22,6 +22,25 @@ exports.run = async ({
   const receipts = [];
   const file = path.join(stateDir, 'desktop-refinement-proof.json');
   await fs.writeFile(file, JSON.stringify({ verdict: 'running' }));
+  // sendInputEvent bypasses native hit testing: clickable controls must also be
+  // excluded from Electron's window-drag regions, which swallow real clicks.
+  const region = (client, selector) =>
+    client.webContents.executeJavaScript(
+      `getComputedStyle(document.querySelector(${JSON.stringify(selector)})).getPropertyValue('-webkit-app-region')`,
+    );
+  assert.equal(
+    await region(avatarWin, '#avatar'),
+    'no-drag',
+    'The astronaut must receive real pointer events',
+  );
+  assert.equal(
+    await region(panelWin, '#panel'),
+    'drag',
+    'The panel background must move its native window',
+  );
+  for (const selector of ['#quit', '#undock', '.session'])
+    assert.equal(await region(panelWin, selector), 'no-drag', `${selector} must remain clickable`);
+  receipts.push('Native drag regions exclude the astronaut and panel buttons');
   const worker = getState().sessions.find(
     (s) => s.ownership === 'managed' && s.capture === 'connected',
   );

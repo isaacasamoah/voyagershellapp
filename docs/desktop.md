@@ -11,6 +11,9 @@ The floating avatar keeps its circular highlights without an outer shadow;
 the transparent native window also disables its shadow.
 Drag the panel background to move it around the screen. A seated astronaut moves
 with it; a detached astronaut stays independent. Buttons remain clickable.
+Only the panel background is an Electron window-drag region. The astronaut
+uses its own pointer gestures and, like the other buttons, must stay outside
+that region so native clicks reach its handler.
 
 The panel shows **Online / Offline**, agent/project names and connection status.
 It grows to fit the current list, within the display height. No event feed,
@@ -111,6 +114,8 @@ sound cue is emitted, then exercises Escape-to-cancel. It captures each window
 separately and verifies that detach preserves the worker process and service
 instance. The temporary unrelated shell is closed; the panel stays open. Receipts/screenshots
 are private. No model call or desktop-wide input injection is used.
+The proof also checks computed native drag regions: renderer-injected clicks
+alone bypass native hit testing and can pass even when a real click is swallowed.
 
 Observed on 10 October: existing native client rediscovered, correct session
 accepted, unrelated shell refused, click handler toggled, the two-row agent list

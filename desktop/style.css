@@ -36,7 +36,6 @@ body[data-view='panel'] #avatar {
 }
 .avatar,
 #panel {
-  -webkit-app-region: drag;
   user-select: none;
   border: 1px solid #ffffff9c;
   background: linear-gradient(145deg, #f9fdffba, #eaf6ff80 50%, #f4fbff9c);
@@ -116,6 +115,7 @@ body[data-connected='true'] #indicator {
   background: #8dccba;
 }
 #panel {
+  -webkit-app-region: drag;
   position: absolute;
   left: 8px;
   right: 8px;
