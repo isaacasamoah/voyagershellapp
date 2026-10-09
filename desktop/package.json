@@ -5,10 +5,11 @@
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/binding.test.cjs",
+    "test": "node --test test/*.test.cjs test/*.test.mjs",
     "proof": "electron . --proof",
     "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "proof:whiteboard": "electron . --whiteboard-proof"
   },
   "license": "MIT",
   "type": "commonjs",
