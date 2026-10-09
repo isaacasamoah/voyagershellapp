@@ -80,6 +80,11 @@ The private database lives in the selected state directory, never in the Git che
 
 The app-server notification stream has no replay cursor established here. Voyager therefore records capture gaps on disconnect, normal stop and restart. After restart the saved registrations remain, but capture is disconnected until you register again. No prompt or old conversation is replayed. A request and its acceptance survive a service restart; uncertain requests remain uncertain.
 
+The [transcript experiment](transcripts.md) tests a durable conversation source
+that can catch up after a collector exits. It uses a separate database and does
+not change this service's capture behavior. Runtime facts such as registration,
+worker ownership and launch outcomes still belong to the service.
+
 The first managed-worker increment is described in [workers.md](workers.md). There is no arbitrary process-adoption, task-cancellation protocol, live-upgrade or machine-reboot guarantee. The native app remains responsible for approvals. Voyager does not answer approval or tool-execution requests from Codex.
 
 ## Verification
