@@ -62,7 +62,6 @@ body[data-view='panel'] #avatar {
   touch-action: none;
   user-select: none;
   z-index: 2;
-  transition: opacity 0.2s;
 }
 .avatar img {
   position: absolute;
@@ -93,14 +92,6 @@ body[data-seated='true'] .avatar {
 }
 .avatar[data-state='moving'] {
   cursor: grabbing;
-}
-.avatar[data-state='docked'] {
-  opacity: 0.4;
-}
-.avatar:hover,
-.avatar:focus-visible,
-body[data-seated='true'] .avatar {
-  opacity: 1;
 }
 #indicator {
   position: absolute;
@@ -236,8 +227,5 @@ body[data-dock-error='true'] #indicator {
 @media (prefers-reduced-motion: reduce) {
   .avatar img {
     animation: none;
-  }
-  .avatar {
-    transition: none;
   }
 }

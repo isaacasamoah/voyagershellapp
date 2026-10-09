@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { processIdentity } = require('../binding.cjs');
+const { processIdentity, windowAt } = require('../binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
   avatarWin,
@@ -12,6 +12,7 @@ exports.run = async ({
   advanceDrag,
   rpc,
   refresh,
+  inventory,
   dock,
   undock,
   setExpanded,
@@ -89,9 +90,20 @@ exports.run = async ({
     }
     assert(unrelated, 'The unrelated terminal must be visible');
     assert.equal(unrelated.title, ours.title);
+    setExpanded(false);
     assert.equal(await dock(unrelated.id), false);
+    assert(!panelWin.isVisible(), 'Dropping on an unsupported window must not open the panel');
     assert.equal(await dock(ours.id), true);
+    assert(!panelWin.isVisible(), 'Docking the floating astronaut must not open the panel');
     assert.equal(getState().binding.session.id, worker.id);
+    await delay(250);
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        "getComputedStyle(document.getElementById('avatar')).opacity",
+      ),
+      '1',
+      'The docked astronaut keeps its full brightness',
+    );
     receipts.push('Exact native worker accepted; unrelated same-title terminal refused');
   } finally {
     other.kill('SIGTERM');
@@ -122,6 +134,8 @@ exports.run = async ({
   assert(panelWin.isVisible());
   await clickAvatar();
   assert(!panelWin.isVisible());
+  assert.equal(avatarWin.getParentWindow(), null, 'The collapsed avatar is an independent window');
+  assert(avatarWin.isVisible(), 'Hiding the panel must not hide the astronaut');
   assert.deepEqual(
     avatarWin.getSize(),
     avatarSizeBefore,
@@ -153,6 +167,7 @@ exports.run = async ({
   advanceDrag({ x: start.x + 30, y: start.y + 20 });
   await delay(100);
   assert(panelWin.isVisible() && !getState().seated);
+  assert.equal(avatarWin.getParentWindow(), null, 'Pulling away releases the native parent');
   assert.equal(getState().binding, null);
   assert.deepEqual(
     panelWin.getBounds(),
@@ -176,6 +191,7 @@ exports.run = async ({
   await delay(150);
   await pointer('mouseUp');
   assert(getState().seated && panelWin.isVisible());
+  assert.equal(avatarWin.getParentWindow(), panelWin, 'Escape restores the native parent');
   assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
   assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
   receipts.push(
@@ -186,6 +202,31 @@ exports.run = async ({
   park();
   setExpanded(true);
   await delay(350);
+  // Read the real X11 stack after selecting each row. Renderer-injected clicks
+  // alone would still reach an astronaut that the panel has covered.
+  const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
+  for (let index = 0; index < getState().sessions.length; index++) {
+    panelWin.focus();
+    await panelWin.webContents.executeJavaScript(`{
+      const row = document.querySelectorAll('.session')[${index}];
+      row.focus(); row.click();
+    }`);
+    await delay(250);
+    const stack = (await inventory()).filter((window) => window.pid === process.pid);
+    const avatarWindow = stack.find((window) => window.id === avatarId);
+    assert(avatarWindow?.visible, 'The astronaut remains visible after selecting a row');
+    assert.equal(
+      windowAt(stack, {
+        x: avatarWindow.x + avatarWindow.width / 2,
+        y: avatarWindow.y + avatarWindow.height / 2,
+      })?.id,
+      avatarId,
+      'The astronaut must receive native clicks above the selected panel',
+    );
+  }
+  receipts.push(
+    'Selecting each agent row leaves the astronaut above the panel in the native stack',
+  );
   const beforeMove = panelWin.getBounds();
   panelWin.setPosition(beforeMove.x - 24, beforeMove.y + 24);
   await delay(100);

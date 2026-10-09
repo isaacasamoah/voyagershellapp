@@ -129,15 +129,23 @@ function placeAvatar(x, y) {
   });
   if (expanded && seated) placePanel();
 }
+function setSeated(value) {
+  seated = value;
+  // Let the window manager keep the seated astronaut above its panel, even
+  // when selecting a row raises the panel. Detaching restores a top-level window.
+  avatarWin.setParentWindow(value ? panelWin : null);
+}
 function setExpanded(value) {
   expanded = value;
-  seated = value;
   if (value) {
     placePanel();
-    sendState();
     panelWin.showInactive();
+    // X11 can resolve a transient parent only after that window is mapped.
+    setSeated(true);
+    sendState();
     avatarWin.moveTop();
   } else {
+    setSeated(false);
     panelWin.hide();
     sendState();
   }
@@ -156,7 +164,7 @@ function advanceDrag(p, now = performance.now()) {
   if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
     dragging.moved = true;
     const wasAttached = seated || Boolean(binding);
-    seated = false;
+    setSeated(false);
     binding = null;
     dockError = '';
     sendState();
@@ -184,7 +192,6 @@ async function dock(id) {
   );
   if (result.error) {
     undock(result.error);
-    if (!expanded) setExpanded(true);
     return false;
   }
   binding = result;
@@ -274,7 +281,6 @@ app.whenReady().then(async () => {
   if (!primaryInstance) return;
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
-  panelWin.on('focus', () => avatarWin.moveTop());
   panelWin.on('move', () => {
     if (!expanded || !seated || dragging) return;
     const panel = panelWin.getBounds();
@@ -320,7 +326,7 @@ app.whenReady().then(async () => {
     if (!dragging) return;
     const previous = dragging;
     dragging = null;
-    seated = previous.seated;
+    setSeated(previous.seated);
     binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
@@ -347,7 +353,7 @@ app.whenReady().then(async () => {
       cursor.y >= panel.y &&
       cursor.y < panel.y + panel.height
     ) {
-      seated = true;
+      setSeated(true);
       placeAvatar(panel.x + 108, panel.y + 44);
       sendState();
       return;
@@ -380,6 +386,7 @@ app.whenReady().then(async () => {
         advanceDrag,
         rpc,
         refresh,
+        inventory,
         dock,
         undock,
         setExpanded,

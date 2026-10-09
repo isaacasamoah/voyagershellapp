@@ -7,6 +7,7 @@ full-width curved top and rainbow VOYAGER lettering above the astronaut.
 The seated avatar has no separate background or circular rim.
 “Let’s Go Together” appears in a warm-to-blue gradient at the bottom of the panel.
 Avatar and panel share the same translucent material.
+The astronaut keeps its full brightness in every state, including terminal docking.
 The floating avatar keeps its circular highlights without an outer shadow;
 the transparent native window also disables its shadow.
 Drag the panel background to move it around the screen. A seated astronaut moves
@@ -53,6 +54,8 @@ change those permissions. `npm start -- --expanded` opens the panel immediately.
    where it was. A quick click opens or closes the panel; releasing a stationary
    hold (350 ms or longer) does neither. Escape during the gesture puts it back.
    The outline appears while pressed and clears on release or cancellation.
+   Moving the standalone astronaut leaves the panel closed, even when dropping
+   onto an unsupported window. Only a quick click toggles the panel.
    Drag the avatar onto that terminal. The app matches a known worker session,
    then follows its window. An unrelated window with the same title is refused.
 4. Drag away or choose Detach. Quit with × when finished. The service and native
@@ -85,6 +88,11 @@ command.
 The avatar and panel have separate transparent windows. The avatar keeps a fixed
 size while the panel is shown or hidden, avoiding the previous resize-and-repaint
 transition. Unchanged window geometry and agent rows are not redrawn on polling.
+While seated, the astronaut is a non-modal child of the panel, so selecting an
+agent cannot raise the panel over it and block clicks. The panel is shown before
+assigning that relationship so X11 can resolve the parent window.
+Pulling it away or hiding the panel removes that parent relationship; Escape
+restores it when reseating.
 Only the avatar renderer may send drag commands; only the panel may select agents
 or quit. The undock cue is a quiet, locally synthesized falling tone with no media
 dependency. It fires when movement detaches the avatar, never on a click or hold
@@ -116,6 +124,9 @@ instance. The temporary unrelated shell is closed; the panel stays open. Receipt
 are private. No model call or desktop-wide input injection is used.
 The proof also checks computed native drag regions: renderer-injected clicks
 alone bypass native hit testing and can pass even when a real click is swallowed.
+After selecting each agent row it reads the real X11 window stack and checks
+that the astronaut remains above the panel at the click target. This caught the
+earlier focus-handler approach allowing the panel to cover the astronaut.
 
 Observed on 10 October: existing native client rediscovered, correct session
 accepted, unrelated shell refused, click handler toggled, the two-row agent list
