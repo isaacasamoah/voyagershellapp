@@ -70,7 +70,7 @@ button:disabled {
 .brand {
   position: absolute;
   left: 50%;
-  top: -96px;
+  top: 0;
   transform: translateX(-50%);
   width: 224px;
   height: 120px;
@@ -79,6 +79,11 @@ button:disabled {
 }
 body[data-expanded='true'] .avatar {
   top: 44px;
+  /* The panel supplies the glass, so the seated astronaut has no separate rim. */
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 .avatar[data-state='moving'] {
   cursor: grabbing;
@@ -107,10 +112,10 @@ body[data-connected='true'] #indicator {
   position: absolute;
   left: 8px;
   right: 8px;
-  top: 96px;
+  top: 8px;
   bottom: 8px;
-  padding: 65px 16px 12px;
-  border-radius: 16px;
+  padding: 153px 16px 12px;
+  border-radius: 50% 50% 16px 16px / 106px 106px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -193,7 +198,7 @@ body[data-connected='false'] #connection {
 }
 #quit {
   position: absolute;
-  top: 9px;
+  top: 108px;
   right: 10px;
   width: 25px;
   height: 25px;

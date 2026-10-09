@@ -2,8 +2,9 @@
 
 Voyager parks near the top-right of the screen. Click the astronaut to reveal a
 compact glass panel; click again to collapse it. The 104 px avatar has no text
-while floating. Opening the panel reveals a filled glass crest with rainbow
-VOYAGER lettering above the astronaut, without a gap between banner and avatar.
+while floating. Opening the panel reveals one continuous glass surface with a
+full-width curved top and rainbow VOYAGER lettering above the astronaut.
+The seated avatar has no separate background or circular rim.
 “Let’s Go Together” appears in a warm-to-blue gradient at the bottom of the panel.
 Avatar and panel share the same translucent material.
 The floating avatar keeps its circular highlights without an outer shadow;
@@ -42,7 +43,10 @@ change those permissions. `npm start -- --expanded` opens the panel immediately.
 1. Open the native worker terminal using the worker guide; it can already be open
    before Voyager's desktop client starts.
 2. Click the avatar to see the real service and agent connection states.
-3. Drag the avatar onto that terminal. The app matches a known worker session,
+3. Hold the astronaut for a moment (350 ms) to lift it out of the panel, or start
+   dragging directly. A quick click still opens or closes the panel. Release a
+   stationary hold to leave it floating; Escape during the gesture puts it back.
+   Drag the avatar onto that terminal. The app matches a known worker session,
    then follows its window. An unrelated window with the same title is refused.
 4. Drag away or choose Detach. Quit with × when finished. The service and native
    agent continue; reopening the app can rediscover the existing native client.
@@ -89,16 +93,20 @@ command.
 clients, disconnected capture and frontmost-window hit testing. `npm run proof`
 is an opt-in check against the real service and an already-open worker terminal.
 It discovers that terminal without a UI launch record, refuses a same-title
-unrelated shell, exercises click-to-toggle in the renderer, captures the panel,
-and verifies that detach preserves the worker process and service instance. The
+unrelated shell, exercises click-to-toggle, hold-to-lift and Escape-to-cancel in
+the renderer, captures the panel, and verifies that detach preserves the worker
+process and service instance. The
 temporary unrelated shell is closed; the panel stays open. Receipts/screenshots
 are private. No model call or desktop-wide input injection is used.
 
 Observed on 10 October: existing native client rediscovered, correct session
 accepted, unrelated shell refused, click handler toggled, the two-row agent list
-fit without scrolling, internal IDs/event feed were absent, and the same worker
-and service survived detach. Isaac reviewed the intermediate layouts and chose
-the glass panel, minimal labels and matching glass avatar.
+fit without scrolling, and internal IDs/event feed were absent. Holding lifted
+and detached the avatar, Escape restored the prior attachment, and releasing a
+stationary hold left it floating. The same worker and service survived these
+gestures. The final pointer-use preview has a continuous curved glass panel with
+no separate banner fill or seated-avatar rim; keyboard focus still has a visible
+outline.
 
 Verdict: **surface** for physical drag and final desktop appearance. Renderer
 input and programmatic window matching do not prove the compositor delivers a

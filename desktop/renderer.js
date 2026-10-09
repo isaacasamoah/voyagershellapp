@@ -54,6 +54,7 @@ $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();
   pointer = true;
+  $('avatar').focus({ preventScroll: true });
   $('avatar').setPointerCapture(event.pointerId);
   const b = $('avatar').getBoundingClientRect();
   api.beginDrag(event.clientX - b.left, event.clientY - b.top);

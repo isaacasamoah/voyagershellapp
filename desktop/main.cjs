@@ -78,7 +78,7 @@ function sendState() {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('state', {
     expanded,
-    dragging: Boolean(dragging?.moved),
+    dragging: Boolean(dragging?.lifted),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(({ id, cwd, ownership, capture, worker_state }) => ({
       id,
@@ -260,6 +260,8 @@ app.whenReady().then(async () => {
       x,
       y,
       start: screen.getCursorScreenPoint(),
+      startedAt: performance.now(),
+      lifted: false,
       moved: false,
       original: avatarPosition(),
       binding,
@@ -277,10 +279,15 @@ app.whenReady().then(async () => {
   });
   handle('end-drag', async () => {
     if (!dragging) return;
-    const moved = dragging.moved;
+    const { lifted, moved } = dragging;
     dragging = null;
-    if (!moved) {
+    if (!lifted) {
       setExpanded(!expanded);
+      return;
+    }
+    // A hold without a move leaves the avatar floating, without joining whatever is behind it.
+    if (!moved) {
+      sendState();
       return;
     }
     const point = screen.dipToScreenPoint(screen.getCursorScreenPoint());
@@ -301,11 +308,13 @@ app.whenReady().then(async () => {
   dragTimer = setInterval(() => {
     if (!dragging) return;
     const p = screen.getCursorScreenPoint();
-    if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
-      dragging.moved = true;
+    if (Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) dragging.moved = true;
+    if (!dragging.lifted && (dragging.moved || performance.now() - dragging.startedAt >= 350)) {
+      dragging.lifted = true;
       binding = null;
       expanded = false;
       dockError = '';
+      placeAvatar(dragging.original.x, dragging.original.y);
       sendState();
     }
     if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);

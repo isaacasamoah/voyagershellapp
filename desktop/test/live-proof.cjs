@@ -78,13 +78,19 @@ exports.run = async ({
   setExpanded(false);
   win.focus();
   await delay(300);
+  const pointer = async (type) => {
+    const { x, y } = await win.webContents.executeJavaScript(`(() => {
+      const r = document.getElementById('avatar').getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()`);
+    win.webContents.sendInputEvent({ type, button: 'left', x, y, clickCount: 1 });
+  };
+  const panelHidden = () =>
+    win.webContents.executeJavaScript("document.getElementById('panel').hidden");
   const clickAvatar = async () => {
-    const x = win.getBounds().width / 2,
-      y = 60;
-    win.webContents.sendInputEvent({ type: 'mouseMove', x, y });
-    win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', x, y, clickCount: 1 });
+    await pointer('mouseDown');
     await delay(40);
-    win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', x, y, clickCount: 1 });
+    await pointer('mouseUp');
     await delay(300);
   };
   await clickAvatar();
@@ -98,9 +104,31 @@ exports.run = async ({
     true,
   );
   receipts.push('Renderer pointer events opened and collapsed the panel');
+  setExpanded(true);
+  await delay(100);
+  await pointer('mouseDown');
+  await delay(450);
+  assert(await panelHidden(), 'Holding lifts the astronaut out of the panel');
+  assert.equal(getState().binding, null, 'Holding detaches the interface from the terminal');
+  assert.equal(win.getBounds().width, 120);
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await delay(150);
+  await pointer('mouseUp');
+  assert.equal(await panelHidden(), false, 'Escape restores the panel');
+  assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
+  await pointer('mouseDown');
+  await delay(450);
+  await pointer('mouseUp');
+  await delay(150);
+  assert(await panelHidden(), 'Releasing a stationary hold leaves the astronaut floating');
+  assert.equal(getState().binding, null, 'A stationary hold must not join a window underneath');
+  receipts.push('Hold lifted and detached; Escape restored; stationary release stayed floating');
   undock();
   park();
   setExpanded(true);
+  // Leave a pointer-use preview after testing the visible keyboard focus ring.
+  await win.webContents.executeJavaScript('document.activeElement?.blur()');
   await delay(350);
   const ui = await win.webContents.executeJavaScript(`({
     text:document.body.innerText,
@@ -121,10 +149,12 @@ exports.run = async ({
   assert.equal(ui.sessionCount, getState().sessions.length);
   assert.equal(ui.avatar.width, 104);
   assert(
-    ui.avatar.top < ui.panel.top && ui.avatar.bottom > ui.panel.top,
-    'Crest overlaps the top of the panel',
+    ui.avatar.top >= ui.panel.top && ui.avatar.bottom < ui.panel.bottom,
+    'The seated astronaut is contained in the continuous panel surface',
   );
-  receipts.push('Compact curved crest, human-readable agent status, no visible IDs or event feed');
+  receipts.push(
+    'Continuous curved panel, human-readable agent status, no visible IDs or event feed',
+  );
   const image = await win.webContents.capturePage();
   await fs.writeFile(path.join(stateDir, 'desktop-refinement.png'), image.toPNG());
   const after = await rpc('attach-info', worker.id);
