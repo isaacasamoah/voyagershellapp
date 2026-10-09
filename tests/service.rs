@@ -134,6 +134,10 @@ impl Fixture {
     fn start(&mut self) {
         self.service = Some(
             Command::new(env!("CARGO_BIN_EXE_voyager"))
+                .env(
+                    "VOYAGER_CODEX_BIN",
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),
+                )
                 .args([
                     "--state",
                     self.dir.to_str().unwrap(),
@@ -162,6 +166,18 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        if self.service.is_some() {
+            if let Ok(sessions) = client(&self.dir, json!({"op":"list"})) {
+                for session in sessions.as_array().unwrap() {
+                    if session["ownership"] == "managed" && session["worker_state"] == "running" {
+                        let _ = client(
+                            &self.dir,
+                            json!({"op":"stop-worker","session_id":session["id"]}),
+                        );
+                    }
+                }
+            }
+        }
         if let Some(mut child) = self.service.take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -292,6 +308,116 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
             .iter()
             .any(|e| e["payload"]["reason"] == "codex_disconnected")
     );
+}
+
+#[test]
+fn interrupted_launch_is_unknown_and_never_automatically_replaced() {
+    let mut f = Fixture::new();
+    let db = f.dir.join("events.sqlite");
+    let store = Store::open(&db).unwrap();
+    fs::set_permissions(&db, fs::Permissions::from_mode(0o600)).unwrap();
+    let parent = store
+        .register(f.socket.to_str().unwrap(), &metadata("live-thread"))
+        .unwrap();
+    // Reachable crash point: intent committed, worker launch not yet acknowledged.
+    store
+        .begin_launch(
+            "interrupted",
+            &parent,
+            f.dir.to_str().unwrap(),
+            "original task",
+        )
+        .unwrap();
+    drop(store);
+    f.start();
+    f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let old=f.call(json!({"op":"launch","parent_id":parent,"request_id":"interrupted","cwd":f.dir,"prompt":"original task"}));
+    assert_eq!(old["state"], "unknown");
+    assert!(old["session_id"].is_null());
+    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"replacement","cwd":f.dir,"prompt":"another task"})).is_err());
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+    f.halt();
+}
+
+#[test]
+fn owned_worker_survives_clients_and_requires_explicit_stop() {
+    let mut f = Fixture::new();
+    f.start();
+    let parent = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let launch = json!({"op":"launch","parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"read the fixture"});
+    let receipt = f.call(launch.clone());
+    assert_eq!(receipt["state"], "running");
+    assert_eq!(receipt["initial_request"]["state"], "accepted");
+    let session = receipt["session_id"].clone();
+    assert_eq!(f.call(launch)["pid"], receipt["pid"]);
+    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"changed"})).is_err());
+    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"worker-2","cwd":f.dir,"prompt":"second"})).is_err());
+    assert!(client(&f.dir, json!({"op":"stop"})).is_err());
+    assert!(client(&f.dir, json!({"op":"stop-worker","session_id":parent})).is_err());
+    let info = f.call(json!({"op":"attach-info","session_id":session}));
+    assert_eq!(info["pid"], receipt["pid"]);
+    let socket = info["args"][1]
+        .as_str()
+        .unwrap()
+        .strip_prefix("unix://")
+        .unwrap();
+    let mut terminal = Codex::connect(Path::new(socket)).unwrap();
+    assert_eq!(
+        terminal.metadata("worker-thread").unwrap()["status"]["type"],
+        "active"
+    );
+    drop(terminal); // Native transport client leaves while the task is active.
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["session_id"] == session && e["type"] == "turn.completed")
+    });
+    let mut reconnected = Codex::connect(Path::new(socket)).unwrap();
+    assert_eq!(
+        reconnected.metadata("worker-thread").unwrap()["status"]["type"],
+        "idle"
+    );
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        receipt["pid"]
+    );
+    let rows = f.call(json!({"op":"list"}));
+    let worker = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == session)
+        .unwrap();
+    assert_eq!(worker["ownership"], "managed");
+    assert_eq!(worker["parent_id"], parent);
+    // Known-different arm: explicit stop during a second turn ends the owned server.
+    f.call(json!({"op":"send","session_id":session,"request_id":"second-turn","message":"still working"}));
+    assert_eq!(
+        f.call(json!({"op":"stop-worker","session_id":session}))["state"],
+        "stopped"
+    );
+    assert!(reconnected.metadata("worker-thread").is_err());
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+    let events = f.events();
+    assert!(
+        !events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["native_turn_id"] == "worker-turn-2" && e["type"] == "turn.completed")
+    );
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "worker.stopped")
+    );
+    // The external parent server still responds; stopping the worker did not touch it.
+    assert_eq!(f.call(json!({"op":"discover"}))[0]["id"], "live-thread");
+    f.halt();
 }
 
 #[test]

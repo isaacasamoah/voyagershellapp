@@ -35,7 +35,11 @@ impl Store {
                 seq INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL UNIQUE,
                 session_id TEXT NOT NULL REFERENCES sessions(id), kind TEXT NOT NULL,
                 native_turn_id TEXT, source_key TEXT, occurred_ms INTEGER, recorded_ms INTEGER NOT NULL,
-                payload TEXT NOT NULL, UNIQUE(session_id,source_key));")?;
+                payload TEXT NOT NULL, UNIQUE(session_id,source_key));
+            CREATE TABLE IF NOT EXISTS workers (
+                launch_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES sessions(id),
+                cwd TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL,
+                session_id TEXT UNIQUE REFERENCES sessions(id), pid INTEGER);")?;
         Ok(Self(db))
     }
 
@@ -75,8 +79,82 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT id,server,native_id,native_session_id,cwd,registered_ms FROM sessions ORDER BY registered_ms")?;
-        Ok(query.query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":"external"})))?.collect::<rusqlite::Result<Vec<_>>>()?)
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        Ok(query.query_map([], |r| {
+            let parent: Option<String> = r.get(6)?;
+            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if parent.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?}))
+        })?.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn session(&self, id: &str) -> Result<Value> {
+        self.sessions()?
+            .into_iter()
+            .find(|s| s["id"] == id)
+            .context("unknown session")
+    }
+
+    pub fn launch(&self, id: &str) -> Result<Option<Value>> {
+        Ok(self.0.query_row("SELECT parent_id,cwd,prompt,state,session_id,pid FROM workers WHERE launch_id=?1",[id],|r|Ok(json!({"launch_id":id,"parent_id":r.get::<_,String>(0)?,"cwd":r.get::<_,String>(1)?,"prompt":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"session_id":r.get::<_,Option<String>>(4)?,"pid":r.get::<_,Option<u32>>(5)?}))).optional()?)
+    }
+
+    pub fn begin_launch(&self, id: &str, parent: &str, cwd: &str, prompt: &str) -> Result<()> {
+        // Unknown launches may still have processes: do not automatically replace them.
+        let active: i64 = self.0.query_row(
+            "SELECT count(*) FROM workers WHERE state IN ('starting','running','unknown')",
+            [],
+            |r| r.get(0),
+        )?;
+        ensure!(
+            active == 0,
+            "one worker at a time; stop the current worker or resolve unknown ownership first"
+        );
+        self.0.execute(
+            "INSERT INTO workers VALUES (?1,?2,?3,?4,'starting',NULL,NULL)",
+            params![id, parent, cwd, prompt],
+        )?;
+        Ok(())
+    }
+
+    pub fn register_worker(
+        &mut self,
+        launch: &str,
+        server: &str,
+        metadata: &Value,
+        pid: u32,
+    ) -> Result<String> {
+        let id = Uuid::new_v4().to_string();
+        let native = metadata["id"].as_str().context("missing worker thread")?;
+        let tx = self.0.transaction()?;
+        tx.execute(
+            "INSERT INTO sessions VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                id,
+                server,
+                native,
+                metadata["sessionId"].as_str(),
+                metadata["cwd"].as_str().unwrap_or(""),
+                now()
+            ],
+        )?;
+        tx.execute(
+            "UPDATE workers SET session_id=?2,pid=?3,state='running' WHERE launch_id=?1",
+            params![launch, id, pid],
+        )?;
+        tx.commit()?;
+        self.local(
+            &id,
+            "session.registered",
+            json!({"ownership":"managed","capture_policy":"conversation-v1"}),
+        )?;
+        Ok(id)
+    }
+
+    pub fn worker_state(&self, launch: &str, state: &str) -> Result<()> {
+        self.0.execute(
+            "UPDATE workers SET state=?2 WHERE launch_id=?1",
+            params![launch, state],
+        )?;
+        Ok(())
     }
 
     pub fn native(&self, session: &str, server: &str) -> Result<String> {

@@ -38,20 +38,25 @@ target/debug/voyager --state "$VOYAGER_STATE" send SESSION_ID request-001 \
 
 The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. Sending to an already-active thread is refused. Native input can race that check, so the returned native turn ID is authoritative; a send is not promised to create an independent task.
 
-`serve` stays in the foreground unless your process manager launches it in the background. No system service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop the service; it never owns the Codex process.
+`serve` stays in the foreground unless your process manager launches it in the background. No system service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
 
 ## Commands
 
 | Command | Result |
 | --- | --- |
-| `status` | Service instance, connection and capture count; explicitly reports that it owns no agents |
+| `status` | Service instance, connection/capture count and whether it currently owns a worker |
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
 | `list` | Saved registrations, ownership and whether capture is currently connected |
 | `send SESSION_ID REQUEST_ID MESSAGE` | Record the request and send text; acceptance is separate from observed completion |
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
-| `stop` | Stop Voyager and record a capture gap; leave native agents alone |
+| `watch --pretty [CURSOR]` | Readable You/Agent messages and lifecycle lines, with terminal control characters escaped |
+| `launch PARENT_SESSION REQUEST_ID CWD PROMPT` | Start one service-owned worker and submit its first task; see [worker commands](workers.md) |
+| `attach SESSION_ID` | Replace this terminal client with Codex's native interface connected to the worker |
+| `attach-info SESSION_ID` | Inspect the worker's native connection command and process identity |
+| `stop-worker SESSION_ID` | Explicitly stop the owned worker server; never stop an external session |
+| `stop` | Refuse while a worker is alive; otherwise stop Voyager and record a capture gap |
 
 Reusing a request ID with the same inputs returns the prior submission record. Changing its inputs is rejected. Delivery whose acknowledgement was lost remains uncertain and is never retried automatically. The request record stays about submission; the event stream carries the observed turn outcome.
 
@@ -75,7 +80,7 @@ The private database lives in the selected state directory, never in the Git che
 
 The app-server notification stream has no replay cursor established here. Voyager therefore records capture gaps on disconnect, normal stop and restart. After restart the saved registrations remain, but capture is disconnected until you register again. No prompt or old conversation is replayed. A request and its acceptance survive a service restart; uncertain requests remain uncertain.
 
-This is deliberately a connection/capture service. It has no worker-launch, cancellation, process-adoption, live-upgrade or machine-reboot guarantee. The native app remains responsible for approvals. Voyager does not answer approval or tool-execution requests from Codex.
+The first managed-worker increment is described in [workers.md](workers.md). There is no arbitrary process-adoption, task-cancellation protocol, live-upgrade or machine-reboot guarantee. The native app remains responsible for approvals. Voyager does not answer approval or tool-execution requests from Codex.
 
 ## Verification
 
@@ -85,7 +90,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Eight earlier black-box process fixtures remain. Three Rust tests exercise the service against a local WebSocket protocol fixture and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, and uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. They are not substitutes for the separate real Codex demonstration.
+Eight earlier black-box process fixtures remain. Five Rust tests exercise the service against local WebSocket protocol fixtures and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
 
 ## Real Codex check — 9 October 2026
 

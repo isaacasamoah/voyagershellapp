@@ -1,4 +1,4 @@
-use crate::{codex::Codex, events, store::Store};
+use crate::{codex::Codex, events, store::Store, worker::Worker};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
@@ -109,6 +109,10 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
         );
     }
     let store = Store::open(&db_path)?;
+    store.0.execute(
+        "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
+        [],
+    )?;
     for session in store.sessions()? {
         store.local(
             session["id"].as_str().unwrap(),
@@ -123,6 +127,9 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
         server,
         registered: HashMap::new(),
         instance: uuid::Uuid::new_v4().to_string(),
+        worker: None,
+        state: fs::canonicalize(state)?,
+        executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
     };
     let listener = UnixListener::bind(&socket_path)?;
     let _socket = SocketPath(socket_path);
@@ -169,6 +176,9 @@ struct Runtime {
     server: String,
     registered: HashMap<String, String>, // native thread -> Voyager registration
     instance: String,
+    worker: Option<Worker>,
+    state: PathBuf,
+    executable: String,
 }
 
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
@@ -188,7 +198,7 @@ impl Runtime {
     fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
         let value = match string(&request, "op")? {
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len(),"owns_agents":false})
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+usize::from(self.worker.as_ref().is_some_and(|w|w.connection.is_some())),"owns_agents":self.worker.as_ref().is_some_and(|w|w.alive)})
             }
             "discover" => {
                 let c = self.codex()?;
@@ -202,9 +212,13 @@ impl Runtime {
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
                     let captured = self
-                        .registered
-                        .get(session["native_thread_id"].as_str().unwrap())
-                        == session["id"].as_str().map(|s| s.to_owned()).as_ref();
+                        .worker
+                        .as_ref()
+                        .is_some_and(|w| session["id"] == w.session && w.connection.is_some())
+                        || self
+                            .registered
+                            .get(session["native_thread_id"].as_str().unwrap())
+                            == session["id"].as_str().map(|s| s.to_owned()).as_ref();
                     session["capture"] = json!(if captured {
                         "connected"
                     } else {
@@ -247,40 +261,126 @@ impl Runtime {
                 let session = string(&request, "session_id")?;
                 let request_id = string(&request, "request_id")?;
                 let message = string(&request, "message")?;
+                self.send(session, request_id, message)?
+            }
+            "launch" => {
+                let id = string(&request, "request_id")?;
+                let parent = string(&request, "parent_id")?;
+                let prompt = string(&request, "prompt")?;
                 ensure!(
-                    request_id.len() <= 128 && message.len() <= events::TEXT_LIMIT,
-                    "request ID or message too long"
+                    id.len() <= 100 && prompt.len() <= events::TEXT_LIMIT,
+                    "launch ID or prompt too long"
                 );
-                if let Some(previous) = self.store.request(request_id)? {
+                let cwd = fs::canonicalize(string(&request, "cwd")?)?;
+                ensure!(cwd.is_dir(), "worker cwd must be a directory");
+                let cwd = cwd.to_str().context("worker cwd must be UTF-8")?;
+                if let Some(previous) = self.store.launch(id)? {
                     ensure!(
-                        previous["session_id"] == session && previous["message"] == message,
-                        "request ID conflicts with previous inputs"
+                        previous["parent_id"] == parent
+                            && previous["cwd"] == cwd
+                            && previous["prompt"] == prompt,
+                        "launch ID conflicts with previous inputs"
                     );
-                    return Ok((previous, false));
+                } else {
+                    self.connection(parent)?; // Parent must be connected at acceptance.
+                    self.store.begin_launch(id, parent, cwd, prompt)?;
+                    match Worker::start(&mut self.store, &self.state, &self.executable, id, cwd) {
+                        Ok(worker) => self.worker = Some(worker),
+                        Err(error) => {
+                            self.store.worker_state(id, "failed")?;
+                            return Err(error);
+                        }
+                    }
+                    let session = self.worker.as_ref().unwrap().session.clone();
+                    self.store.local(
+                        parent,
+                        "worker.launched",
+                        json!({"worker_session_id":session,"launch_id":id,"scope":"private"}),
+                    )?;
+                    // A lost acknowledgement is stored as uncertain, never silently replayed.
+                    if let Err(error) = self.send(&session, &format!("launch:{id}"), prompt) {
+                        self.store.local(&session,"task.submission_error",json!({"request_id":format!("launch:{id}"),"error":error.to_string(),"request":self.store.request(&format!("launch:{id}"))?,"automatic_retry":false}))?;
+                    }
                 }
-                let native = self.store.native(session, &self.server)?;
+                let mut receipt = self.store.launch(id)?.unwrap();
+                receipt["initial_request"] = json!(self.store.request(&format!("launch:{id}"))?);
+                receipt
+            }
+            "attach-info" => {
+                let id = string(&request, "session_id")?;
+                let w = self
+                    .worker
+                    .as_ref()
+                    .filter(|w| w.session == id)
+                    .context("not a live managed worker")?;
+                let request = self.store.request(&format!("launch:{}", w.launch))?;
                 ensure!(
-                    self.registered.get(&native).map(String::as_str) == Some(session),
-                    "session is not currently registered for capture"
+                    request.as_ref().is_some_and(|r| r["state"] == "accepted"),
+                    "initial task has no accepted acknowledgement; inspect events before attaching"
                 );
-                let metadata = self.codex()?.metadata(&native)?;
-                ensure!(
-                    metadata["status"]["type"] == "idle",
-                    "agent is not idle; leave its current work alone"
-                );
-                self.store.begin_request(request_id, session, message)?;
-                let result = self.codex()?.rpc("turn/start",json!({"threadId":native,"clientUserMessageId":request_id,"input":[{"type":"text","text":message}]}))?;
-                let turn = result["turn"]["id"]
-                    .as_str()
-                    .context("no turn identity; request remains uncertain")?;
-                self.store.accepted(request_id, turn)?;
-                self.store.request(request_id)?.unwrap()
+                w.attach()?
+            }
+            "stop-worker" => {
+                let id = string(&request, "session_id")?;
+                self.worker
+                    .as_mut()
+                    .filter(|w| w.session == id)
+                    .context("not a live managed worker; external sessions cannot be stopped")?
+                    .stop(&self.store)?
             }
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
-            "stop" => return Ok((json!({"stopping":true,"native_agents_stopped":false}), true)),
+            "stop" => {
+                ensure!(
+                    !self.worker.as_ref().is_some_and(|w| w.alive),
+                    "stop the managed worker explicitly before stopping Voyager"
+                );
+                return Ok((json!({"stopping":true,"native_agents_stopped":false}), true));
+            }
             _ => bail!("unsupported operation"),
         };
         Ok((value, false))
+    }
+
+    fn connection(&mut self, session: &str) -> Result<&mut Codex> {
+        if self.worker.as_ref().is_some_and(|w| w.session == session) {
+            return self.worker.as_mut().unwrap().client();
+        }
+        let native = self.store.native(session, &self.server)?;
+        ensure!(
+            self.registered.get(&native).map(String::as_str) == Some(session),
+            "session is not currently registered for capture"
+        );
+        self.codex()
+    }
+
+    fn send(&mut self, session: &str, request_id: &str, message: &str) -> Result<Value> {
+        ensure!(
+            request_id.len() <= 128 && message.len() <= events::TEXT_LIMIT,
+            "request ID or message too long"
+        );
+        if let Some(previous) = self.store.request(request_id)? {
+            ensure!(
+                previous["session_id"] == session && previous["message"] == message,
+                "request ID conflicts with previous inputs"
+            );
+            return Ok(previous);
+        }
+        let native = self.store.session(session)?["native_thread_id"]
+            .as_str()
+            .context("missing native thread")?
+            .to_owned();
+        let metadata = self.connection(session)?.metadata(&native)?;
+        ensure!(
+            metadata["status"]["type"] == "idle",
+            "agent is not idle; leave its current work alone"
+        );
+        self.store.begin_request(request_id, session, message)?;
+        let result=self.connection(session)?.rpc("turn/start",json!({"threadId":native,"clientUserMessageId":request_id,"input":[{"type":"text","text":message}]}))?;
+        let turn = result["turn"]["id"]
+            .as_str()
+            .context("no turn identity; request remains uncertain")?;
+        self.store.accepted(request_id, turn)?;
+        Ok(self.store.request(request_id)?.unwrap())
     }
 
     fn persist(&self, message: Value) -> Result<()> {
@@ -293,6 +393,9 @@ impl Runtime {
     }
 
     fn observe(&mut self) -> Result<()> {
+        if let Some(worker) = self.worker.as_mut() {
+            worker.observe(&self.store)?;
+        }
         let pending: Vec<_> = self
             .codex
             .as_mut()
