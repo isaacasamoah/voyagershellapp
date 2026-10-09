@@ -212,6 +212,7 @@ app.whenReady().then(async () => {
     height: collapsedSize,
     frame: false,
     transparent: true,
+    hasShadow: false,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,

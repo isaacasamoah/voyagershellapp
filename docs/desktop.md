@@ -4,6 +4,8 @@ Voyager parks near the top-right of the screen. Click the astronaut to reveal a
 compact glass panel; click again to collapse it. The smaller, 104 px avatar forms
 a rounded crest at the top, with rainbow VOYAGER lettering above and “let’s go
 together” below. Avatar and panel share the same translucent material.
+The floating avatar keeps its circular highlights without an outer shadow;
+the transparent native window also disables its shadow.
 
 The panel shows **Online / Offline**, agent/project names and connection status.
 It grows to fit the current list, within the display height. No event feed,
