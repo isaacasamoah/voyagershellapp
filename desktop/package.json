@@ -1,0 +1,20 @@
+{
+  "name": "voyager-desktop",
+  "version": "0.1.0",
+  "description": "A small Electron client of the Voyager Rust service",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/binding.test.cjs",
+    "proof": "electron . --proof",
+    "format:check": "prettier --check .",
+    "format": "prettier --write ."
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "44.7.0",
+    "prettier": "3.9.9"
+  },
+  "private": true
+}

@@ -8,7 +8,7 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 
 ## Starting boundary
 
-The background service and the interface are separate. The service connects agents, owns the work it launches, and records attributed events. A later Electron app provides the Voyager avatar, docking and a small status panel.
+The background service and the interface are separate. The service connects agents, owns the work it launches, and records attributed events. An experimental Electron client provides the Voyager avatar, docking and a small status panel.
 
 Connecting an existing agent is different from taking ownership of its process. Hooks can provide events and tools without replacing the agent's interface. Live persistence requires the original process to keep running; restarting from saved conversation is recovery. Our first experiment tests cooperative transfer from an existing terminal owner. It does not establish that an ordinary terminal currently exposes that integration.
 
@@ -28,7 +28,13 @@ Persistence initially means surviving client disconnect. It does not mean preser
 
 A minimal Rust service now registers an existing Codex app-server thread, launches one local Codex worker, and records future conversation/lifecycle events in a private SQLite database. The worker has a service-owned app server; its native terminal interface can disconnect and reconnect independently. The existing lead session remains externally owned.
 
-Read [running the service](docs/service.md) and [the worker experiment](docs/workers.md) for commands and measured limits. A CLI watcher offers JSONL or readable You/Agent output. Registering an existing lead requires its app server's local Unix socket; arbitrary standalone CLI adoption remains unsupported. There is no Electron client or knowledge graph in this slice.
+Read [running the service](docs/service.md) and [the worker experiment](docs/workers.md) for commands and measured limits. A CLI watcher offers JSONL or readable You/Agent output. Registering an existing lead requires its app server's local Unix socket; arbitrary standalone CLI adoption remains unsupported.
+
+The [desktop experiment](docs/desktop.md) adds the existing astronaut design and a
+live status panel. Its first window binding is deliberately narrow: dedicated
+Ghostty XWayland windows opened for an already registered worker. It does not yet
+attach arbitrary existing terminals, support native Wayland docking, or build a
+knowledge graph.
 
 The earlier [mechanism experiments](docs/experiments.md) remain reproducible: cooperative PTY handoff and independent synthetic capture. They do not establish arbitrary live-terminal adoption.
 
