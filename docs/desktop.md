@@ -2,9 +2,10 @@
 
 Voyager parks near the top-right of the screen. Click the astronaut to reveal a
 compact glass panel; click again to collapse it. The 104 px avatar has no text
-while floating. Opening the panel reveals a curved glass banner with rainbow
-VOYAGER lettering above the astronaut, and “let’s go together” at the bottom
-of the panel. Avatar and panel share the same translucent material.
+while floating. Opening the panel reveals a filled glass crest with rainbow
+VOYAGER lettering above the astronaut, without a gap between banner and avatar.
+“Let’s Go Together” appears in a warm-to-blue gradient at the bottom of the panel.
+Avatar and panel share the same translucent material.
 The floating avatar keeps its circular highlights without an outer shadow;
 the transparent native window also disables its shadow.
 
