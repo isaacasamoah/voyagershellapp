@@ -1,0 +1,13 @@
+[package]
+name = "voyager-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Small, disposable experiments for Voyager's native agent service"
+publish = false
+
+[dependencies]
+anyhow = "1"
+nix = { version = "0.31.3", features = ["socket", "uio", "user", "ioctl"] }
+serde_json = "1"
