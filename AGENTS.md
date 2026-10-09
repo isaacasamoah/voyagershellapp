@@ -16,3 +16,8 @@ Voyager is an experimental Rust service around existing native agent interfaces.
 - No automatic agent resubmission or process restoration after an uncertain failure.
 
 The detailed design work can evolve before an implementation increment is accepted. Update the README's actual status when behavior changes; do not call a scaffold a working feature.
+
+Read the small Rust conventions in `CONTRIBUTING.md`. Keep source readable for
+people learning with us, and preserve the same checks and docs in every increment.
+Use a working branch and PR; never use the admin bypass without Isaac explicitly
+authorizing that particular merge or protected-branch update.
