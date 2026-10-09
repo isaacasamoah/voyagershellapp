@@ -1,0 +1,226 @@
+:root {
+  color-scheme: light;
+  font-family: ui-monospace, monospace;
+  color: #172837;
+  font-size: 12px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+button:focus-visible,
+.avatar:active {
+  outline: 2px solid #bbd7ff;
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+[hidden] {
+  display: none !important;
+}
+body[data-view='avatar'] #panel,
+body[data-view='panel'] #avatar {
+  display: none !important;
+}
+.avatar,
+#panel {
+  user-select: none;
+  border: 1px solid #ffffff9c;
+  background: linear-gradient(145deg, #f9fdffba, #eaf6ff80 50%, #f4fbff9c);
+  box-shadow:
+    inset 0 1px 0 #ffffffdf,
+    inset 0 -1px 0 #ffffff66,
+    0 12px 32px #142b421a;
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+.avatar {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: 104px;
+  height: 104px;
+  padding: 0;
+  border-radius: 50%;
+  /* An outer shadow would be cut into a square by the compact floating window. */
+  box-shadow:
+    inset 0 1px 0 #ffffffdf,
+    inset 0 -1px 0 #ffffff66;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+}
+.avatar img {
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+  pointer-events: none;
+  animation: float-idle 8s ease-in-out infinite;
+}
+.brand {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 224px;
+  height: 120px;
+  overflow: visible;
+  pointer-events: none;
+}
+body[data-seated='true'] .avatar {
+  /* The panel supplies the glass, so the seated astronaut has no separate rim. */
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.avatar[data-state='moving'] {
+  cursor: grabbing;
+}
+#indicator {
+  position: absolute;
+  right: 6px;
+  bottom: 18px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #dca34b;
+}
+body[data-connected='true'] #indicator {
+  background: #8dccba;
+}
+#panel {
+  -webkit-app-region: drag;
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+  padding: 153px 16px 12px;
+  border-radius: 50% 50% 16px 16px / 106px 106px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#tagline {
+  margin: 0;
+  align-self: center;
+  text-align: center;
+  background: linear-gradient(90deg, #f7a34b, #f4e04d 50%, #59a5ff);
+  background-clip: text;
+  color: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+}
+#connection {
+  color: #25634f;
+  text-align: center;
+  font-size: 11px;
+}
+body[data-connected='false'] #connection {
+  color: #785322;
+}
+#sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: auto;
+  min-height: 44px;
+  flex: 1;
+}
+.session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid transparent;
+  background: #ffffff12;
+  border-radius: 8px;
+  padding: 9px;
+  flex-shrink: 0;
+}
+.session[aria-pressed='true'] {
+  border-color: #ffffff9c;
+  background: #ffffff35;
+}
+.session-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #78848d;
+  flex-shrink: 0;
+}
+.session[data-connected='true'] .connection-dot {
+  background: #36866d;
+}
+.empty {
+  margin: 12px 0;
+  text-align: center;
+  color: #435b6b;
+  font-size: 11px;
+}
+#undock {
+  background: transparent;
+  border: 1px solid #ffffff90;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+#quit {
+  position: absolute;
+  top: 108px;
+  right: 10px;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #425767;
+  font-size: 20px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#panel:hover #quit,
+#quit:focus-visible {
+  opacity: 1;
+}
+body[data-dock-error='true'] #indicator {
+  background: #c69349;
+}
+@keyframes float-idle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar img {
+    animation: none;
+  }
+}

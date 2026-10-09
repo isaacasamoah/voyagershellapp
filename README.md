@@ -6,39 +6,41 @@ Keep your terminal. Keep your agent's interface. Voyager should help those agent
 
 We are building in small increments: try a real workflow, use it ourselves, document what failed, and change the next increment from that experience. This repository is public so others can learn with us and help shape it.
 
-## Starting boundary
+## What works today
+
+- The Rust service registers a supported existing Codex app-server thread and
+  records future conversation and lifecycle events in private SQLite storage.
+- It launches one local Codex worker with a service-owned app server. The native
+  terminal client can disconnect and reconnect while that worker keeps running.
+- The Electron prototype shows a glass astronaut and a small panel of project
+  names and connection dots. Click to toggle the panel, drag its background to
+  move it, or pull the astronaut away and return it with paired sound cues.
+- The desktop recognises dedicated Ghostty XWayland windows of an already
+  registered worker by process and session identity. It can join that worker;
+  dropping onto an arbitrary terminal does not yet register an agent.
+
+Start with [running the service](docs/service.md), then [the worker
+experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
+
+This is a Linux prototype under active development. Native Wayland, arbitrary
+running-CLI adoption, macOS behavior, knowledge extraction and team sharing
+remain unproved or unimplemented. Persistence currently means surviving client
+disconnect, not a daemon crash or reboot. The desktop's tested adapter requires
+a dedicated Ghostty XWayland process; tabs and switching agent threads are not
+supported.
+
+## The boundary we are keeping
 
 The background service and the interface are separate. The service connects agents, owns the work it launches, and records attributed events. An experimental Electron client provides the Voyager avatar, docking and a small status panel.
 
-Connecting an existing agent is different from taking ownership of its process. Hooks can provide events and tools without replacing the agent's interface. Live persistence requires the original process to keep running; restarting from saved conversation is recovery. Our first experiment tests cooperative transfer from an existing terminal owner. It does not establish that an ordinary terminal currently exposes that integration.
+Connecting an existing agent is different from taking ownership of its process.
+The existing lead remains externally owned. Closing Electron or undocking its
+avatar only detaches the interface: it does not unregister a session or stop
+work. The native agent remains the conversational interface.
 
 This is not a new terminal UI or a tmux integration. We are learning from the process ownership in Herdr and tmux, and from Pi's structured events. We are writing our own small service, without copying those applications.
 
-## First experiments
-
-1. Test a terminal handing an already-running process's PTY connection to a Rust receiver, including a shutdown-policy counterexample.
-2. Collect synthetic structured events alongside that process and prove a collector failure leaves it running.
-3. Take the measured boundary to one real terminal/harness integration. Then prove interactive detach/reconnect and correctly attributed tasks through that adapter.
-4. Add the existing avatar/docking design as a client of the same service.
-5. Use the event evidence to build and retrieve personal knowledge; add explicit team sharing later.
-
-Persistence initially means surviving client disconnect. It does not mean preserving processes across a daemon crash, reboot or machine migration.
-
-## Status
-
-A minimal Rust service now registers an existing Codex app-server thread, launches one local Codex worker, and records future conversation/lifecycle events in a private SQLite database. The worker has a service-owned app server; its native terminal interface can disconnect and reconnect independently. The existing lead session remains externally owned.
-
-Read [running the service](docs/service.md) and [the worker experiment](docs/workers.md) for commands and measured limits. A CLI watcher offers JSONL or readable You/Agent output. Registering an existing lead requires its app server's local Unix socket; arbitrary standalone CLI adoption remains unsupported.
-
-The [desktop experiment](docs/desktop.md) adds the existing astronaut design and a
-live status panel. Its first window binding is deliberately narrow: dedicated
-Ghostty XWayland windows opened for an already registered worker. It does not yet
-attach arbitrary existing terminals, support native Wayland docking, or build a
-knowledge graph.
-
-The earlier [mechanism experiments](docs/experiments.md) remain reproducible: cooperative PTY handoff and independent synthetic capture. They do not establish arbitrary live-terminal adoption.
-
-## Try the experiments
+## Try the checks
 
 On Linux with Rust, a C linker and Python 3 installed:
 
@@ -50,6 +52,44 @@ cargo test --locked
 
 The tests create disposable local processes, sockets and synthetic records, then clean them up. They make no model calls, need no credentials or root privileges, and do not attach to existing sessions. Cargo downloads the locked dependencies on the first build. macOS support is still to be proved.
 
-The service is written in Rust. Python is only the independent process fixture used to test it. Read the [experiment walkthrough and limits](docs/experiments.md) before running the low-level probe commands manually.
+For the desktop, install Node 24, then:
+
+```sh
+cd desktop
+npm ci
+npm run format:check
+npm test
+```
+
+These desktop checks do not open windows or call a model. The separate
+[live desktop proof](docs/desktop.md#limits-and-proof) uses a running service and
+an existing supported worker terminal. It deliberately opens windows; do not
+confuse its programmatic checks with a human testing the gestures.
+
+## Find your way around
+
+| Directory         | Responsibility                                                   |
+| ----------------- | ---------------------------------------------------------------- |
+| `src/`            | Rust service, capture, persistence, worker ownership and CLI     |
+| `src/bin/`        | Service CLI entry point and read-only X11 window inventory       |
+| `tests/`          | Disposable service tests and independent Python process fixtures |
+| `desktop/src/`    | Electron main process, window binding and narrow preload API     |
+| `desktop/src/ui/` | Local HTML, CSS and browser-side interface code                  |
+| `desktop/test/`   | Binding tests and the explicit live desktop proof                |
+| `docs/`           | Run guides, experiments, evidence and limitations                |
+
+The [desktop developer guide](desktop/README.md) explains the small process
+boundary and how to change the UI. Earlier [mechanism experiments](docs/experiments.md)
+remain reproducible learning fixtures, separate from the application. Python is
+used for those fixtures, not the Rust service runtime.
+
+## Next experiment
+
+Connect the actual avatar drop to registering or joining a supported native
+session through the Rust service. First prove one exact window-to-session match,
+then capture a conversation, detach the interface, and rejoin the same session.
+Refuse an unrelated or ambiguous terminal. Registration must not pretend to take
+ownership of an externally launched agent. Event-to-knowledge extraction follows
+as a separate increment.
 
 Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.

@@ -8,7 +8,8 @@ async function processIdentity(pid) {
     .trim()
     .split(/\s+/);
   const argv = (await fs.readFile(`/proc/${pid}/cmdline`, 'utf8')).split('\0').filter(Boolean);
-  return { pid, start: fields[19], argv };
+  const executable = await fs.readlink(`/proc/${pid}/exe`);
+  return { pid, start: fields[19], argv, executable };
 }
 
 async function directChildren(pid) {
@@ -31,28 +32,51 @@ async function directChildren(pid) {
   return [...new Set(children.flat())];
 }
 
+async function identifyTerminal(pid, sessionId, info) {
+  const terminal = await processIdentity(pid);
+  if (terminal.executable !== '/usr/bin/ghostty') return null;
+  const expectedExecutable = await fs.realpath(info.executable);
+  for (const child of await directChildren(pid)) {
+    let frontend;
+    try {
+      frontend = await processIdentity(child);
+    } catch {
+      continue;
+    }
+    if (
+      frontend.executable === expectedExecutable &&
+      JSON.stringify(frontend.argv.slice(1)) === JSON.stringify(info.args)
+    ) {
+      return { ...terminal, frontend, sessionId, nativeId: info.native_thread_id };
+    }
+  }
+  return null;
+}
+
 function resolveWindow(window, windows, records, sessions, identities) {
-  if (!window?.visible) return { error: 'No supported terminal under the avatar' };
+  if (!window?.visible) return { error: 'This terminal is unavailable.' };
   const record = records.find((r) => r.pid === window.pid);
-  if (!record) return { error: 'This window has no Voyager launch binding' };
+  if (!record) return { error: 'Can’t connect to this terminal yet.' };
   // Even hidden siblings make a process-to-window association ambiguous.
   if (windows.filter((w) => w.pid === record.pid).length !== 1)
-    return { error: 'Several windows share this process; docking is ambiguous' };
+    return { error: 'Use a separate terminal window for this agent.' };
   const terminal = identities.get(record.pid),
     frontend = identities.get(record.frontend.pid);
   if (
     !terminal ||
     terminal.start !== record.start ||
+    terminal.executable !== record.executable ||
     !frontend ||
     frontend.start !== record.frontend.start ||
+    frontend.executable !== record.frontend.executable ||
     JSON.stringify(frontend.argv) !== JSON.stringify(record.frontend.argv)
   )
-    return { error: 'The original terminal client is no longer verified' };
+    return { error: 'This terminal has changed. Try docking again.' };
   const session = sessions.find(
     (s) => s.id === record.sessionId && s.native_thread_id === record.nativeId,
   );
   if (!session || session.capture !== 'connected' || session.worker_state !== 'running')
-    return { error: 'The registered worker is no longer connected' };
+    return { error: 'This agent is disconnected.' };
   return { window, session, record };
 }
 
@@ -70,4 +94,4 @@ function windowAt(windows, point, excludedPid) {
     );
 }
 
-module.exports = { processIdentity, directChildren, resolveWindow, windowAt };
+module.exports = { processIdentity, identifyTerminal, resolveWindow, windowAt };

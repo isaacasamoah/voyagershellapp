@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveWindow, windowAt } = require('../binding.cjs');
+const { resolveWindow, windowAt } = require('../src/binding.cjs');
 const session = {
   id: 'one',
   native_thread_id: 'thread-one',
@@ -10,7 +10,13 @@ const session = {
 const record = {
   pid: 10,
   start: '100',
-  frontend: { pid: 11, start: '110', argv: ['codex', 'resume', 'thread-one'] },
+  executable: '/usr/bin/ghostty',
+  frontend: {
+    pid: 11,
+    start: '110',
+    executable: '/native/codex',
+    argv: ['codex', 'resume', 'thread-one'],
+  },
   sessionId: 'one',
   nativeId: 'thread-one',
 };
@@ -25,11 +31,11 @@ function resolve(w, windows = [a, b], sessions = [session], processes = identiti
 }
 test('identical titles do not bind an unrelated terminal', () => {
   assert.equal(resolve(a).session.id, 'one');
-  assert.match(resolve(b).error, /no Voyager launch binding/);
+  assert.match(resolve(b).error, /Can’t connect to this terminal yet/);
   assert.equal(windowAt([a, b], { x: 300, y: 50 }, 999).id, 2);
 });
 test('extra windows, PID reuse, exited frontend and disconnected capture refuse docking', () => {
-  assert.match(resolve(a, [a, { ...b, pid: 10 }]).error, /ambiguous/);
+  assert.match(resolve(a, [a, { ...b, pid: 10 }]).error, /separate terminal window/);
   assert.match(
     resolve(
       a,
@@ -40,14 +46,26 @@ test('extra windows, PID reuse, exited frontend and disconnected capture refuse 
         [11, record.frontend],
       ]),
     ).error,
-    /no longer verified/,
+    /terminal has changed/,
   );
-  assert.match(resolve(a, [a, b], [session], new Map([[10, record]])).error, /no longer verified/);
   assert.match(
-    resolve(a, [a, b], [{ ...session, capture: 'disconnected' }]).error,
-    /no longer connected/,
+    resolve(a, [a, b], [session], new Map([[10, record]])).error,
+    /terminal has changed/,
   );
-  assert.match(resolve({ ...a, visible: false }).error, /No supported terminal/);
+  assert.match(
+    resolve(
+      a,
+      [a, b],
+      [session],
+      new Map([
+        [10, record],
+        [11, { ...record.frontend, executable: '/unrelated/program' }],
+      ]),
+    ).error,
+    /terminal has changed/,
+  );
+  assert.match(resolve(a, [a, b], [{ ...session, capture: 'disconnected' }]).error, /disconnected/);
+  assert.match(resolve({ ...a, visible: false }).error, /terminal is unavailable/);
 });
 test('frontmost visible window wins hit testing, never a covered terminal', () => {
   assert.equal(windowAt([a, { ...b, x: 0 }], { x: 50, y: 50 }, 999).id, 2);

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'"
+    />
+    <title>Voyager</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <section id="panel" hidden aria-label="Voyager agents">
+        <svg class="brand" viewBox="0 0 224 120" aria-hidden="true">
+          <defs>
+            <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff5f56" />
+              <stop offset="20%" stop-color="#f7a34b" />
+              <stop offset="40%" stop-color="#f4e04d" />
+              <stop offset="60%" stop-color="#5ec98f" />
+              <stop offset="80%" stop-color="#59a5ff" />
+              <stop offset="100%" stop-color="#b07af5" />
+            </linearGradient>
+            <path id="upper-arc" d="M 29 111 A 83 83 0 0 1 195 111" fill="none" />
+          </defs>
+          <g
+            font-family="VoyagerMono,ui-monospace,monospace"
+            font-size="22"
+            font-weight="900"
+            letter-spacing="2.8"
+          >
+            <g transform="translate(1.8,2.2)">
+              <text fill="#12071f">
+                <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">
+                  VOYAGER
+                </textPath>
+              </text>
+            </g>
+            <g transform="translate(.8,1)">
+              <text fill="#2a1245">
+                <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">
+                  VOYAGER
+                </textPath>
+              </text>
+            </g>
+            <text fill="url(#rainbow)" stroke="#fff7e6" stroke-width=".2">
+              <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">VOYAGER</textPath>
+            </text>
+          </g>
+        </svg>
+        <div id="connection" role="status">Connecting…</div>
+        <div id="sessions" aria-label="Your agents"></div>
+        <button id="undock" hidden>Detach</button>
+        <p id="tagline">Let’s Go Together</p>
+        <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
+      </section>
+      <button
+        id="avatar"
+        class="avatar"
+        data-state="floating"
+        aria-label="Voyager. Click for agents. Hold to lift, then drag onto a terminal."
+        aria-expanded="false"
+      >
+        <img src="../../assets/idle.png" alt="" draggable="false" />
+        <span id="indicator" aria-hidden="true"></span>
+      </button>
+    </main>
+    <script src="renderer.js"></script>
+  </body>
+</html>
