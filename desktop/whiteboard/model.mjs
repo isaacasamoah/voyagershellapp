@@ -24,7 +24,13 @@ export function validateBoard(board) {
       typeof n.label !== 'string' ||
       n.label.length > 120 ||
       !coord(n.x) ||
-      !coord(n.y)
+      !coord(n.y) ||
+      !Number.isFinite(n.width ?? 200) ||
+      (n.width ?? 200) < 40 ||
+      (n.width ?? 200) > 4096 ||
+      !Number.isFinite(n.height ?? 64) ||
+      (n.height ?? 64) < 32 ||
+      (n.height ?? 64) > 4096
     )
       fail();
     ids.add(n.id);
@@ -40,7 +46,15 @@ export function validateBoard(board) {
   // Copy just the supported fields: imported files never carry executable markup.
   return {
     version: 1,
-    nodes: board.nodes.map(({ id, kind, label, x, y }) => ({ id, kind, label, x, y })),
+    nodes: board.nodes.map(({ id, kind, label, x, y, width = 200, height = 64 }) => ({
+      id,
+      kind,
+      label,
+      x,
+      y,
+      width: width ?? 200,
+      height: height ?? 64,
+    })),
     edges: board.edges.map(({ from, to }) => ({ from, to })),
     strokes: board.strokes.map((s) => s.map((p) => [...p])),
   };

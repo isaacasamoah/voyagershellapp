@@ -1,134 +1,251 @@
-// Opt-in proof through the real Voyager sidebar and transparent desktop layer.
+// Opt-in interaction proof: every sidebar action is reached with pointer input.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { screen, dialog } = require('electron');
+const { BrowserWindow, screen, dialog, nativeImage } = require('electron');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
   const output = process.env.VOYAGER_WHITEBOARD_PROOF;
   if (!output || !path.isAbsolute(output))
-    throw Error('Set VOYAGER_WHITEBOARD_PROOF to an absolute evidence directory');
+    throw Error('Set VOYAGER_WHITEBOARD_PROOF to an absolute directory');
   await fs.mkdir(output, { recursive: true });
   const before = await rpc('status');
+  win.focus();
   setExpanded(true);
+  await delay(250);
   const panel = (code) => win.webContents.executeJavaScript(code, true);
-  const overlay = whiteboard.overlay;
-  const drawing = (code) => overlay.webContents.executeJavaScript(code, true);
-  const click = async (x, y) => {
-    overlay.webContents.sendInputEvent({ type: 'mouseMove', x, y });
-    overlay.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+  const drawing = panel;
+  const snapshot = () => whiteboard.snapshot();
+  async function click(x, y, count = 1, modifiers = []) {
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(x), y: Math.round(y) });
+    win.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: Math.round(x),
+      y: Math.round(y),
+      button: 'left',
+      clickCount: count,
+      modifiers,
+    });
     await delay(35);
-    overlay.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    win.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: Math.round(x),
+      y: Math.round(y),
+      button: 'left',
+      clickCount: count,
+      modifiers,
+    });
     await delay(100);
-  };
-  const tool = async (name) => {
-    await panel(`document.querySelector('[data-drawing-tool="${name}"]').click()`);
-    await delay(150);
-  };
-  const label = async (text) => {
-    await panel(
-      `(()=>{const e=document.getElementById('wb-label');e.value=${JSON.stringify(text)};e.dispatchEvent(new Event('input'));})()`,
+  }
+  async function button(selector) {
+    const p = await panel(
+      `(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,disabled:e.disabled}})()`,
     );
-    await delay(80);
-  };
-  assert.equal(overlay.isVisible(), false);
+    assert(!p.disabled, `${selector} must be enabled`);
+    await click(p.x, p.y);
+  }
+  async function tool(name) {
+    await button(`[data-drawing-tool="${name}"]`);
+    assert.equal(whiteboard.getState().tool, name);
+  }
+  async function typeLabel(text) {
+    await button('#wb-label');
+    await panel(`document.querySelector('#wb-label').select()`);
+    await win.webContents.insertText(text);
+    await delay(100);
+  }
+  async function drag(a, b) {
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: a[0], y: a[1] });
+    await delay(35);
+    win.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: a[0],
+      y: a[1],
+      button: 'left',
+      clickCount: 1,
+    });
+    for (let i = 1; i <= 12; i++) {
+      win.webContents.sendInputEvent({
+        type: 'mouseMove',
+        x: Math.round(a[0] + ((b[0] - a[0]) * i) / 12),
+        y: Math.round(a[1] + ((b[1] - a[1]) * i) / 12),
+      });
+      await delay(15);
+    }
+    win.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: b[0],
+      y: b[1],
+      button: 'left',
+      clickCount: 1,
+    });
+    await delay(100);
+  }
+  const normal = win.getBounds();
+  await tool('pen');
+  assert(whiteboard.getState().active);
+  assert.deepEqual(win.getBounds(), screen.getDisplayMatching(normal).bounds);
+  assert.equal(
+    BrowserWindow.getAllWindows().length,
+    1,
+    'Tools and drawing must share one native window',
+  );
+  // Deliberately recreate the bug inside the window: canvas over controls.
+  await panel(`document.querySelector('#drawing').style.zIndex='2'`);
+  await button('[data-drawing-tool="box"]');
+  assert.equal(
+    whiteboard.getState().tool,
+    'pen',
+    'Known-broken stacking must swallow the Box click',
+  );
+  await panel(`document.querySelector('#drawing').style.zIndex=''`);
   await tool('box');
-  assert(overlay.isVisible());
-  assert.deepEqual(overlay.getBounds(), screen.getDisplayMatching(win.getBounds()).bounds);
-  await label('Desktop sketch');
+  await button('#wb-clear');
+  await typeLabel('Desktop sketch');
   await click(200, 200);
-  await label('Agent planning');
+  await typeLabel('Agent planning');
   await click(550, 200);
+  await tool('text');
+  await typeLabel('A shared thought');
+  await click(850, 360);
+  const textId = (await snapshot()).nodes[2].id;
+  assert.deepEqual(
+    await drawing(
+      `(()=>{const r=document.querySelector('[data-node="${textId}"] rect');return [r.getAttribute('fill'),r.getAttribute('stroke')]})()`,
+    ),
+    ['transparent', 'none'],
+    'Text must render without a card background or outline',
+  );
   await tool('arrow');
   await click(200, 200);
   await click(550, 200);
+  assert.equal((await snapshot()).edges.length, 1);
   await tool('pen');
-  overlay.webContents.sendInputEvent({
-    type: 'mouseDown',
-    x: 150,
-    y: 350,
-    button: 'left',
-    clickCount: 1,
-  });
-  for (let i = 1; i <= 16; i++) {
-    overlay.webContents.sendInputEvent({
-      type: 'mouseMove',
-      x: 150 + i * 20,
-      y: 350 + Math.round(Math.sin(i / 3) * 35),
-    });
-    await delay(20);
-  }
-  overlay.webContents.sendInputEvent({
-    type: 'mouseUp',
-    x: 470,
-    y: 320,
-    button: 'left',
-    clickCount: 1,
-  });
-  await delay(150);
-  let board = await drawing('window.whiteboard.snapshot()');
-  assert.equal(board.nodes.length, 2);
-  assert.equal(board.edges.length, 1);
-  assert.equal(board.strokes.length, 1);
-  assert(board.strokes[0].length > 5);
-  const frame = await overlay.webContents.capturePage();
-  const bitmap = frame.toBitmap();
-  assert.equal(bitmap[3], 0, 'Empty desktop pixels must remain fully transparent');
-  await fs.writeFile(path.join(output, 'overlay.png'), frame.toPNG());
-  await fs.writeFile(
-    path.join(output, 'sidebar.png'),
-    (await win.webContents.capturePage()).toPNG(),
-  );
-  // The dialogs are replaced only here to choose bounded evidence filenames.
+  await drag([150, 400], [450, 430]);
+  assert.equal((await snapshot()).strokes.length, 1);
+  await tool('select');
+  await click(200, 200);
+  assert.equal(whiteboard.getState().selectedCount, 1);
+  // Text edit using the sidebar after a canvas selection.
+  await typeLabel('Plan together');
+  assert.equal((await snapshot()).nodes[0].label, 'Plan together');
+  // Bottom-right resize handle must change the box rather than move it.
+  await drag([300, 232], [350, 272]);
+  let board = await snapshot();
+  assert.equal(board.nodes[0].width, 250, JSON.stringify(board.nodes[0]));
+  assert.equal(board.nodes[0].height, 104);
+  // Double-click opens direct text editing inside the box.
+  await click(225, 220);
+  await click(225, 220, 2);
+  assert.equal(await drawing(`document.querySelector('#editor').hidden`), false);
+  assert.equal(await drawing('document.activeElement.id'), 'editor');
+  await win.webContents.insertText('Direct edit');
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+  await delay(100);
+  assert.equal((await snapshot()).nodes[0].label, 'Direct edit');
+  // Marquee two boxes, move together, and undo as one operation.
+  await drag([80, 130], [680, 300]);
+  assert.equal(whiteboard.getState().selectedCount, 2);
+  const old = await snapshot();
+  await drag([225, 220], [275, 250]);
+  board = await snapshot();
+  assert.equal(board.nodes[0].x, old.nodes[0].x + 50);
+  assert.equal(board.nodes[1].x, old.nodes[1].x + 50);
+  await button('#wb-undo');
+  assert.equal((await snapshot()).nodes[0].x, old.nodes[0].x);
+  // Shift-click expands selection. Strokes can participate as well.
+  await click(225, 220);
+  await click(550, 200, 1, ['shift']);
+  assert.equal(whiteboard.getState().selectedCount, 2);
+  await click(300, 415, 1, ['shift']);
+  assert.equal(whiteboard.getState().selectedCount, 3);
+  await button('#wb-delete');
+  assert.equal((await snapshot()).nodes.length, 1);
+  assert.equal((await snapshot()).strokes.length, 0);
+  await button('#wb-undo');
+  assert.equal((await snapshot()).nodes.length, 3);
+  assert.equal((await snapshot()).strokes.length, 1);
+  // Save actions: real click paths, file chooser selection replaced only in test.
   const saveDialog = dialog.showSaveDialog,
     openDialog = dialog.showOpenDialog;
+  let saveCount = 0,
+    openCount = 0;
   try {
-    dialog.showSaveDialog = async (_parent, options) => ({
-      canceled: false,
-      filePath: path.join(output, options.defaultPath),
-    });
-    for (const action of ['save-board', 'save-mermaid', 'save-image'])
-      await whiteboard.command({ action });
-    assert.equal(overlay.isVisible(), false);
-    assert.equal(
-      JSON.parse(await fs.readFile(path.join(output, 'voyager-board.json'), 'utf8')).nodes.length,
-      2,
+    dialog.showSaveDialog = async (_parent, options) => {
+      saveCount++;
+      return { canceled: false, filePath: path.join(output, options.defaultPath) };
+    };
+    for (const id of ['wb-json', 'wb-mermaid', 'wb-image']) {
+      await tool('pen');
+      await button(`#${id}`);
+      await delay(200);
+      assert.equal(whiteboard.getState().active, false);
+    }
+    assert.equal(saveCount, 3);
+    assert((await fs.readFile(path.join(output, 'voyager-board.png'))).length > 1000);
+    // Export after leaving drawing mode must retain the full display size.
+    await button('#wb-image');
+    await delay(200);
+    assert.equal(saveCount, 4);
+    assert.deepEqual(
+      nativeImage.createFromPath(path.join(output, 'voyager-board.png')).getSize(),
+      whiteboard.getState().canvas,
     );
+    const saved = JSON.parse(await fs.readFile(path.join(output, 'voyager-board.json'), 'utf8'));
+    assert.equal(saved.nodes[0].width, 250);
     assert.match(await fs.readFile(path.join(output, 'voyager-board.mmd'), 'utf8'), /N0 --> N1/);
-    const png = await fs.readFile(path.join(output, 'voyager-board.png'));
-    assert(png.length > 1000);
-    board.nodes.push({ id: 'nagent', kind: 'box', label: 'Review together', x: 900, y: 200 });
-    board.edges.push({ from: board.nodes[1].id, to: 'nagent' });
-    const imported = path.join(output, 'edited-board.json');
-    await fs.writeFile(imported, JSON.stringify(board));
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [imported] });
-    await whiteboard.command({ action: 'open' });
+    dialog.showOpenDialog = async () => {
+      openCount++;
+      return { canceled: false, filePaths: [path.join(output, 'voyager-board.json')] };
+    };
+    await button('#wb-open');
+    await delay(200);
+    assert.equal(openCount, 1);
+    assert(whiteboard.getState().active);
+    assert.equal((await snapshot()).nodes.length, 3);
+    await button('#wb-clear');
+    assert.equal((await snapshot()).nodes.length, 0);
+    await button('#wb-undo');
+    assert.equal((await snapshot()).nodes.length, 3);
+    const invalid = path.join(output, 'invalid.json');
+    await fs.writeFile(invalid, '{"version":999}');
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [invalid] });
+    await button('#wb-open');
     await delay(100);
-    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 3);
-    await fs.writeFile(imported, '{"version":999}');
-    await assert.rejects(() => whiteboard.command({ action: 'open' }));
-    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 3);
-    await tool('pen');
-    await panel(`document.getElementById('wb-undo').click()`);
-    await delay(100);
-    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 2);
+    assert.equal((await snapshot()).nodes.length, 3);
   } finally {
     dialog.showSaveDialog = saveDialog;
     dialog.showOpenDialog = openDialog;
   }
-  await panel(`document.getElementById('wb-hide').click()`);
+  await tool('pen');
+  await button('#wb-hide');
+  assert(!whiteboard.getState().active);
+  assert.deepEqual(win.getBounds(), normal);
+  await tool('select');
+  await click(225, 220);
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   await delay(100);
-  assert.equal(overlay.isVisible(), false);
-  await tool('pen');
-  assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 2);
-  overlay.focus();
-  overlay.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-  await delay(150);
-  assert.equal(overlay.isVisible(), false);
-  await tool('pen');
+  assert(!whiteboard.getState().active);
+  await tool('select');
+  assert.equal((await snapshot()).nodes.length, 3);
+  const capture = await win.webContents.capturePage();
+  assert.equal(capture.toBitmap()[3], 0, 'Desktop background must stay transparent');
+  await fs.writeFile(path.join(output, 'shared-surface.png'), capture.toPNG());
+  await fs.writeFile(
+    path.join(output, 'sidebar.png'),
+    (
+      await win.webContents.capturePage({
+        x: whiteboard.getState().sidebar.x,
+        y: whiteboard.getState().sidebar.y,
+        width: 390,
+        height: 790,
+      })
+    ).toPNG(),
+  );
   setExpanded(false);
   await delay(100);
-  assert.equal(overlay.isVisible(), false);
+  assert(!whiteboard.getState().active);
   assert.equal((await rpc('status')).instance, before.instance);
   await fs.writeFile(
     path.join(output, 'result.json'),
@@ -136,28 +253,27 @@ exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
       {
         verdict: 'surface',
         observed: [
-          'existing sidebar controls the transparent layer',
-          'layer matches the sidebar display',
-          'empty pixels alpha zero',
-          'pointer strokes, boxes and connections',
-          'file exports and edited board import',
-          'invalid board refused without loss',
-          'hide and Escape remove input layer',
-          'marks survive hide and reopen',
-          'collapsing sidebar hides drawing layer',
+          'one native window for sidebar and canvas',
+          'pointer clicks detect deliberate canvas-over-sidebar bug',
+          'Pen Box Text Connect Select all reachable while drawing',
+          'single box text edit via sidebar and inline editor',
+          'box resize',
+          'marquee select and group move with undo',
+          'Shift-click extends selection to boxes and strokes',
+          'Delete selected and undo',
+          'Save board Mermaid Save marks Open board Clear Undo Use desktop via pointer input',
+          'invalid import preserves board',
+          'Escape and collapse restore ordinary window',
           'same service instance',
         ],
         limits: [
-          'compositor appearance and physical click routing require user check',
-          'one display per drawing session',
-          'no live agent whiteboard service tools',
+          'physical pointer and drawing feel need final user check',
+          'file dialogs choose test paths automatically',
         ],
       },
       null,
       2,
     ),
   );
-  console.log(
-    'Desktop whiteboard checks passed; physical desktop interaction remains a user check.',
-  );
+  console.log('Shared-surface whiteboard interaction checks passed.');
 };

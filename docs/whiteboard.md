@@ -14,13 +14,18 @@ VOYAGER_STATE=/absolute/path/to/service-state npm start -- --expanded
 
 Build the repository's service/helper binaries first with `cargo build --locked --bins`.
 Run from a logged-in graphical desktop terminal. Open the avatar if the sidebar is
-collapsed. Choose Pen, Box, Text, Connect or Move under **Desktop whiteboard**.
+collapsed. Choose Pen, Box, Text, Connect or Select under **Desktop whiteboard**.
 A transparent drawing layer covers the display containing the sidebar.
 
 - Pen: drag directly over your desktop and application windows.
-- Box or Text: enter the label in the sidebar, then click the desktop to place it.
+- Box: enter the label in the sidebar, then click the desktop to place a labelled rectangle.
+- Text: place plain text directly on the desktop. Its editing outline appears only when selected.
 - Connect: click two labelled items in order.
-- Move: drag a labelled item; connections follow.
+- Click a labelled item to select it. Drag its corner handles to resize it; change
+  its label in the sidebar or double-click it to edit directly. Enter finishes editing.
+- Select: drag around items to select them together. Shift-click adds or removes
+  boxes, text items or pen strokes. Drag a selected item to move the group; connections follow.
+- Delete selected or the Delete key: remove the selection and its connections. Undo restores it.
 - Undo and Clear marks: change the drawing; clearing can be undone.
 - Use desktop or Escape: hide the marks and release desktop input. Choose a tool
   again to resume the same drawing. Collapsing or dragging the avatar also hides it.
@@ -43,8 +48,10 @@ file exchange, not a live Voyager agent tool. Mermaid deliberately omits freehan
 strokes and adds a comment documenting that omission.
 
 The JSON contract is `{ version: 1, nodes, edges, strokes }`. Nodes have a unique
-`id` beginning with `n`, `kind` (`box` or `text`), `label`, and `x`, `y` coordinates in
-display-local CSS pixels. Edges have `from` and `to` IDs. Strokes contain `[x, y]`
+`id` beginning with `n`, `kind` (`box` or `text`), `label`, `width`, `height`, and `x`, `y`
+centre coordinates in display-local CSS pixels. Missing dimensions default to 200 by
+64 pixels; dimensions must be between 40 by 32 and 4096 by 4096 pixels.
+Edges have `from` and `to` IDs. Strokes contain `[x, y]`
 point arrays. Validation lives in `desktop/whiteboard/model.mjs`; imported files are
 limited to 5 MB, 1,000 items per collection and 100,000 stroke points. No imported
 markup is executed.
@@ -64,19 +71,28 @@ VOYAGER_STATE=/absolute/path/to/service-state \
 VOYAGER_WHITEBOARD_PROOF=/absolute/path/to/evidence npm run proof:whiteboard
 ```
 
-The opt-in proof uses a separate UI profile and the existing service. It exercises
-the actual sidebar IPC, pointer drawing on the overlay, zero-alpha background pixels,
-file export/import, malformed-import refusal, undo, hide/reopen, Escape and sidebar
-collapse. File dialogs are replaced only in the test to select evidence filenames.
+The prototype uses its own `desktop-whiteboard-profile` beside the service state, so
+it does not take the main docking client's single-instance lock. Keep micro-projects
+on their own branch and worktree; run the prototype from that worktree.
+
+The opt-in proof uses another separate UI profile and the existing service. It sends
+pointer events through the shared window, exercising each drawing tool, sidebar label
+editing, inline editing, resizing, marquee and Shift-click selection, group movement,
+deletion, file export/import, malformed-import refusal, undo, hide/reopen, Escape and
+sidebar collapse. Its known-broken control places the drawing above the sidebar and
+confirms the tool click fails before restoring the correct stacking. It checks
+zero-alpha background pixels. File dialogs are replaced only in the test to select evidence filenames.
 It verifies that the service instance remains the same and exits its test UI.
 It does not send a prompt, open a worker terminal, or stop an agent.
 
 Linux/XWayland is the tested platform. Renderer input proves application behavior;
 physical input routing, compositor stacking and drawing feel still need a user test.
-The sidebar is raised above the drawing layer when the layer gains focus. Escape is
-registered only while drawing; if another app owns that shortcut, the sidebar reports
-that Use desktop remains the exit. Hiding the layer avoids relying on transparent
-click-through behavior, which varies across platforms and Electron versions.
+Sidebar and drawing are elements of one transparent native window. Drawing mode
+expands that window to the display while keeping the sidebar at its previous position,
+above the drawing. Exiting restores the sidebar window bounds. Escape is registered
+only while drawing; if another app owns that shortcut, the sidebar reports that
+Use desktop remains the exit. Other applications receive input after exiting drawing
+mode. The prototype does not support simultaneous drawing and interaction with apps underneath.
 
 References: Electron's [transparent window limitations](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles)
 and [window positioning and stacking APIs](https://www.electronjs.org/docs/latest/api/browser-window/).

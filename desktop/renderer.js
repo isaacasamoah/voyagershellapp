@@ -2,6 +2,14 @@ const api = window.voyager;
 const $ = (id) => document.getElementById(id);
 let state,
   pointer = false;
+const drawingSurface = $('drawing');
+api.onDrawingCommand((command) =>
+  window.dispatchEvent(new CustomEvent('whiteboard-command', { detail: command })),
+);
+window.addEventListener('whiteboard-report', (event) => api.drawingReport(event.detail));
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') api.whiteboard({ action: 'hide' });
+});
 function element(tag, text, className) {
   const e = document.createElement(tag);
   e.textContent = text;
@@ -13,6 +21,22 @@ api.onState((value) => {
   state = value;
   const drawing = value.whiteboard;
   if (drawing) {
+    drawingSurface.hidden = !drawing.active;
+    const ui = $('voyager-ui');
+    const bounds = drawing.active
+      ? drawing.sidebar
+      : { x: 0, y: 0, width: innerWidth, height: innerHeight };
+    Object.assign(ui.style, {
+      left: `${bounds.x}px`,
+      top: `${bounds.y}px`,
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`,
+    });
+    $('wb-delete').disabled = !drawing.selectedCount;
+    $('wb-label').disabled = drawing.selectedCount > 1;
+    if (document.activeElement !== $('wb-label'))
+      $('wb-label').value = drawing.selectedLabel ?? drawing.label;
+
     for (const b of document.querySelectorAll('[data-drawing-tool]')) {
       b.setAttribute(
         'aria-pressed',
@@ -129,6 +153,7 @@ for (const [id, action] of Object.entries({
   'wb-hide': 'hide',
   'wb-undo': 'undo',
   'wb-clear': 'clear',
+  'wb-delete': 'delete',
   'wb-image': 'save-image',
   'wb-json': 'save-board',
   'wb-mermaid': 'save-mermaid',

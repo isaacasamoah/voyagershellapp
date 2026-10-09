@@ -5,8 +5,8 @@ test('agent-edited graph round trips and exports explicit relationships, not inf
   const board = {
     ...emptyBoard(),
     nodes: [
-      { id: 'n1', kind: 'box', label: 'Claude "plan"', x: 100, y: 100 },
-      { id: 'n2', kind: 'box', label: 'Voyager', x: 400, y: 100 },
+      { id: 'n1', kind: 'box', label: 'Claude "plan"', x: 100, y: 100, width: 200, height: 64 },
+      { id: 'n2', kind: 'box', label: 'Voyager', x: 400, y: 100, width: 200, height: 64 },
     ],
     edges: [{ from: 'n1', to: 'n2' }],
     strokes: [

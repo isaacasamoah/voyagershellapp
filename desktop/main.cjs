@@ -16,7 +16,10 @@ app.commandLine.appendSwitch('ozone-platform', 'x11');
 const whiteboardProof = process.argv.includes('--whiteboard-proof');
 app.setPath(
   'userData',
-  path.join(stateDir, whiteboardProof ? 'desktop-whiteboard-proof-profile' : 'desktop-profile'),
+  path.join(
+    stateDir,
+    whiteboardProof ? 'desktop-whiteboard-proof-profile' : 'desktop-whiteboard-profile',
+  ),
 );
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
@@ -92,7 +95,7 @@ function sendState() {
   });
 }
 function avatarPosition() {
-  const b = win.getBounds();
+  const b = whiteboard?.getSidebarBounds() ?? win.getBounds();
   return { x: b.x + b.width - 144, y: b.y + 8 };
 }
 function placeAvatar(x, y) {
@@ -146,7 +149,7 @@ async function dock(id) {
   return true;
 }
 function follow() {
-  if (!binding || dragging) return;
+  if (!binding || dragging || whiteboardState?.active) return;
   const w = binding.window;
   const anchor = screen.screenToDipPoint({
     x: w.x + w.width,
@@ -400,7 +403,6 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
-  whiteboard?.destroy();
   clearInterval(timer);
   clearInterval(dragTimer);
 });

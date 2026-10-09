@@ -5,16 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'none'"
     />
     <title>Voyager · sessions</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="whiteboard/style.css" />
   </head>
   <body>
-    <main>
+    <div id="drawing" hidden>
+      <svg id="board" role="img" aria-label="Draw on the desktop"></svg
+      ><input id="editor" aria-label="Edit selected text" maxlength="120" hidden />
+      <div id="hint" role="status">Draw on the desktop · Escape returns to your apps</div>
+    </div>
+    <main id="voyager-ui">
       <section id="panel" hidden aria-label="Voyager session dashboard">
         <header>
-          <span class="wordmark">VOYAGER</span><span class="small">this machine · private</span>
+          <span class="wordmark">VOYAGER</span><span class="small">whiteboard prototype</span>
         </header>
         <div id="connection" role="status">Connecting…</div>
         <div id="sessions" aria-label="Registered sessions"></div>
@@ -32,14 +38,15 @@
             ><button data-drawing-tool="box" aria-pressed="false">Box</button
             ><button data-drawing-tool="text" aria-pressed="false">Text</button
             ><button data-drawing-tool="arrow" aria-pressed="false">Connect</button
-            ><button data-drawing-tool="move" aria-pressed="false">Move</button>
+            ><button data-drawing-tool="select" aria-pressed="false">Select</button>
           </div>
           <label for="wb-label">Text / box label</label
           ><input id="wb-label" value="An idea" maxlength="120" />
           <div class="drawing-tools">
-            <button id="wb-undo">Undo</button><button id="wb-clear">Clear marks</button
-            ><button id="wb-image">Save marks</button><button id="wb-json">Save board</button
-            ><button id="wb-mermaid">Mermaid</button><button id="wb-open">Open board</button>
+            <button id="wb-undo">Undo</button><button id="wb-delete">Delete selected</button
+            ><button id="wb-clear">Clear marks</button><button id="wb-image">Save marks</button
+            ><button id="wb-json">Save board</button><button id="wb-mermaid">Mermaid</button
+            ><button id="wb-open">Open board</button>
           </div>
           <p id="wb-status" role="status">Choose a tool to draw on your desktop.</p>
         </section>
@@ -117,5 +124,6 @@
       </button>
     </main>
     <script src="renderer.js"></script>
+    <script type="module" src="whiteboard/renderer.mjs"></script>
   </body>
 </html>
