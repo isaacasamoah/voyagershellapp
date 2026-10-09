@@ -59,21 +59,26 @@ button:disabled {
 }
 .avatar img {
   position: absolute;
-  left: 22%;
-  top: 26%;
-  width: 56%;
-  height: 56%;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
   object-fit: contain;
   pointer-events: none;
   animation: float-idle 8s ease-in-out infinite;
 }
-.avatar svg {
+.brand {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 50%;
+  top: -96px;
+  transform: translateX(-50%);
+  width: 224px;
+  height: 120px;
   overflow: visible;
   pointer-events: none;
+}
+body[data-expanded='true'] .avatar {
+  top: 44px;
 }
 .avatar[data-state='moving'] {
   cursor: grabbing;
@@ -102,13 +107,20 @@ body[data-connected='true'] #indicator {
   position: absolute;
   left: 8px;
   right: 8px;
-  top: 60px;
+  top: 96px;
   bottom: 8px;
   padding: 65px 16px 12px;
   border-radius: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+#tagline {
+  margin: 0;
+  text-align: center;
+  color: #54636c;
+  font-size: 10px;
+  letter-spacing: 0.4px;
 }
 #connection {
   color: #25634f;

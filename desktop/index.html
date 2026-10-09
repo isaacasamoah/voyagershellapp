@@ -13,23 +13,7 @@
   <body>
     <main>
       <section id="panel" hidden aria-label="Voyager agents">
-        <div id="connection" role="status">Connecting…</div>
-        <div id="sessions" aria-label="Your agents"></div>
-        <button id="undock" hidden>Detach</button>
-        <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
-      </section>
-      <button
-        id="avatar"
-        class="avatar"
-        data-state="floating"
-        aria-label="Voyager. Click for agents. Drag onto a terminal to connect."
-        aria-expanded="false"
-      >
-        <img src="assets/idle.png" alt="" draggable="false" /><svg
-          class="brand"
-          viewBox="0 0 200 200"
-          aria-hidden="true"
-        >
+        <svg class="brand" viewBox="0 0 224 120" aria-hidden="true">
           <defs>
             <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#ff5f56" />
@@ -39,19 +23,23 @@
               <stop offset="80%" stop-color="#59a5ff" />
               <stop offset="100%" stop-color="#b07af5" />
             </linearGradient>
-            <linearGradient id="tagline-spectrum" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#f7a34b" />
-              <stop offset="50%" stop-color="#f4e04d" />
-              <stop offset="100%" stop-color="#59a5ff" />
+            <linearGradient id="banner-glass" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f9fdff" stop-opacity=".73" />
+              <stop offset="100%" stop-color="#eaf6ff" stop-opacity=".5" />
             </linearGradient>
-            <path id="upper-arc" d="M 32 100 A 68 68 0 0 1 168 100" fill="none" />
-            <path id="lower-arc" d="M 18 100 A 82 82 0 0 0 182 100" fill="none" />
+            <path id="upper-arc" d="M 29 111 A 83 83 0 0 1 195 111" fill="none" />
           </defs>
+          <path
+            d="M 16 106 A 96 96 0 0 1 208 106 L 185 106 A 73 73 0 0 0 39 106 Z"
+            fill="url(#banner-glass)"
+            stroke="#ffffff9c"
+            stroke-width="1"
+          />
           <g
             font-family="VoyagerMono,ui-monospace,monospace"
-            font-size="26"
+            font-size="22"
             font-weight="900"
-            letter-spacing="3.8"
+            letter-spacing="2.8"
           >
             <g transform="translate(1.8,2.2)">
               <text fill="#12071f">
@@ -71,19 +59,22 @@
               <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">VOYAGER</textPath>
             </text>
           </g>
-          <text
-            fill="url(#tagline-spectrum)"
-            opacity="0.85"
-            font-family="VoyagerMono,ui-monospace,monospace"
-            font-size="16"
-            font-weight="500"
-            letter-spacing="0.3"
-          >
-            <textPath href="#lower-arc" startOffset="50%" text-anchor="middle">
-              let's go together
-            </textPath>
-          </text></svg
-        ><span id="indicator" aria-hidden="true"></span>
+        </svg>
+        <div id="connection" role="status">Connecting…</div>
+        <div id="sessions" aria-label="Your agents"></div>
+        <button id="undock" hidden>Detach</button>
+        <p id="tagline">let’s go together</p>
+        <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
+      </section>
+      <button
+        id="avatar"
+        class="avatar"
+        data-state="floating"
+        aria-label="Voyager. Click for agents. Drag onto a terminal to connect."
+        aria-expanded="false"
+      >
+        <img src="assets/idle.png" alt="" draggable="false" />
+        <span id="indicator" aria-hidden="true"></span>
       </button>
     </main>
     <script src="renderer.js"></script>

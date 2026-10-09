@@ -1,9 +1,10 @@
 # Desktop experiment: a glass avatar and your agents
 
 Voyager parks near the top-right of the screen. Click the astronaut to reveal a
-compact glass panel; click again to collapse it. The smaller, 104 px avatar forms
-a rounded crest at the top, with rainbow VOYAGER lettering above and “let’s go
-together” below. Avatar and panel share the same translucent material.
+compact glass panel; click again to collapse it. The 104 px avatar has no text
+while floating. Opening the panel reveals a curved glass banner with rainbow
+VOYAGER lettering above the astronaut, and “let’s go together” at the bottom
+of the panel. Avatar and panel share the same translucent material.
 The floating avatar keeps its circular highlights without an outer shadow;
 the transparent native window also disables its shadow.
 

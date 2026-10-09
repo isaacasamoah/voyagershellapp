@@ -96,19 +96,22 @@ function sendState() {
 }
 function avatarPosition() {
   const b = win.getBounds();
-  return { x: b.x + (b.width - avatarSize) / 2, y: b.y + margin };
+  return { x: b.x + (b.width - avatarSize) / 2, y: b.y + avatarTop() };
+}
+function avatarTop() {
+  return expanded ? 44 : margin;
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
   const width = expanded ? 320 : collapsedSize,
     height = expanded
-      ? Math.min(area.height, 192 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0))
+      ? Math.min(area.height, 252 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0))
       : collapsedSize;
   const left = Math.max(
     area.x,
     Math.min(area.x + area.width - width, x - (width - avatarSize) / 2),
   );
-  const top = Math.max(area.y, Math.min(area.y + area.height - height, y - margin));
+  const top = Math.max(area.y, Math.min(area.y + area.height - height, y - avatarTop()));
   win.setBounds({ x: Math.round(left), y: Math.round(top), width, height });
 }
 function setExpanded(value) {
