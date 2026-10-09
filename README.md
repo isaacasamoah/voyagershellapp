@@ -38,6 +38,11 @@ knowledge graph.
 
 The earlier [mechanism experiments](docs/experiments.md) remain reproducible: cooperative PTY handoff and independent synthetic capture. They do not establish arbitrary live-terminal adoption.
 
+The separate [transcript experiment](docs/transcripts.md) derives the same event
+shapes from one explicitly selected Codex transcript. It checkpoints incremental
+reads so capture can catch up after the reader exits. The running service still
+uses live notifications; this experiment does not yet feed a knowledge graph.
+
 ## Try the experiments
 
 On Linux with Rust, a C linker and Python 3 installed:
