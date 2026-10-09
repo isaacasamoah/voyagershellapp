@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveWindow, windowAt } = require('../binding.cjs');
+const { resolveWindow, windowAt } = require('../src/binding.cjs');
 const session = {
   id: 'one',
   native_thread_id: 'thread-one',

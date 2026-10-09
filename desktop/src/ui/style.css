@@ -163,24 +163,19 @@ body[data-connected='false'] #connection {
 }
 .session-name {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.project {
-  color: #435b6b;
-  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session .state {
-  color: #54636c;
-  font-size: 10px;
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #78848d;
   flex-shrink: 0;
 }
-.session[data-connected='true'] .state {
-  color: #25634f;
+.session[data-connected='true'] .connection-dot {
+  background: #36866d;
 }
 .empty {
   margin: 12px 0;

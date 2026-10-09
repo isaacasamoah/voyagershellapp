@@ -16,7 +16,10 @@ Only the panel background is an Electron window-drag region. The astronaut
 uses its own pointer gestures and, like the other buttons, must stay outside
 that region so native clicks reach its handler.
 
-The panel shows **Online / Offline**, agent/project names and connection status.
+The panel shows **Online / Offline** and project names, each with a small green
+dot for a connected agent or gray for other states. Hover or a screen reader
+provides the full connection status. Names currently come from the working
+directory; custom session names and duplicate-name disambiguation are future work.
 It grows to fit the current list, within the display height. No event feed,
 internal IDs, terminal-launch button or instructional footer is shown. A small
 close × appears on hover or keyboard focus; it quits only the desktop client.
@@ -50,7 +53,10 @@ change those permissions. `npm start -- --expanded` opens the panel immediately.
    before Voyager's desktop client starts.
 2. Click the avatar to see the real service and agent connection states.
 3. Hold the astronaut, then pull it away. Holding alone leaves it seated and the
-   panel visible; moving lifts it out with one short undock tone. The panel stays
+   panel visible; moving lifts it out with one short falling undock tone. Returning
+   it to the panel or docking to a supported terminal plays the inverse rising tone.
+   Escape also plays that return cue if it restores an attachment after movement.
+   The panel stays
    where it was. A quick click opens or closes the panel; releasing a stationary
    hold (350 ms or longer) does neither. Escape during the gesture puts it back.
    The outline appears while pressed and clears on release or cancellation.
@@ -91,12 +97,14 @@ transition. Unchanged window geometry and agent rows are not redrawn on polling.
 While seated, the astronaut is a non-modal child of the panel, so selecting an
 agent cannot raise the panel over it and block clicks. The panel is shown before
 assigning that relationship so X11 can resolve the parent window.
+The client waits for that exact panel to appear in the managed X11 window list
+before assigning its child. A show request alone can race with the compositor.
 Pulling it away or hiding the panel removes that parent relationship; Escape
 restores it when reseating.
 Only the avatar renderer may send drag commands; only the panel may select agents
-or quit. The undock cue is a quiet, locally synthesized falling tone with no media
-dependency. It fires when movement detaches the avatar, never on a click or hold
-alone. Perceived flicker and sound still need checking on the real desktop.
+or quit. Both cues use the same quiet, locally synthesized tone: falling on undock,
+rising on return. There is no media dependency or second model. Clicking and
+holding still are silent. Perceived flicker and sound need a real desktop check.
 
 ## Limits and proof
 
@@ -129,7 +137,7 @@ that the astronaut remains above the panel at the click target. This caught the
 earlier focus-handler approach allowing the panel to cover the astronaut.
 
 Observed on 10 October: existing native client rediscovered, correct session
-accepted, unrelated shell refused, click handler toggled, the two-row agent list
+accepted, unrelated shell refused, click handler toggled, the agent list
 fit without scrolling, and internal IDs/event feed were absent. The updated
 gesture keeps the panel visible during a hold; movement detaches the avatar and
 Escape restores the prior attachment. The final pointer-use preview has a
@@ -137,7 +145,12 @@ continuous curved glass panel with
 no separate banner fill or seated-avatar rim. Pointer highlights clear on release;
 keyboard navigation still has a visible focus outline.
 
-Verdict: **surface** for physical drag and final desktop appearance. Renderer
-input and programmatic window matching do not prove the compositor delivers a
-real mouse drag. The previous XTEST input experiment was removed after it raised
+Isaac subsequently confirmed the click, panel movement and avatar pull/return
+flow on his desktop. The row-selection regression was reproduced against the
+native stack and corrected; the private live proof also covers it. The latest
+name/dot layout and paired sounds are ready for his next check. This still does
+not prove physical docking to an arbitrary terminal or registration by dropping.
+The previous XTEST input experiment was removed after it raised
 a GNOME remote-desktop prompt; this app and its proof do not request it.
+
+For the source layout and contributor workflow, see [desktop/README](../desktop/README.md).

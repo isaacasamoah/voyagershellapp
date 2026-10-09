@@ -48,6 +48,9 @@ For the Electron client, use Node 24 and run `npm ci`, `npm run format:check` an
 `npm test` inside `desktop/`. Normal checks do not open windows or call a model.
 The optional live proof is a separate, deliberate action; see
 [the desktop experiment](docs/desktop.md).
+The [desktop source map](desktop/README.md) explains the main process, preload
+and browser-side UI. Prefer plain functions and a small number of files. Native
+window behavior needs a desktop check; renderer-only tests cannot prove it.
 
 ## Review and preservation
 

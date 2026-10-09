@@ -2,7 +2,7 @@
   "name": "voyager-desktop",
   "version": "0.1.0",
   "description": "A small Electron client of the Voyager Rust service",
-  "main": "main.cjs",
+  "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test test/binding.test.cjs",

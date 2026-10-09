@@ -9,8 +9,8 @@ contextBridge.exposeInMainWorld(
     undock: () => ipcRenderer.invoke('undock'),
     select: (id) => ipcRenderer.invoke('select', id),
     quit: () => ipcRenderer.invoke('quit-ui'),
-    onUndock: (callback) => {
-      ipcRenderer.on('undocked', () => callback());
+    onDockSound: (callback) => {
+      ipcRenderer.on('dock-sound', (_event, action) => callback(action));
     },
     onState: (callback) => {
       ipcRenderer.on('state', (_event, value) => callback(value));

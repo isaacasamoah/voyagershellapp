@@ -2,9 +2,10 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
+const { setTimeout: delay } = require('node:timers/promises');
 const { processIdentity, identifyTerminal, resolveWindow, windowAt } = require('./binding.cjs');
 const exec = promisify(execFile);
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../..');
 const stateDir = process.env.VOYAGER_STATE;
 if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
@@ -113,7 +114,7 @@ function placePanel() {
   const width = 320;
   const height = Math.min(
     area.height,
-    252 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0),
+    252 + Math.max(1, sessions.length) * 44 + (binding ? 38 : 0),
   );
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
@@ -133,17 +134,31 @@ function setSeated(value) {
   seated = value;
   // Let the window manager keep the seated astronaut above its panel, even
   // when selecting a row raises the panel. Detaching restores a top-level window.
-  avatarWin.setParentWindow(value ? panelWin : null);
+  if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
 }
-function setExpanded(value) {
+async function setExpanded(value) {
   expanded = value;
   if (value) {
-    placePanel();
-    panelWin.showInactive();
-    // X11 can resolve a transient parent only after that window is mapped.
     setSeated(true);
+    placePanel();
     sendState();
+    panelWin.showInactive();
     avatarWin.moveTop();
+    // A show request is not a compositor acknowledgement. Wait for this exact
+    // window in the managed X11 stack before assigning a transient parent.
+    const id = panelWin.getNativeWindowHandle().readUInt32LE();
+    const deadline = performance.now() + 2000;
+    while (expanded && seated) {
+      const mapped = (await inventory()).some((window) => window.id === id && window.visible);
+      // A hide or pull can arrive while the native inventory is in flight.
+      if (!expanded || !seated) return;
+      if (mapped) {
+        avatarWin.setParentWindow(panelWin);
+        return;
+      }
+      if (performance.now() >= deadline) throw Error('The desktop did not show the panel');
+      await delay(25);
+    }
   } else {
     setSeated(false);
     panelWin.hide();
@@ -168,7 +183,7 @@ function advanceDrag(p, now = performance.now()) {
     binding = null;
     dockError = '';
     sendState();
-    if (wasAttached) avatarWin.webContents.send('undocked');
+    if (wasAttached) avatarWin.webContents.send('dock-sound', 'undock');
   }
   if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
 }
@@ -194,11 +209,13 @@ async function dock(id) {
     undock(result.error);
     return false;
   }
+  const joined = binding?.window.id !== result.window.id;
   binding = result;
   selected = result.session.id;
   dockError = '';
   follow();
   sendState();
+  if (joined) avatarWin.webContents.send('dock-sound', 'dock');
   return true;
 }
 function follow() {
@@ -330,13 +347,15 @@ app.whenReady().then(async () => {
     binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
+    if (previous.moved && (previous.seated || previous.binding))
+      avatarWin.webContents.send('dock-sound', 'dock');
   });
   handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
     const { held, moved } = dragging;
     dragging = null;
     if (!held && !moved) {
-      setExpanded(!expanded);
+      await setExpanded(!expanded);
       return;
     }
     // A stationary hold leaves the panel and attachment exactly as they were.
@@ -356,6 +375,7 @@ app.whenReady().then(async () => {
       setSeated(true);
       placeAvatar(panel.x + 108, panel.y + 44);
       sendState();
+      avatarWin.webContents.send('dock-sound', 'dock');
       return;
     }
     const point = screen.dipToScreenPoint(cursor);
@@ -368,18 +388,18 @@ app.whenReady().then(async () => {
     sendState();
   });
   await Promise.all([
-    panelWin.loadFile(path.join(__dirname, 'index.html'), { query: { view: 'panel' } }),
-    avatarWin.loadFile(path.join(__dirname, 'index.html'), { query: { view: 'avatar' } }),
+    panelWin.loadFile(path.join(__dirname, 'ui/index.html'), { query: { view: 'panel' } }),
+    avatarWin.loadFile(path.join(__dirname, 'ui/index.html'), { query: { view: 'avatar' } }),
   ]);
   park();
   avatarWin.showInactive();
   await refresh();
-  if (process.argv.includes('--expanded')) setExpanded(true);
+  if (process.argv.includes('--expanded')) await setExpanded(true);
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(() => advanceDrag(screen.getCursorScreenPoint()), 32);
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (process.argv.includes('--proof')) {
-    require('./test/live-proof.cjs')
+    require('../test/live-proof.cjs')
       .run({
         avatarWin,
         panelWin,

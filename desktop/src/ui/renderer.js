@@ -5,13 +5,14 @@ document.body.dataset.view = view;
 let pointer = false;
 let audio;
 let lastRows;
-api.onUndock(() => {
+api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
   const gain = audio.createGain();
   const now = audio.currentTime;
-  tone.frequency.setValueAtTime(620, now);
-  tone.frequency.exponentialRampToValueAtTime(310, now + 0.16);
+  const [from, to] = action === 'dock' ? [310, 620] : [620, 310];
+  tone.frequency.setValueAtTime(from, now);
+  tone.frequency.exponentialRampToValueAtTime(to, now + 0.16);
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(0.06, now + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
@@ -50,11 +51,7 @@ api.onState((value) => {
       const b = element('button', '', 'session');
       b.dataset.key = s.id;
       b.setAttribute('aria-pressed', String(s.id === value.selected));
-      const name = element('span', '', 'session-name');
-      name.append(
-        element('span', 'Codex'),
-        element('span', s.cwd.split('/').filter(Boolean).at(-1) || 'This computer', 'project'),
-      );
+      const name = s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
       const status =
         value.serviceError || s.worker_state === 'unknown'
           ? 'Unknown'
@@ -63,8 +60,12 @@ api.onState((value) => {
             : s.capture === 'connected'
               ? 'Connected'
               : 'Disconnected';
-      b.append(name, element('span', status, 'state'));
-      b.dataset.connected = String(!value.serviceError && s.capture === 'connected');
+      const dot = element('span', '', 'connection-dot');
+      dot.setAttribute('aria-hidden', 'true');
+      b.setAttribute('aria-label', `${name}, ${status}`);
+      b.title = `${name} — ${status}`;
+      b.append(element('span', name, 'session-name'), dot);
+      b.dataset.connected = String(status === 'Connected');
       b.onclick = () => api.select(s.id);
       return b;
     }),

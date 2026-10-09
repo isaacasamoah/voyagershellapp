@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { processIdentity, windowAt } = require('../binding.cjs');
+const { processIdentity, windowAt } = require('../src/binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
   avatarWin,
@@ -90,7 +90,7 @@ exports.run = async ({
     }
     assert(unrelated, 'The unrelated terminal must be visible');
     assert.equal(unrelated.title, ours.title);
-    setExpanded(false);
+    await setExpanded(false);
     assert.equal(await dock(unrelated.id), false);
     assert(!panelWin.isVisible(), 'Dropping on an unsupported window must not open the panel');
     assert.equal(await dock(ours.id), true);
@@ -108,17 +108,17 @@ exports.run = async ({
   } finally {
     other.kill('SIGTERM');
   }
-  setExpanded(false);
+  await setExpanded(false);
   avatarWin.focus();
   await delay(300);
   const pointer = async (type) => {
     avatarWin.webContents.sendInputEvent({ type, button: 'left', x: 60, y: 60, clickCount: 1 });
   };
   await avatarWin.webContents.executeJavaScript(`
-    window.undockCount = 0;
-    window.voyager.onUndock(() => window.undockCount++);
+    window.dockSounds = [];
+    window.voyager.onDockSound((action) => window.dockSounds.push(action));
   `);
-  const soundCount = () => avatarWin.webContents.executeJavaScript('window.undockCount');
+  const sounds = () => avatarWin.webContents.executeJavaScript('window.dockSounds');
   const outline = () =>
     avatarWin.webContents.executeJavaScript(
       "getComputedStyle(document.getElementById('avatar')).outlineStyle",
@@ -141,11 +141,11 @@ exports.run = async ({
     avatarSizeBefore,
     'Toggling never resizes the avatar window',
   );
-  assert.equal(await soundCount(), 0, 'Clicking is silent');
+  assert.deepEqual(await sounds(), [], 'Clicking is silent');
   assert.equal(await outline(), 'none', 'A released click must not leave a focus ring');
   receipts.push('Clicks toggled the separate panel without resizing the avatar');
 
-  setExpanded(true);
+  await setExpanded(true);
   await delay(100);
   const panelBefore = panelWin.getBounds();
   await pointer('mouseDown');
@@ -157,7 +157,7 @@ exports.run = async ({
   await pointer('mouseUp');
   await delay(100);
   assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
-  assert.equal(await soundCount(), 0, 'A stationary hold is silent');
+  assert.deepEqual(await sounds(), [], 'A stationary hold is silent');
   assert.equal(await outline(), 'none', 'Releasing the hold clears its highlight');
 
   await pointer('mouseDown');
@@ -174,7 +174,7 @@ exports.run = async ({
     panelBefore,
     'The panel stays put when the astronaut leaves',
   );
-  assert.equal(await soundCount(), 1, 'Exactly one undock cue is emitted per departure');
+  assert.deepEqual(await sounds(), ['undock'], 'Exactly one undock cue is emitted per departure');
   // Settle the synthetic pointer at the actual cursor before moving the panel independently.
   advanceDrag(start);
   await delay(50);
@@ -194,18 +194,27 @@ exports.run = async ({
   assert.equal(avatarWin.getParentWindow(), panelWin, 'Escape restores the native parent');
   assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
   assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
+  assert.deepEqual(
+    await sounds(),
+    ['undock', 'dock'],
+    'Returning to the seat emits the inverse cue',
+  );
   receipts.push(
-    'Hold stayed seated and silent; movement left the panel in place and cued once; Escape restored',
+    'Clicks and stationary holds were silent; pulling cued undock once and returning cued dock once',
   );
 
   undock();
   park();
-  setExpanded(true);
+  await setExpanded(true);
   await delay(350);
   // Read the real X11 stack after selecting each row. Renderer-injected clicks
   // alone would still reach an astronaut that the panel has covered.
   const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
-  for (let index = 0; index < getState().sessions.length; index++) {
+  // Reopen before each row: a just-shown parent is the mapping-race case.
+  for (let attempt = 0; attempt < getState().sessions.length * 3; attempt++) {
+    const index = attempt % getState().sessions.length;
+    await setExpanded(false);
+    await setExpanded(true);
     panelWin.focus();
     await panelWin.webContents.executeJavaScript(`{
       const row = document.querySelectorAll('.session')[${index}];
@@ -250,7 +259,34 @@ exports.run = async ({
   assert(!ui.scroll, 'The real agent list must fit without scrolling');
   for (const s of getState().sessions)
     assert(!ui.text.includes(s.id) && !ui.text.includes(s.native_thread_id));
-  assert(ui.text.includes('Online') && ui.text.includes('Connected'));
+  assert(ui.text.includes('Online'));
+  const rows = await panelWin.webContents.executeJavaScript(`
+    [...document.querySelectorAll('.session')].map(row => ({
+      name: row.querySelector('.session-name').textContent,
+      text: row.innerText,
+      label: row.getAttribute('aria-label'),
+      title: row.title,
+      connected: row.dataset.connected,
+      dot: Boolean(row.querySelector('.connection-dot'))
+    }))
+  `);
+  assert(
+    rows.every(
+      (row) =>
+        row.dot &&
+        row.text === row.name &&
+        row.label.startsWith(row.name) &&
+        row.title.includes(row.name),
+    ),
+  );
+  assert(rows.some((row) => row.connected === 'true' && row.label.includes('Connected')));
+  assert.deepEqual(
+    rows.map((row) => row.name),
+    getState().sessions.map((s) => s.cwd.split('/').filter(Boolean).at(-1) || 'This computer'),
+  );
+  receipts.push(
+    'Rows lead with project names and accessible connection dots, without harness labels',
+  );
   assert.equal(ui.sessionCount, getState().sessions.length);
   const panel = panelWin.getBounds(),
     avatar = avatarWin.getBounds();
