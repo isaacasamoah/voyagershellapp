@@ -5,7 +5,7 @@ export function validateBoard(board) {
       'Not a supported board. Expected version 1 with valid nodes, edges and strokes.',
     );
   };
-  const coord = (n) => Number.isFinite(n) && n >= 0 && n <= 1600;
+  const coord = (n) => Number.isFinite(n) && n >= 0 && n <= 32768;
   const point = (p) => Array.isArray(p) && p.length === 2 && p.every(coord);
   if (
     !board ||

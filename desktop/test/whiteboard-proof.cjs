@@ -1,141 +1,163 @@
-// Deliberate visible Electron interaction proof, separate from normal tests.
-const { app, BrowserWindow } = require('electron');
+// Opt-in proof through the real Voyager sidebar and transparent desktop layer.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const output = process.env.VOYAGER_WHITEBOARD_PROOF;
-if (!output || !path.isAbsolute(output))
-  throw Error('Set VOYAGER_WHITEBOARD_PROOF to an absolute evidence directory');
-app.whenReady().then(async () => {
-  const win = new BrowserWindow({
-    width: 1320,
-    height: 900,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+const { screen, dialog } = require('electron');
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+exports.run = async ({ win, whiteboard, setExpanded, rpc }) => {
+  const output = process.env.VOYAGER_WHITEBOARD_PROOF;
+  if (!output || !path.isAbsolute(output))
+    throw Error('Set VOYAGER_WHITEBOARD_PROOF to an absolute evidence directory');
+  await fs.mkdir(output, { recursive: true });
+  const before = await rpc('status');
+  setExpanded(true);
+  const panel = (code) => win.webContents.executeJavaScript(code, true);
+  const overlay = whiteboard.overlay;
+  const drawing = (code) => overlay.webContents.executeJavaScript(code, true);
+  const click = async (x, y) => {
+    overlay.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+    overlay.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+    await delay(35);
+    overlay.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    await delay(100);
+  };
+  const tool = async (name) => {
+    await panel(`document.querySelector('[data-drawing-tool="${name}"]').click()`);
+    await delay(150);
+  };
+  const label = async (text) => {
+    await panel(
+      `(()=>{const e=document.getElementById('wb-label');e.value=${JSON.stringify(text)};e.dispatchEvent(new Event('input'));})()`,
+    );
+    await delay(80);
+  };
+  assert.equal(overlay.isVisible(), false);
+  await tool('box');
+  assert(overlay.isVisible());
+  assert.deepEqual(overlay.getBounds(), screen.getDisplayMatching(win.getBounds()).bounds);
+  await label('Desktop sketch');
+  await click(200, 200);
+  await label('Agent planning');
+  await click(550, 200);
+  await tool('arrow');
+  await click(200, 200);
+  await click(550, 200);
+  await tool('pen');
+  overlay.webContents.sendInputEvent({
+    type: 'mouseDown',
+    x: 150,
+    y: 350,
+    button: 'left',
+    clickCount: 1,
   });
-  try {
-    await fs.mkdir(output, { recursive: true });
-    const downloads = [];
-    win.webContents.session.on('will-download', (_event, item) => {
-      item.setSavePath(path.join(output, item.getFilename()));
-      downloads.push(
-        new Promise((resolve, reject) =>
-          item.once('done', (_e, state) =>
-            state === 'completed' ? resolve() : reject(Error(state)),
-          ),
-        ),
-      );
+  for (let i = 1; i <= 16; i++) {
+    overlay.webContents.sendInputEvent({
+      type: 'mouseMove',
+      x: 150 + i * 20,
+      y: 350 + Math.round(Math.sin(i / 3) * 35),
     });
-    await win.loadFile(path.join(__dirname, '../whiteboard/index.html'));
-    const js = (code) => win.webContents.executeJavaScript(code, true);
-    const click = async (x, y) => {
-      win.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
-      win.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
-      await new Promise((r) => setTimeout(r, 40));
-    };
-    const bounds = await js(
-      `(()=>{const r=document.querySelector('#board').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}})()`,
-    );
-    const point = (x, y) => [
-      Math.round(bounds.x + (x / 1400) * bounds.w),
-      Math.round(bounds.y + (y / 800) * bounds.h),
-    ];
-    await js(
-      `document.querySelector('[data-tool="box"]').click();document.querySelector('#label').value='Human sketch'`,
-    );
-    await click(...point(260, 240));
-    await js(`document.querySelector('#label').value='Agent interpretation'`);
-    await click(...point(700, 240));
-    await js(`document.querySelector('[data-tool="arrow"]').click()`);
-    await click(...point(260, 240));
-    await click(...point(700, 240));
-    await js(`document.querySelector('[data-tool="pen"]').click()`);
-    const [x, y] = point(240, 380);
-    win.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
-    for (let i = 1; i <= 20; i++) {
-      const [px, py] = point(240 + i * 20, 380 + Math.sin(i / 3) * 30);
-      win.webContents.sendInputEvent({ type: 'mouseMove', x: px, y: py });
-    }
-    const [ex, ey] = point(640, 390);
-    win.webContents.sendInputEvent({
-      type: 'mouseUp',
-      x: ex,
-      y: ey,
-      button: 'left',
-      clickCount: 1,
-    });
-    await new Promise((r) => setTimeout(r, 100));
-    assert.equal(
-      await js(`document.querySelector('#count').textContent`),
-      '2 ideas · 1 connections · 1 strokes',
-    );
-    await js(
-      `document.querySelector('#json').click();document.querySelector('#mermaid').click();document.querySelector('#png').click()`,
-    );
-    await new Promise((r) => setTimeout(r, 1000));
-    await Promise.all(downloads);
-    assert.equal(downloads.length, 3);
-    const board = JSON.parse(await fs.readFile(path.join(output, 'voyager-board.json'), 'utf8'));
-    assert.equal(board.nodes.length, 2);
-    assert.equal(board.edges.length, 1);
-    assert.ok(board.strokes[0].length > 2);
-    assert.match(await fs.readFile(path.join(output, 'voyager-board.mmd'), 'utf8'), /N0 --> N1/);
-    const shot = await win.webContents.capturePage();
-    await fs.writeFile(path.join(output, 'whiteboard.png'), shot.toPNG());
-    // A programmatic edit exercises the file-exchange contract an agent would use.
-    board.nodes.push({ id: 'nagent', kind: 'box', label: 'Mermaid plan', x: 1120, y: 240 });
-    board.edges.push({ from: board.nodes[1].id, to: 'nagent' });
-    await fs.writeFile(path.join(output, 'agent-board.json'), JSON.stringify(board, null, 2));
-    async function importBoard(content) {
-      await js(
-        `(()=>{const f=new File([${JSON.stringify(content)}],'agent-board.json',{type:'application/json'});const dt=new DataTransfer();dt.items.add(f);const el=document.querySelector('#open');el.files=dt.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
-      );
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    await importBoard(JSON.stringify(board));
-    assert.equal(
-      await js(`document.querySelector('#count').textContent`),
-      '3 ideas · 2 connections · 1 strokes',
-    );
-    await importBoard('{"version":999}');
-    assert.match(await js(`document.querySelector('#hint').textContent`), /Could not open board/);
-    assert.equal(
-      await js(`document.querySelector('#count').textContent`),
-      '3 ideas · 2 connections · 1 strokes',
-    );
-    await js(`document.querySelector('#undo').click()`);
-    assert.equal(
-      await js(`document.querySelector('#count').textContent`),
-      '2 ideas · 1 connections · 1 strokes',
-    );
-    await fs.writeFile(
-      path.join(output, 'result.json'),
-      JSON.stringify(
-        {
-          verdict: 'pass',
-          actor: 'Electron input driver and deterministic JSON-edit fixture',
-          observed: [
-            'box placement',
-            'pointer stroke',
-            'connect two nodes',
-            'PNG JSON Mermaid downloaded',
-            'programmatically edited board imported',
-            'invalid import preserves canvas',
-            'undo restores previous board',
-          ],
-          limits: [
-            'no service tool integration',
-            'no model-based sketch interpretation',
-            'physical user interaction pending',
-          ],
-        },
-        null,
-        2,
-      ),
-    );
-    console.log('Whiteboard Electron proof passed');
-    app.quit();
-  } catch (error) {
-    console.error(error);
-    app.exit(1);
+    await delay(20);
   }
-});
+  overlay.webContents.sendInputEvent({
+    type: 'mouseUp',
+    x: 470,
+    y: 320,
+    button: 'left',
+    clickCount: 1,
+  });
+  await delay(150);
+  let board = await drawing('window.whiteboard.snapshot()');
+  assert.equal(board.nodes.length, 2);
+  assert.equal(board.edges.length, 1);
+  assert.equal(board.strokes.length, 1);
+  assert(board.strokes[0].length > 5);
+  const frame = await overlay.webContents.capturePage();
+  const bitmap = frame.toBitmap();
+  assert.equal(bitmap[3], 0, 'Empty desktop pixels must remain fully transparent');
+  await fs.writeFile(path.join(output, 'overlay.png'), frame.toPNG());
+  await fs.writeFile(
+    path.join(output, 'sidebar.png'),
+    (await win.webContents.capturePage()).toPNG(),
+  );
+  // The dialogs are replaced only here to choose bounded evidence filenames.
+  const saveDialog = dialog.showSaveDialog,
+    openDialog = dialog.showOpenDialog;
+  try {
+    dialog.showSaveDialog = async (_parent, options) => ({
+      canceled: false,
+      filePath: path.join(output, options.defaultPath),
+    });
+    for (const action of ['save-board', 'save-mermaid', 'save-image'])
+      await whiteboard.command({ action });
+    assert.equal(overlay.isVisible(), false);
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(output, 'voyager-board.json'), 'utf8')).nodes.length,
+      2,
+    );
+    assert.match(await fs.readFile(path.join(output, 'voyager-board.mmd'), 'utf8'), /N0 --> N1/);
+    const png = await fs.readFile(path.join(output, 'voyager-board.png'));
+    assert(png.length > 1000);
+    board.nodes.push({ id: 'nagent', kind: 'box', label: 'Review together', x: 900, y: 200 });
+    board.edges.push({ from: board.nodes[1].id, to: 'nagent' });
+    const imported = path.join(output, 'edited-board.json');
+    await fs.writeFile(imported, JSON.stringify(board));
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [imported] });
+    await whiteboard.command({ action: 'open' });
+    await delay(100);
+    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 3);
+    await fs.writeFile(imported, '{"version":999}');
+    await assert.rejects(() => whiteboard.command({ action: 'open' }));
+    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 3);
+    await tool('pen');
+    await panel(`document.getElementById('wb-undo').click()`);
+    await delay(100);
+    assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 2);
+  } finally {
+    dialog.showSaveDialog = saveDialog;
+    dialog.showOpenDialog = openDialog;
+  }
+  await panel(`document.getElementById('wb-hide').click()`);
+  await delay(100);
+  assert.equal(overlay.isVisible(), false);
+  await tool('pen');
+  assert.equal((await drawing('window.whiteboard.snapshot()')).nodes.length, 2);
+  overlay.focus();
+  overlay.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  await delay(150);
+  assert.equal(overlay.isVisible(), false);
+  await tool('pen');
+  setExpanded(false);
+  await delay(100);
+  assert.equal(overlay.isVisible(), false);
+  assert.equal((await rpc('status')).instance, before.instance);
+  await fs.writeFile(
+    path.join(output, 'result.json'),
+    JSON.stringify(
+      {
+        verdict: 'surface',
+        observed: [
+          'existing sidebar controls the transparent layer',
+          'layer matches the sidebar display',
+          'empty pixels alpha zero',
+          'pointer strokes, boxes and connections',
+          'file exports and edited board import',
+          'invalid board refused without loss',
+          'hide and Escape remove input layer',
+          'marks survive hide and reopen',
+          'collapsing sidebar hides drawing layer',
+          'same service instance',
+        ],
+        limits: [
+          'compositor appearance and physical click routing require user check',
+          'one display per drawing session',
+          'no live agent whiteboard service tools',
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(
+    'Desktop whiteboard checks passed; physical desktop interaction remains a user check.',
+  );
+};

@@ -3,6 +3,7 @@ const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
 const { processIdentity, directChildren, resolveWindow, windowAt } = require('./binding.cjs');
+const { createWhiteboard } = require('./whiteboard.cjs');
 const exec = promisify(execFile);
 const root = path.resolve(__dirname, '..');
 const stateDir = process.env.VOYAGER_STATE;
@@ -12,10 +13,16 @@ const binary = path.join(root, 'target/debug/voyager');
 const probe = path.join(root, 'target/debug/voyager-windows');
 // The first platform adapter is explicitly XWayland; native Wayland needs GNOME.
 app.commandLine.appendSwitch('ozone-platform', 'x11');
-app.setPath('userData', path.join(stateDir, 'desktop-profile'));
+const whiteboardProof = process.argv.includes('--whiteboard-proof');
+app.setPath(
+  'userData',
+  path.join(stateDir, whiteboardProof ? 'desktop-whiteboard-proof-profile' : 'desktop-profile'),
+);
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 
+let whiteboard,
+  whiteboardState = null;
 let win,
   timer,
   dragTimer,
@@ -61,6 +68,7 @@ function sendState() {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('state', {
     expanded,
+    whiteboard: whiteboardState,
     dragging: Boolean(dragging?.moved),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(({ id, native_thread_id, cwd, ownership, capture, worker_state }) => ({
@@ -90,12 +98,13 @@ function avatarPosition() {
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
   const width = expanded ? 390 : 144,
-    height = expanded ? 580 : 144;
+    height = expanded ? Math.min(area.height, 790) : 144;
   const left = Math.max(area.x, Math.min(area.x + area.width - width, x - width + 144));
   const top = Math.max(area.y, Math.min(area.y + area.height - height, y - 8));
   win.setBounds({ x: Math.round(left), y: Math.round(top), width, height });
 }
 function setExpanded(value) {
+  if (!value) whiteboard?.command({ action: 'hide' });
   const p = avatarPosition();
   expanded = value;
   placeAvatar(p.x, p.y);
@@ -281,6 +290,10 @@ app.whenReady().then(async () => {
         return { error: error.message };
       }
     });
+  handle('whiteboard', async (message) => {
+    if (!whiteboard) throw Error('Whiteboard is loading');
+    return whiteboard.command(message);
+  });
   handle('toggle', () => setExpanded(!expanded));
   handle('ready', sendState);
   handle('undock', () => undock());
@@ -331,8 +344,13 @@ app.whenReady().then(async () => {
     }
     sendState();
   });
+  whiteboard = await createWhiteboard(win, (value) => {
+    whiteboardState = value;
+    sendState();
+  });
   await win.loadFile(path.join(__dirname, 'index.html'));
   park();
+  if (process.argv.includes('--expanded')) setExpanded(true);
   win.showInactive();
   await refresh();
   timer = setInterval(refresh, 750);
@@ -340,6 +358,7 @@ app.whenReady().then(async () => {
     if (!dragging) return;
     const p = screen.getCursorScreenPoint();
     if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
+      whiteboard?.command({ action: 'hide' });
       dragging.moved = true;
       binding = null;
       expanded = false;
@@ -348,6 +367,15 @@ app.whenReady().then(async () => {
     }
     if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
   }, 32);
+  if (whiteboardProof) {
+    require('./test/whiteboard-proof.cjs')
+      .run({ win, whiteboard, setExpanded, rpc })
+      .then(() => app.quit())
+      .catch((error) => {
+        console.error(error);
+        app.exit(1);
+      });
+  }
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (process.argv.includes('--proof')) {
     require('./test/live-proof.cjs')
@@ -372,6 +400,7 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
+  whiteboard?.destroy();
   clearInterval(timer);
   clearInterval(dragTimer);
 });

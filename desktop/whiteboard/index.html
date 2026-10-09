@@ -7,59 +7,12 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'none'"
     />
-    <title>Voyager · whiteboard experiment</title>
+    <title>Voyager · desktop drawing layer</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header>
-      <div>
-        <span class="eyebrow">VOYAGER / EXPERIMENT 002</span>
-        <h1>A place to think together.</h1>
-      </div>
-      <span class="badge">Local whiteboard prototype</span>
-    </header>
-    <main>
-      <div class="toolbar" aria-label="Drawing tools">
-        <button data-tool="pen" aria-pressed="true">Pen</button
-        ><button data-tool="box" aria-pressed="false">Box</button
-        ><button data-tool="text" aria-pressed="false">Text</button
-        ><button data-tool="arrow" aria-pressed="false">Connect</button
-        ><button data-tool="move" aria-pressed="false">Move</button>
-        <label>Label <input id="label" value="An idea" maxlength="120" /></label
-        ><button id="undo">Undo</button><button id="fullscreen">Full screen</button>
-      </div>
-      <div class="sheet">
-        <svg
-          id="board"
-          viewBox="0 0 1400 800"
-          role="img"
-          aria-label="Shared planning whiteboard"
-        ></svg>
-      </div>
-      <div class="status">
-        <span id="hint" role="status"
-          >Drag to draw. Use boxes and connections for a structured diagram.</span
-        ><span id="count">0 ideas · 0 connections · 0 strokes</span>
-      </div>
-      <footer>
-        <div>
-          <strong>Share with your agent</strong>
-          <p>Save an image to discuss your sketch, or exchange a board file to add ideas.</p>
-        </div>
-        <div class="exports">
-          <button id="png">Save image</button><button id="json">Save board</button
-          ><button id="mermaid">Save Mermaid</button
-          ><label class="file"
-            >Open board<input id="open" type="file" accept=".json,application/json"
-          /></label>
-        </div>
-      </footer>
-      <p class="note">
-        Mermaid includes labelled items and connections. Freehand interpretation is an agent task.
-        Files are saved locally; this prototype is not connected to the Voyager service. Opening a
-        board replaces this canvas; Undo restores it.
-      </p>
-    </main>
+    <svg id="board" role="img" aria-label="Draw on the desktop"></svg>
+    <div id="hint" role="status">Draw on the desktop · Escape returns to your apps</div>
     <script type="module" src="renderer.mjs"></script>
   </body>
 </html>

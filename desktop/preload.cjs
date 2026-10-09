@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld(
   'voyager',
   Object.freeze({
+    whiteboard: (command) => ipcRenderer.invoke('whiteboard', command),
     toggle: () => ipcRenderer.invoke('toggle'),
     beginDrag: (x, y) => ipcRenderer.invoke('begin-drag', x, y),
     endDrag: () => ipcRenderer.invoke('end-drag'),

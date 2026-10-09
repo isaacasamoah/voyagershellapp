@@ -36,10 +36,10 @@ Ghostty XWayland windows opened for an already registered worker. It does not ye
 attach arbitrary existing terminals, support native Wayland docking, or build a
 knowledge graph.
 
-The [whiteboard experiment](docs/whiteboard.md) is a separate Electron planning
-canvas: draw, exchange images and structured board files with an agent, and export
-explicit connections as Mermaid. It is not yet connected to the Rust service and
-does not automatically interpret freehand marks.
+The [desktop whiteboard experiment](docs/whiteboard.md) adds drawing tools to the
+existing Voyager sidebar and a transparent layer over the desktop. It exchanges
+marks and structured diagrams with agents through files and exports explicit
+connections as Mermaid. Live agent tools and freehand interpretation remain unimplemented.
 
 The earlier [mechanism experiments](docs/experiments.md) remain reproducible: cooperative PTY handoff and independent synthetic capture. They do not establish arbitrary live-terminal adoption.
 

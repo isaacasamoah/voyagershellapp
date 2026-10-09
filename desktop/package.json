@@ -9,8 +9,7 @@
     "proof": "electron . --proof",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "whiteboard": "electron whiteboard/main.cjs",
-    "proof:whiteboard": "electron test/whiteboard-proof.cjs"
+    "proof:whiteboard": "electron . --whiteboard-proof"
   },
   "license": "MIT",
   "type": "commonjs",

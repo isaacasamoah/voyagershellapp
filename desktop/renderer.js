@@ -11,6 +11,19 @@ function element(tag, text, className) {
 api.onState((value) => {
   const focused = document.activeElement?.dataset.key;
   state = value;
+  const drawing = value.whiteboard;
+  if (drawing) {
+    for (const b of document.querySelectorAll('[data-drawing-tool]')) {
+      b.setAttribute(
+        'aria-pressed',
+        String(drawing.active && drawing.tool === b.dataset.drawingTool),
+      );
+    }
+    $('wb-hide').disabled = !drawing.active;
+    $('wb-undo').disabled = !drawing.canUndo;
+    $('wb-status').textContent =
+      `${drawing.active ? 'Drawing on desktop' : 'Desktop available'} · ${drawing.nodes} items · ${drawing.strokes} strokes. ${drawing.notice}`;
+  }
   $('panel').hidden = !value.expanded;
   $('avatar').setAttribute('aria-expanded', String(value.expanded));
   $('avatar').dataset.state = value.dragging ? 'moving' : value.docked ? 'docked' : 'floating';
@@ -109,4 +122,17 @@ $('avatar').addEventListener('keydown', (event) => {
 $('open-terminal').onclick = () => api.openTerminal(state.selected);
 $('undock').onclick = () => api.undock();
 $('quit').onclick = () => api.quit();
+for (const b of document.querySelectorAll('[data-drawing-tool]'))
+  b.onclick = () => api.whiteboard({ action: 'tool', tool: b.dataset.drawingTool });
+$('wb-label').oninput = (event) => api.whiteboard({ action: 'label', label: event.target.value });
+for (const [id, action] of Object.entries({
+  'wb-hide': 'hide',
+  'wb-undo': 'undo',
+  'wb-clear': 'clear',
+  'wb-image': 'save-image',
+  'wb-json': 'save-board',
+  'wb-mermaid': 'save-mermaid',
+  'wb-open': 'open',
+}))
+  $(id).onclick = () => api.whiteboard({ action });
 api.ready();
