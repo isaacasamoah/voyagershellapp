@@ -19,10 +19,12 @@ app.setPath('userData', path.join(stateDir, 'desktop-profile'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 
-let win,
+let avatarWin,
+  panelWin,
   timer,
   dragTimer,
   expanded = false,
+  seated = false,
   dragging = null,
   binding = null;
 let sessions = [],
@@ -75,10 +77,10 @@ async function discoverTerminals() {
   records = found;
 }
 function sendState() {
-  if (!win || win.isDestroyed()) return;
-  win.webContents.send('state', {
+  const state = {
     expanded,
-    dragging: Boolean(dragging?.lifted),
+    seated,
+    dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(({ id, cwd, ownership, capture, worker_state }) => ({
       id,
@@ -92,39 +94,75 @@ function sendState() {
     platformError,
     dockError,
     selected,
-  });
+  };
+  for (const client of [avatarWin, panelWin]) {
+    if (client && !client.isDestroyed()) client.webContents.send('state', state);
+  }
 }
 function avatarPosition() {
-  const b = win.getBounds();
-  return { x: b.x + (b.width - avatarSize) / 2, y: b.y + avatarTop() };
+  const b = avatarWin.getBounds();
+  return { x: b.x + margin, y: b.y + margin };
 }
-function avatarTop() {
-  return expanded ? 44 : margin;
+function setBoundsIfChanged(client, bounds) {
+  const previous = client.getBounds();
+  if (Object.keys(bounds).some((key) => previous[key] !== bounds[key])) client.setBounds(bounds);
+}
+function placePanel() {
+  const p = avatarPosition();
+  const area = screen.getDisplayNearestPoint(p).workArea;
+  const width = 320;
+  const height = Math.min(
+    area.height,
+    252 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0),
+  );
+  const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
+  const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
+  setBoundsIfChanged(panelWin, { x, y, width, height });
+  // Keep the astronaut in its seat if the panel was clamped at a display edge.
+  setBoundsIfChanged(avatarWin, { x: x + 100, y: y + 36 });
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
-  const width = expanded ? 320 : collapsedSize,
-    height = expanded
-      ? Math.min(area.height, 252 + Math.max(1, sessions.length) * 60 + (binding ? 38 : 0))
-      : collapsedSize;
-  const left = Math.max(
-    area.x,
-    Math.min(area.x + area.width - width, x - (width - avatarSize) / 2),
-  );
-  const top = Math.max(area.y, Math.min(area.y + area.height - height, y - avatarTop()));
-  win.setBounds({ x: Math.round(left), y: Math.round(top), width, height });
+  setBoundsIfChanged(avatarWin, {
+    x: Math.round(Math.max(area.x, Math.min(area.x + area.width - collapsedSize, x - margin))),
+    y: Math.round(Math.max(area.y, Math.min(area.y + area.height - collapsedSize, y - margin))),
+  });
+  if (expanded && seated) placePanel();
 }
 function setExpanded(value) {
-  const p = avatarPosition();
   expanded = value;
-  placeAvatar(p.x, p.y);
-  sendState();
+  seated = value;
+  if (value) {
+    placePanel();
+    sendState();
+    panelWin.showInactive();
+    avatarWin.moveTop();
+  } else {
+    panelWin.hide();
+    sendState();
+  }
 }
 function park() {
   const area = screen.getPrimaryDisplay().workArea;
-  expanded = false;
+  setExpanded(false);
   placeAvatar(area.x + area.width - avatarSize - 24, area.y + 28);
-  sendState();
+}
+function advanceDrag(p, now = performance.now()) {
+  if (!dragging) return;
+  if (!dragging.held && now - dragging.startedAt >= 350) {
+    dragging.held = true;
+    sendState();
+  }
+  if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
+    dragging.moved = true;
+    const wasAttached = seated || Boolean(binding);
+    seated = false;
+    binding = null;
+    dockError = '';
+    sendState();
+    if (wasAttached) avatarWin.webContents.send('undocked');
+  }
+  if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
 }
 function undock(message = '') {
   binding = null;
@@ -146,7 +184,7 @@ async function dock(id) {
   );
   if (result.error) {
     undock(result.error);
-    setExpanded(true);
+    if (!expanded) setExpanded(true);
     return false;
   }
   binding = result;
@@ -202,17 +240,13 @@ async function refresh() {
     }
   }
   busy = false;
-  if (expanded && !dragging) {
-    const p = avatarPosition();
-    placeAvatar(p.x, p.y);
-  }
+  if (expanded && seated && !dragging) placePanel();
   sendState();
 }
-app.whenReady().then(async () => {
-  if (!primaryInstance) return;
-  win = new BrowserWindow({
-    width: collapsedSize,
-    height: collapsedSize,
+function createWindow(width, height) {
+  const client = new BrowserWindow({
+    width,
+    height,
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -228,14 +262,23 @@ app.whenReady().then(async () => {
       sandbox: true,
     },
   });
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('will-navigate', (event) => event.preventDefault());
-  win.webContents.session.setPermissionRequestHandler((_web, _permission, callback) =>
+  client.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  client.webContents.on('will-navigate', (event) => event.preventDefault());
+  client.webContents.session.setPermissionRequestHandler((_web, _permission, callback) =>
     callback(false),
   );
-  const handle = (name, fn) =>
+  client.on('closed', () => app.quit());
+  return client;
+}
+app.whenReady().then(async () => {
+  if (!primaryInstance) return;
+  panelWin = createWindow(320, 372);
+  avatarWin = createWindow(collapsedSize, collapsedSize);
+  panelWin.on('focus', () => avatarWin.moveTop());
+  const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
-      if (event.senderFrame !== win.webContents.mainFrame) throw Error('Unknown caller');
+      if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
+        throw Error('Unknown caller');
       try {
         return await fn(...args);
       } catch (error) {
@@ -244,16 +287,16 @@ app.whenReady().then(async () => {
         return { error: error.message };
       }
     });
-  handle('toggle', () => setExpanded(!expanded));
-  handle('ready', sendState);
-  handle('undock', () => undock());
-  handle('select', (id) => {
+  handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('ready', [avatarWin, panelWin], sendState);
+  handle('undock', [panelWin], () => undock());
+  handle('select', [panelWin], (id) => {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown session');
     selected = id;
     sendState();
   });
-  handle('quit-ui', () => app.quit());
-  handle('begin-drag', (x, y) => {
+  handle('quit-ui', [panelWin], () => app.quit());
+  handle('begin-drag', [avatarWin], (x, y) => {
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
     dragging = {
@@ -261,36 +304,50 @@ app.whenReady().then(async () => {
       y,
       start: screen.getCursorScreenPoint(),
       startedAt: performance.now(),
-      lifted: false,
+      held: false,
       moved: false,
       original: avatarPosition(),
       binding,
-      expanded,
+      seated,
     };
   });
-  handle('cancel-drag', () => {
+  handle('cancel-drag', [avatarWin], () => {
     if (!dragging) return;
     const previous = dragging;
     dragging = null;
-    expanded = previous.expanded;
+    seated = previous.seated;
     binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
   });
-  handle('end-drag', async () => {
+  handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
-    const { lifted, moved } = dragging;
+    const { held, moved } = dragging;
     dragging = null;
-    if (!lifted) {
+    if (!held && !moved) {
       setExpanded(!expanded);
       return;
     }
-    // A hold without a move leaves the avatar floating, without joining whatever is behind it.
+    // A stationary hold leaves the panel and attachment exactly as they were.
     if (!moved) {
       sendState();
       return;
     }
-    const point = screen.dipToScreenPoint(screen.getCursorScreenPoint());
+    const cursor = screen.getCursorScreenPoint();
+    const panel = panelWin.getBounds();
+    if (
+      expanded &&
+      cursor.x >= panel.x &&
+      cursor.x < panel.x + panel.width &&
+      cursor.y >= panel.y &&
+      cursor.y < panel.y + panel.height
+    ) {
+      seated = true;
+      placeAvatar(panel.x + 108, panel.y + 44);
+      sendState();
+      return;
+    }
+    const point = screen.dipToScreenPoint(cursor);
     windows = await inventory();
     const target = windowAt(windows, point, process.pid);
     if (target) await dock(target.id);
@@ -299,38 +356,39 @@ app.whenReady().then(async () => {
     }
     sendState();
   });
-  await win.loadFile(path.join(__dirname, 'index.html'));
+  await Promise.all([
+    panelWin.loadFile(path.join(__dirname, 'index.html'), { query: { view: 'panel' } }),
+    avatarWin.loadFile(path.join(__dirname, 'index.html'), { query: { view: 'avatar' } }),
+  ]);
   park();
-  win.showInactive();
+  avatarWin.showInactive();
   await refresh();
   if (process.argv.includes('--expanded')) setExpanded(true);
   timer = setInterval(refresh, 750);
-  dragTimer = setInterval(() => {
-    if (!dragging) return;
-    const p = screen.getCursorScreenPoint();
-    if (Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) dragging.moved = true;
-    if (!dragging.lifted && (dragging.moved || performance.now() - dragging.startedAt >= 350)) {
-      dragging.lifted = true;
-      binding = null;
-      expanded = false;
-      dockError = '';
-      placeAvatar(dragging.original.x, dragging.original.y);
-      sendState();
-    }
-    if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
-  }, 32);
+  dragTimer = setInterval(() => advanceDrag(screen.getCursorScreenPoint()), 32);
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (process.argv.includes('--proof')) {
     require('./test/live-proof.cjs')
       .run({
-        win,
+        avatarWin,
+        panelWin,
+        advanceDrag,
         rpc,
         refresh,
         dock,
         undock,
         setExpanded,
         park,
-        getState: () => ({ sessions, windows, records, binding, serviceError }),
+        getState: () => ({
+          sessions,
+          windows,
+          records,
+          binding,
+          serviceError,
+          expanded,
+          seated,
+          dragging,
+        }),
         stateDir,
       })
       .catch((error) => {

@@ -43,9 +43,10 @@ change those permissions. `npm start -- --expanded` opens the panel immediately.
 1. Open the native worker terminal using the worker guide; it can already be open
    before Voyager's desktop client starts.
 2. Click the avatar to see the real service and agent connection states.
-3. Hold the astronaut for a moment (350 ms) to lift it out of the panel, or start
-   dragging directly. A quick click still opens or closes the panel. Release a
-   stationary hold to leave it floating; Escape during the gesture puts it back.
+3. Hold the astronaut, then pull it away. Holding alone leaves it seated and the
+   panel visible; moving lifts it out with one short undock tone. The panel stays
+   where it was. A quick click opens or closes the panel; releasing a stationary
+   hold (350 ms or longer) does neither. Escape during the gesture puts it back.
    Drag the avatar onto that terminal. The app matches a known worker session,
    then follows its window. An unrelated window with the same title is refused.
 4. Drag away or choose Detach. Quit with × when finished. The service and native
@@ -75,6 +76,14 @@ has only a narrow preload API. It no longer requests or receives conversation
 events. No terminal-launch path remains in the UI. Closing it sends no agent stop
 command.
 
+The avatar and panel have separate transparent windows. The avatar keeps a fixed
+size while the panel is shown or hidden, avoiding the previous resize-and-repaint
+transition. Unchanged window geometry and agent rows are not redrawn on polling.
+Only the avatar renderer may send drag commands; only the panel may select agents
+or quit. The undock cue is a quiet, locally synthesized falling tone with no media
+dependency. It fires when movement detaches the avatar, never on a click or hold
+alone. Perceived flicker and sound still need checking on the real desktop.
+
 ## Limits and proof
 
 - Dedicated Ghostty **XWayland** clients of the known worker only. Native Wayland,
@@ -93,18 +102,19 @@ command.
 clients, disconnected capture and frontmost-window hit testing. `npm run proof`
 is an opt-in check against the real service and an already-open worker terminal.
 It discovers that terminal without a UI launch record, refuses a same-title
-unrelated shell, exercises click-to-toggle, hold-to-lift and Escape-to-cancel in
-the renderer, captures the panel, and verifies that detach preserves the worker
-process and service instance. The
-temporary unrelated shell is closed; the panel stays open. Receipts/screenshots
+unrelated shell, exercises clicks and stationary holds in the renderer, drives
+the main-process movement transition, checks that the panel stays put and one
+sound cue is emitted, then exercises Escape-to-cancel. It captures each window
+separately and verifies that detach preserves the worker process and service
+instance. The temporary unrelated shell is closed; the panel stays open. Receipts/screenshots
 are private. No model call or desktop-wide input injection is used.
 
 Observed on 10 October: existing native client rediscovered, correct session
 accepted, unrelated shell refused, click handler toggled, the two-row agent list
-fit without scrolling, and internal IDs/event feed were absent. Holding lifted
-and detached the avatar, Escape restored the prior attachment, and releasing a
-stationary hold left it floating. The same worker and service survived these
-gestures. The final pointer-use preview has a continuous curved glass panel with
+fit without scrolling, and internal IDs/event feed were absent. The updated
+gesture keeps the panel visible during a hold; movement detaches the avatar and
+Escape restores the prior attachment. The final pointer-use preview has a
+continuous curved glass panel with
 no separate banner fill or seated-avatar rim; keyboard focus still has a visible
 outline.
 

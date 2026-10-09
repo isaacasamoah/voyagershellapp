@@ -28,6 +28,10 @@ button:disabled {
 [hidden] {
   display: none !important;
 }
+body[data-view='avatar'] #panel,
+body[data-view='panel'] #avatar {
+  display: none !important;
+}
 .avatar,
 #panel {
   border: 1px solid #ffffff9c;
@@ -77,8 +81,7 @@ button:disabled {
   overflow: visible;
   pointer-events: none;
 }
-body[data-expanded='true'] .avatar {
-  top: 44px;
+body[data-seated='true'] .avatar {
   /* The panel supplies the glass, so the seated astronaut has no separate rim. */
   background: none;
   border-color: transparent;
@@ -93,7 +96,7 @@ body[data-expanded='true'] .avatar {
 }
 .avatar:hover,
 .avatar:focus-visible,
-body[data-expanded='true'] .avatar {
+body[data-seated='true'] .avatar {
   opacity: 1;
 }
 #indicator {

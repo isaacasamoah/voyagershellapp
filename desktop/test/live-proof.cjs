@@ -7,7 +7,9 @@ const { spawn } = require('node:child_process');
 const { processIdentity } = require('../binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
-  win,
+  avatarWin,
+  panelWin,
+  advanceDrag,
   rpc,
   refresh,
   dock,
@@ -76,70 +78,85 @@ exports.run = async ({
     other.kill('SIGTERM');
   }
   setExpanded(false);
-  win.focus();
+  avatarWin.focus();
   await delay(300);
   const pointer = async (type) => {
-    const { x, y } = await win.webContents.executeJavaScript(`(() => {
-      const r = document.getElementById('avatar').getBoundingClientRect();
-      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-    })()`);
-    win.webContents.sendInputEvent({ type, button: 'left', x, y, clickCount: 1 });
+    avatarWin.webContents.sendInputEvent({ type, button: 'left', x: 60, y: 60, clickCount: 1 });
   };
-  const panelHidden = () =>
-    win.webContents.executeJavaScript("document.getElementById('panel').hidden");
+  await avatarWin.webContents.executeJavaScript(`
+    window.undockCount = 0;
+    window.voyager.onUndock(() => window.undockCount++);
+  `);
+  const soundCount = () => avatarWin.webContents.executeJavaScript('window.undockCount');
   const clickAvatar = async () => {
     await pointer('mouseDown');
     await delay(40);
     await pointer('mouseUp');
-    await delay(300);
+    await delay(200);
   };
+  const avatarSizeBefore = avatarWin.getSize();
   await clickAvatar();
-  assert.equal(
-    await win.webContents.executeJavaScript("document.getElementById('panel').hidden"),
-    false,
-  );
+  assert(panelWin.isVisible());
   await clickAvatar();
-  assert.equal(
-    await win.webContents.executeJavaScript("document.getElementById('panel').hidden"),
-    true,
+  assert(!panelWin.isVisible());
+  assert.deepEqual(
+    avatarWin.getSize(),
+    avatarSizeBefore,
+    'Toggling never resizes the avatar window',
   );
-  receipts.push('Renderer pointer events opened and collapsed the panel');
+  assert.equal(await soundCount(), 0, 'Clicking is silent');
+  receipts.push('Clicks toggled the separate panel without resizing the avatar');
+
   setExpanded(true);
   await delay(100);
+  const panelBefore = panelWin.getBounds();
   await pointer('mouseDown');
   await delay(450);
-  assert(await panelHidden(), 'Holding lifts the astronaut out of the panel');
-  assert.equal(getState().binding, null, 'Holding detaches the interface from the terminal');
-  assert.equal(win.getBounds().width, 120);
-  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  assert(panelWin.isVisible(), 'Holding must leave the panel visible');
+  assert(getState().seated, 'Holding alone must not lift the astronaut');
+  assert.equal(getState().binding?.session.id, worker.id);
+  await pointer('mouseUp');
+  await delay(100);
+  assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
+  assert.equal(await soundCount(), 0, 'A stationary hold is silent');
+
+  await pointer('mouseDown');
+  await delay(50);
+  const start = getState().dragging.start;
+  // Exercise the same main-process drag transition; this is not compositor mouse injection.
+  advanceDrag({ x: start.x + 30, y: start.y + 20 });
+  await delay(100);
+  assert(panelWin.isVisible() && !getState().seated);
+  assert.equal(getState().binding, null);
+  assert.deepEqual(
+    panelWin.getBounds(),
+    panelBefore,
+    'The panel stays put when the astronaut leaves',
+  );
+  assert.equal(await soundCount(), 1, 'Exactly one undock cue is emitted per departure');
+  avatarWin.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  avatarWin.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await delay(150);
   await pointer('mouseUp');
-  assert.equal(await panelHidden(), false, 'Escape restores the panel');
+  assert(getState().seated && panelWin.isVisible());
   assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
-  await pointer('mouseDown');
-  await delay(450);
-  await pointer('mouseUp');
-  await delay(150);
-  assert(await panelHidden(), 'Releasing a stationary hold leaves the astronaut floating');
-  assert.equal(getState().binding, null, 'A stationary hold must not join a window underneath');
-  receipts.push('Hold lifted and detached; Escape restored; stationary release stayed floating');
+  receipts.push(
+    'Hold stayed seated and silent; movement left the panel in place and cued once; Escape restored',
+  );
+
   undock();
   park();
   setExpanded(true);
-  // Leave a pointer-use preview after testing the visible keyboard focus ring.
-  await win.webContents.executeJavaScript('document.activeElement?.blur()');
+  await avatarWin.webContents.executeJavaScript('document.activeElement?.blur()');
   await delay(350);
-  const ui = await win.webContents.executeJavaScript(`({
+  const ui = await panelWin.webContents.executeJavaScript(`({
     text:document.body.innerText,
     hasEvents:Boolean(document.getElementById('events')),
     hasDockButtons:Boolean(document.getElementById('targets')),
     hasNotice:Boolean(document.getElementById('notice')),
     hasLauncher:Boolean(document.getElementById('open-terminal')),
     scroll:document.getElementById('sessions').scrollHeight>document.getElementById('sessions').clientHeight,
-    sessionCount:document.querySelectorAll('.session').length,
-    avatar:document.getElementById('avatar').getBoundingClientRect().toJSON(),
-    panel:document.getElementById('panel').getBoundingClientRect().toJSON()
+    sessionCount:document.querySelectorAll('.session').length
   })`);
   assert(!ui.hasEvents && !ui.hasDockButtons && !ui.hasNotice && !ui.hasLauncher);
   assert(!ui.scroll, 'The real agent list must fit without scrolling');
@@ -147,16 +164,19 @@ exports.run = async ({
     assert(!ui.text.includes(s.id) && !ui.text.includes(s.native_thread_id));
   assert(ui.text.includes('Online') && ui.text.includes('Connected'));
   assert.equal(ui.sessionCount, getState().sessions.length);
-  assert.equal(ui.avatar.width, 104);
-  assert(
-    ui.avatar.top >= ui.panel.top && ui.avatar.bottom < ui.panel.bottom,
-    'The seated astronaut is contained in the continuous panel surface',
+  const panel = panelWin.getBounds(),
+    avatar = avatarWin.getBounds();
+  assert.equal(avatar.x + 8, panel.x + 108);
+  assert.equal(avatar.y + 8, panel.y + 44);
+  receipts.push('Two desktop surfaces align the astronaut with the continuous glass panel');
+  await fs.writeFile(
+    path.join(stateDir, 'desktop-refinement-panel.png'),
+    (await panelWin.webContents.capturePage()).toPNG(),
   );
-  receipts.push(
-    'Continuous curved panel, human-readable agent status, no visible IDs or event feed',
+  await fs.writeFile(
+    path.join(stateDir, 'desktop-refinement-avatar.png'),
+    (await avatarWin.webContents.capturePage()).toPNG(),
   );
-  const image = await win.webContents.capturePage();
-  await fs.writeFile(path.join(stateDir, 'desktop-refinement.png'), image.toPNG());
   const after = await rpc('attach-info', worker.id);
   assert.equal(after.pid, workerBefore.pid);
   assert.equal((await processIdentity(after.pid)).start, original.start);
@@ -173,7 +193,7 @@ exports.run = async ({
         workerPid: after.pid,
         workerStart: original.start,
         limits: [
-          'Physical drag still needs a human desktop test',
+          'Physical drag, perceived flicker and audible cue still need a human desktop test',
           'Only dedicated Ghostty XWayland clients of the known worker',
           'No arbitrary CLI registration or current-thread switching detection',
         ],

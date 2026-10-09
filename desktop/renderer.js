@@ -1,6 +1,28 @@
 const api = window.voyager;
 const $ = (id) => document.getElementById(id);
+const view = new URLSearchParams(location.search).get('view');
+document.body.dataset.view = view;
 let pointer = false;
+let audio;
+let lastRows;
+api.onUndock(() => {
+  if (!audio || audio.state !== 'running') return;
+  const tone = audio.createOscillator();
+  const gain = audio.createGain();
+  const now = audio.currentTime;
+  tone.frequency.setValueAtTime(620, now);
+  tone.frequency.exponentialRampToValueAtTime(310, now + 0.16);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.06, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  tone.connect(gain).connect(audio.destination);
+  tone.start(now);
+  tone.stop(now + 0.2);
+  tone.onended = () => {
+    tone.disconnect();
+    gain.disconnect();
+  };
+});
 function element(tag, text, className) {
   const e = document.createElement(tag);
   e.textContent = text;
@@ -9,14 +31,20 @@ function element(tag, text, className) {
 }
 api.onState((value) => {
   const focused = document.activeElement?.dataset.key;
-  $('panel').hidden = !value.expanded;
+  $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
+  document.body.dataset.seated = String(value.seated);
   document.body.dataset.connected = String(!value.serviceError);
   $('avatar').setAttribute('aria-expanded', String(value.expanded));
   $('avatar').dataset.state = value.dragging ? 'moving' : value.docked ? 'docked' : 'floating';
   $('connection').textContent = value.serviceError ? 'Offline' : 'Online';
   $('avatar').title = value.platformError || value.dockError || '';
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
+  if (view !== 'panel') return;
+  $('undock').hidden = !value.docked;
+  const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
+  if (rows === lastRows) return;
+  lastRows = rows;
   $('sessions').replaceChildren(
     ...value.sessions.map((s) => {
       const b = element('button', '', 'session');
@@ -43,7 +71,6 @@ api.onState((value) => {
   );
   if (!value.sessions.length)
     $('sessions').append(element('p', 'No agents connected yet.', 'empty'));
-  $('undock').hidden = !value.docked;
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });
@@ -54,6 +81,8 @@ $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();
   pointer = true;
+  audio ??= new AudioContext();
+  audio.resume().catch(() => {});
   $('avatar').focus({ preventScroll: true });
   $('avatar').setPointerCapture(event.pointerId);
   const b = $('avatar').getBoundingClientRect();
