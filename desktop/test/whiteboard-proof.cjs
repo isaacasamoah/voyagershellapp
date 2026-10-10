@@ -268,6 +268,8 @@ exports.run = async ({ win, avatarWin, whiteboard, setExpanded, rpc, inventory }
   await assertAvatarReachable();
   await require('./snip-proof.cjs').run({
     win,
+    avatarWin,
+    inventory,
     whiteboard,
     button,
     tool,
@@ -298,7 +300,24 @@ exports.run = async ({ win, avatarWin, whiteboard, setExpanded, rpc, inventory }
   assert(!win.isVisible(), 'Astronaut click still closes the drawing panel');
   assert(avatarWin.isVisible());
   assert.equal(avatarWin.getParentWindow(), null);
-  await setExpanded(true);
+  avatarWin.webContents.sendInputEvent({
+    type: 'mouseDown',
+    x: 60,
+    y: 60,
+    button: 'left',
+    clickCount: 1,
+  });
+  await delay(40);
+  avatarWin.webContents.sendInputEvent({
+    type: 'mouseUp',
+    x: 60,
+    y: 60,
+    button: 'left',
+    clickCount: 1,
+  });
+  await delay(250);
+  assert(win.isVisible(), 'The next astronaut click reopens the panel after Snip');
+  await assertAvatarReachable();
   await setExpanded(false);
   await delay(100);
   assert(!whiteboard.getState().active);

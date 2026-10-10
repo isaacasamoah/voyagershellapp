@@ -50,9 +50,11 @@ Voyager MCP tool set; that service integration is not implemented yet. This UI
 update does not claim agent interpretation, saved boards or knowledge-graph events.
 
 The drawing model and board snapshot remain in `desktop/src/ui/whiteboard/`.
-Only the explicit Snip action captures underlying applications. Voyager hides
-its own windows while the native picker is open and imports the returned PNG;
-the desktop may retain the original in its usual screenshots folder. Images
+Only the explicit Snip action captures underlying applications. Voyager makes
+its contents invisible and its windows click-through while the native picker is
+open, then imports the returned PNG. The native windows stay mapped and retain
+their parent relationship; returning from capture does not request focus.
+The desktop may retain the original in its usual screenshots folder. Images
 are embedded in the in-memory board. The JSON validation and explicit-connection
 Mermaid conversion are local data helpers, not callable Voyager agent tools.
 The converter does not interpret image contents.
@@ -87,7 +89,12 @@ canvas-above-controls counterexample must block the Box click before the correct
 order is restored. The service instance must remain unchanged.
 
 The image editing check uses a controlled PNG to exercise movement, proportional
-resizing, drawing above images, group selection and undo. Add
+resizing, drawing above images, group selection and undo. A controlled screenshot
+helper also exercises success, cancellation and failure through the real capture
+flow. It checks that both native windows remain mapped, have no visible pixels
+and pass mouse input during capture, then repaint and accept input afterward.
+It checks the actual X11 input region, not just Electron's visibility flags.
+Add
 `VOYAGER_SNIP_INTERACTIVE=1` to the proof command to test the real native picker:
 select across both colours of the pink-and-green card and capture. That separate
 check verifies actual desktop pixels; image editing alone does not prove capture.
