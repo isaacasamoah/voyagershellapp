@@ -5,7 +5,19 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-exports.run = async ({ win, whiteboard, button, tool, drag, click, snapshot, panel, output }) => {
+exports.run = async ({
+  win,
+  avatarWin,
+  inventory,
+  whiteboard,
+  button,
+  tool,
+  drag,
+  click,
+  snapshot,
+  panel,
+  output,
+}) => {
   const display = screen.getDisplayMatching(win.getBounds());
   const fixture = new BrowserWindow({
     x: display.bounds.x + 40,
@@ -52,7 +64,18 @@ exports.run = async ({ win, whiteboard, button, tool, drag, click, snapshot, pan
       await fs.writeFile(path.join(output, 'native-snippet.png'), image.toPNG());
       await button('#wb-clear');
     }
-    const png = (await fixture.webContents.capturePage()).toDataURL();
+    const fixtureImage = await fixture.webContents.capturePage();
+    await require('./capture-lifecycle-proof.cjs').run({
+      win,
+      avatarWin,
+      whiteboard,
+      inventory,
+      png: fixtureImage.toPNG(),
+      output,
+    });
+    await button('#wb-clear');
+    await tool('select');
+    const png = fixtureImage.toDataURL();
     await panel(
       `window.whiteboard.command(${JSON.stringify({ action: 'insert-image', image: png, rect: { x: 60, y: 520, width: 360, height: 200 } })})`,
     );

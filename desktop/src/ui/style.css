@@ -12,6 +12,9 @@ body {
   background: transparent;
   overflow: hidden;
 }
+body[data-capturing='true'] {
+  visibility: hidden;
+}
 button {
   font: inherit;
   color: inherit;

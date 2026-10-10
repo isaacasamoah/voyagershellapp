@@ -41,6 +41,7 @@ api.onState((value) => {
   const focused = document.activeElement?.dataset.key;
   $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
+  document.body.dataset.capturing = String(Boolean(value.whiteboard?.capturing));
   document.body.dataset.seated = String(value.seated);
   document.body.dataset.connected = String(!value.serviceError);
   $('avatar').setAttribute('aria-expanded', String(value.expanded));

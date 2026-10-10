@@ -50,7 +50,10 @@ exports.createWhiteboard = (panel, avatar, resizePanel, changed) => {
     // The native picker owns Escape while it is open.
     globalShortcut.unregister('Escape');
     try {
-      for (const win of visible) win.hide();
+      // Keep the linked windows mapped. Unmapping and focusing them again after
+      // the portal closes can leave GNOME showing only an attention notification.
+      // The capturing state hides their contents; input goes to the desktop.
+      for (const win of visible) win.setIgnoreMouseEvents(true);
       await delay(180);
       if (request.signal.aborted) return;
       const { stdout } = await exec('python3', [path.join(__dirname, 'screenshot.py')], {
@@ -98,12 +101,9 @@ exports.createWhiteboard = (panel, avatar, resizePanel, changed) => {
     } finally {
       capture = null;
       state.capturing = false;
-      for (const win of visible) if (!win.isDestroyed()) win.showInactive();
+      for (const win of visible) if (!win.isDestroyed()) win.setIgnoreMouseEvents(false);
       if (!panel.isDestroyed()) {
-        if (state.active) {
-          globalShortcut.register('Escape', hide);
-          panel.focus();
-        }
+        if (state.active) globalShortcut.register('Escape', hide);
         update();
       }
     }
