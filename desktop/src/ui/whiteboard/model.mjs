@@ -20,17 +20,24 @@ export function validateBoard(board) {
       typeof n.id !== 'string' ||
       !/^n[\w-]{1,80}$/.test(n.id) ||
       ids.has(n.id) ||
-      !['box', 'text'].includes(n.kind) ||
+      !['box', 'text', 'image'].includes(n.kind) ||
       typeof n.label !== 'string' ||
       n.label.length > 120 ||
       !coord(n.x) ||
       !coord(n.y) ||
       !Number.isFinite(n.width ?? 200) ||
-      (n.width ?? 200) < 40 ||
+      (n.width ?? 200) < (n.kind === 'image' ? 8 : 40) ||
       (n.width ?? 200) > 4096 ||
       !Number.isFinite(n.height ?? 64) ||
-      (n.height ?? 64) < 32 ||
+      (n.height ?? 64) < (n.kind === 'image' ? 8 : 32) ||
       (n.height ?? 64) > 4096
+    )
+      fail();
+    if (
+      n.kind === 'image' &&
+      (typeof n.image !== 'string' ||
+        n.image.length > 16 * 1024 * 1024 ||
+        !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(n.image))
     )
       fail();
     ids.add(n.id);
@@ -46,7 +53,7 @@ export function validateBoard(board) {
   // Copy just the supported fields: imported files never carry executable markup.
   return {
     version: 1,
-    nodes: board.nodes.map(({ id, kind, label, x, y, width = 200, height = 64 }) => ({
+    nodes: board.nodes.map(({ id, kind, label, x, y, width = 200, height = 64, image }) => ({
       id,
       kind,
       label,
@@ -54,6 +61,7 @@ export function validateBoard(board) {
       y,
       width: width ?? 200,
       height: height ?? 64,
+      ...(kind === 'image' ? { image } : {}),
     })),
     edges: board.edges.map(({ from, to }) => ({ from, to })),
     strokes: board.strokes.map((s) => s.map((p) => [...p])),
@@ -75,6 +83,9 @@ export function toMermaid(board) {
       ...board.edges.map((e) => `  ${ids.get(e.from)} --> ${ids.get(e.to)}`),
       ...(board.strokes.length
         ? ['  %% Freehand strokes omitted; inspect the board image to interpret them.']
+        : []),
+      ...(board.nodes.some((n) => n.kind === 'image')
+        ? ['  %% Image contents are not interpreted by this export.']
         : []),
     ].join('\n') + '\n'
   );

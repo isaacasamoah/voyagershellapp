@@ -72,12 +72,12 @@ api.onState((value) => {
         'aria-pressed',
         String(drawing.active && drawing.tool === button.dataset.drawingTool),
       );
+    $('wb-snip').disabled = drawing.capturing;
     $('wb-delete').disabled = !drawing.selectedCount;
     $('wb-undo').disabled = !drawing.canUndo;
     $('wb-hide').disabled = !drawing.active;
-    $('wb-status').textContent = drawing.active
-      ? 'Escape or Done returns to your apps.'
-      : 'Draw and type on your desktop.';
+    $('wb-status').hidden = !drawing.error;
+    $('wb-status').textContent = drawing.error;
   }
   $('undock').hidden = !value.docked;
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
@@ -158,6 +158,7 @@ for (const button of document.querySelectorAll('[data-drawing-tool]'))
   button.onclick = () => api.whiteboard({ action: 'tool', tool: button.dataset.drawingTool });
 for (const [id, action] of Object.entries({
   'wb-hide': 'hide',
+  'wb-snip': 'snip',
   'wb-undo': 'undo',
   'wb-clear': 'clear',
   'wb-delete': 'delete',

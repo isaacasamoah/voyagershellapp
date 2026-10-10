@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'none'"
     />
     <title>Voyager</title>
     <link rel="stylesheet" href="style.css" />
@@ -15,7 +15,6 @@
     <div id="drawing" hidden>
       <svg id="board" role="img" aria-label="Draw on the desktop"></svg>
       <input id="editor" aria-label="Edit text on the desktop" maxlength="120" hidden />
-      <div id="hint" role="status">Draw on the desktop · Escape returns to your apps</div>
     </div>
     <main id="voyager-ui">
       <section id="panel" hidden aria-label="Voyager agents">
@@ -72,12 +71,15 @@
               <button data-drawing-tool="select" aria-pressed="false">Select</button>
             </div>
             <div class="drawing-tools" aria-label="Drawing actions">
+              <button id="wb-snip" title="Drag an area of the desktop to add as an image">
+                Snip
+              </button>
               <button id="wb-undo" disabled>Undo</button>
               <button id="wb-delete" disabled>Delete</button>
               <button id="wb-clear">Clear</button>
               <button id="wb-hide" disabled title="Return to your desktop">Done</button>
             </div>
-            <p id="wb-status" role="status">Draw and type on your desktop.</p>
+            <p id="wb-status" role="status" hidden></p>
           </div>
         </section>
         <p id="tagline">Let’s Go Together</p>

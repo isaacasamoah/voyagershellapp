@@ -34,3 +34,21 @@ test('agent-edited graph round trips and exports explicit relationships, not inf
     }),
   );
 });
+
+test('snippets round trip as embedded PNGs and reject executable or remote image sources', () => {
+  const image = {
+    id: 'nimage',
+    kind: 'image',
+    label: 'Snippet',
+    x: 100,
+    y: 100,
+    width: 80,
+    height: 40,
+    image: 'data:image/png;base64,iVBORw0KGgo=',
+  };
+  const board = { ...emptyBoard(), nodes: [image] };
+  assert.deepEqual(validateBoard(board), board);
+  assert.match(toMermaid(board), /Image contents are not interpreted/);
+  for (const bad of ['https://example.com/image.png', 'data:image/svg+xml,<svg/>', '', null])
+    assert.throws(() => validateBoard({ ...board, nodes: [{ ...image, image: bad }] }));
+});
