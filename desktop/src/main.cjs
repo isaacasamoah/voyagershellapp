@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
+const { createWhiteboard } = require('./whiteboard.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const { processIdentity, identifyTerminal, resolveWindow, windowAt } = require('./binding.cjs');
 const exec = promisify(execFile);
@@ -16,7 +17,14 @@ const avatarSize = 104,
   collapsedSize = avatarSize + margin * 2;
 // The first platform adapter is explicitly XWayland; native Wayland needs GNOME.
 app.commandLine.appendSwitch('ozone-platform', 'x11');
-app.setPath('userData', path.join(stateDir, 'desktop-profile'));
+const whiteboardProof = process.argv.includes('--whiteboard-proof');
+app.setPath(
+  'userData',
+  path.join(
+    stateDir,
+    whiteboardProof ? 'desktop-whiteboard-proof-profile' : 'desktop-whiteboard-glass-profile',
+  ),
+);
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 
@@ -37,6 +45,9 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
+let whiteboard,
+  whiteboardState = null,
+  whiteboardExpanded = false;
 
 async function rpc(...args) {
   const result = await exec(binary, ['--state', stateDir, ...args], {
@@ -80,6 +91,8 @@ async function discoverTerminals() {
 function sendState() {
   const state = {
     expanded,
+    whiteboard: whiteboardState,
+    whiteboardExpanded,
     seated,
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
@@ -109,12 +122,17 @@ function setBoundsIfChanged(client, bounds) {
   if (Object.keys(bounds).some((key) => previous[key] !== bounds[key])) client.setBounds(bounds);
 }
 function placePanel() {
+  if (whiteboardState?.active) return;
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
   const height = Math.min(
     area.height,
-    252 + Math.max(1, sessions.length) * 44 + (binding ? 38 : 0),
+    252 +
+      Math.max(1, sessions.length) * 44 +
+      (binding ? 38 : 0) +
+      44 +
+      (whiteboardExpanded ? 92 : 0),
   );
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
@@ -137,6 +155,7 @@ function setSeated(value) {
   if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
 }
 async function setExpanded(value) {
+  if (!value) whiteboard?.command({ action: 'hide' });
   expanded = value;
   if (value) {
     setSeated(true);
@@ -177,6 +196,7 @@ function advanceDrag(p, now = performance.now()) {
     sendState();
   }
   if (!dragging.moved && Math.hypot(p.x - dragging.start.x, p.y - dragging.start.y) > 7) {
+    whiteboard?.command({ action: 'hide' });
     dragging.moved = true;
     const wasAttached = seated || Boolean(binding);
     setSeated(false);
@@ -219,7 +239,7 @@ async function dock(id) {
   return true;
 }
 function follow() {
-  if (!binding || dragging) return;
+  if (!binding || dragging || whiteboardState?.active) return;
   const w = binding.window;
   const anchor = screen.screenToDipPoint({
     x: w.x + w.width,
@@ -299,10 +319,25 @@ app.whenReady().then(async () => {
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
   panelWin.on('move', () => {
-    if (!expanded || !seated || dragging) return;
+    if (!expanded || !seated || dragging || whiteboardState?.active) return;
     const panel = panelWin.getBounds();
     setBoundsIfChanged(avatarWin, { x: panel.x + 100, y: panel.y + 36 });
   });
+  whiteboard = createWhiteboard(
+    panelWin,
+    avatarWin,
+    (bounds, active) => {
+      const avatarBounds = avatarWin.getBounds();
+      avatarWin.setParentWindow(null);
+      panelWin.setBounds(bounds);
+      avatarWin.setBounds(avatarBounds);
+      avatarWin.setParentWindow(active || seated ? panelWin : null);
+    },
+    (value) => {
+      whiteboardState = value;
+      sendState();
+    },
+  );
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
@@ -316,6 +351,14 @@ app.whenReady().then(async () => {
       }
     });
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('whiteboard', [panelWin], (message) => whiteboard.command(message));
+  handle('whiteboard-expand', [panelWin], (value) => {
+    if (typeof value !== 'boolean') throw Error('Invalid whiteboard expansion');
+    if (!value) whiteboard.command({ action: 'hide' });
+    whiteboardExpanded = value;
+    placePanel();
+    sendState();
+  });
   handle('ready', [avatarWin, panelWin], sendState);
   handle('undock', [panelWin], () => undock());
   handle('select', [panelWin], (id) => {
@@ -327,6 +370,7 @@ app.whenReady().then(async () => {
   handle('begin-drag', [avatarWin], (x, y) => {
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
+    whiteboard.command({ action: 'hide' });
     dragging = {
       x,
       y,
@@ -397,6 +441,22 @@ app.whenReady().then(async () => {
   if (process.argv.includes('--expanded')) await setExpanded(true);
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(() => advanceDrag(screen.getCursorScreenPoint()), 32);
+  if (whiteboardProof) {
+    require('../test/whiteboard-proof.cjs')
+      .run({
+        win: panelWin,
+        avatarWin,
+        whiteboard,
+        setExpanded,
+        rpc,
+        inventory,
+      })
+      .then(() => app.quit())
+      .catch((error) => {
+        console.error(error);
+        app.exit(1);
+      });
+  }
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (process.argv.includes('--proof')) {
     require('../test/live-proof.cjs')

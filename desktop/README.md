@@ -41,6 +41,9 @@ If Electron's binary download was skipped during installation, run
 | `src/preload.cjs`                | The renderer's small, allowlisted IPC API                     |
 | `src/ui/renderer.js`             | Agent rows, pointer input and local sound cues                |
 | `src/ui/index.html`, `style.css` | The glass interface and accessibility labels                  |
+| `src/whiteboard.cjs`             | Drawing mode, panel bounds and snippet insertion              |
+| `src/screenshot.py`              | One interactive Linux screenshot portal request via Python GI |
+| `src/ui/whiteboard/`             | Drawing, direct text editing and selection                    |
 | `assets/`                        | Astronaut artwork and its attribution                         |
 
 There is no frontend framework or bundler. Main owns the state; the renderer
@@ -51,7 +54,10 @@ put native credentials or conversation text into the renderer.
 The panel and astronaut are separate transparent windows so holding and pulling
 the astronaut can leave the panel in place. A seated astronaut is a child of the
 visible panel; floating detaches that relationship. The native panel background
-is draggable. The astronaut and buttons are excluded from native drag regions so
+is draggable outside drawing mode. Opening the collapsible Whiteboard section
+reveals the drawing controls; see [the whiteboard guide](../docs/whiteboard.md).
+Drawing expands the panel window while preserving the sidebar and astronaut
+positions; closing drawing restores its bounds. The astronaut and buttons are excluded from native drag regions so
 their clicks reach the renderer.
 
 ## Testing changes

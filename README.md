@@ -19,6 +19,11 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   registered worker by process and session identity. It can join that worker;
   dropping onto an arbitrary terminal does not yet register an agent.
 
+The [desktop whiteboard experiment](docs/whiteboard.md) adds collapsible drawing
+controls to the glass panel, with direct text editing, group selection and a
+native Snip action that adds desktop images on Fedora GNOME. Agent
+MCP tools and board persistence are still planned.
+
 Start with [running the service](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
 
