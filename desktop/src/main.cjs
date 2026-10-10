@@ -231,7 +231,7 @@ function placePanel() {
   const width = 320;
   const height = Math.min(
     area.height,
-    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0) + 44 + (whiteboardExpanded ? 110 : 0),
+    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0) + 44 + (whiteboardExpanded ? 92 : 0),
   );
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
@@ -589,6 +589,7 @@ app.whenReady().then(async () => {
   });
   whiteboard = createWhiteboard(
     panelWin,
+    avatarWin,
     (bounds, active) => {
       const avatarBounds = avatarWin.getBounds();
       avatarWin.setParentWindow(null);

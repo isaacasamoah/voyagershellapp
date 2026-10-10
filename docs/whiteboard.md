@@ -21,6 +21,12 @@ Run from a logged-in graphical desktop with the existing service running. Open
 - Box or Text: click the desktop, then type directly into the new item. Text has
   no card background. Enter or clicking outside finishes; double-click to edit again.
 - Connect: click two items to join them with an arrow.
+- Snip: opens the native screenshot picker. Choose an area and capture it;
+  Voyager adds the image to the board, selected and ready to move. Corner handles
+  resize images proportionally. Pen draws over an image; Select can group it
+  with other items. The Linux capture path uses the
+  [desktop screenshot portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Screenshot.html),
+  Python 3 and PyGObject (`python3-gobject` on Fedora).
 - Select: drag around several items, or Shift-click to add/remove an item from
   the selection. Drag a selected item to move the group; connections follow.
 - Click an item for its corner resize handles. Undo reverts a completed action;
@@ -43,15 +49,19 @@ buttons. Those operations are intended for registered agents through a shared
 Voyager MCP tool set; that service integration is not implemented yet. This UI
 update does not claim agent interpretation, saved boards or knowledge-graph events.
 
-The drawing model and marks-only snapshot remain in
-`desktop/src/ui/whiteboard/`. No application windows beneath the drawing are
-captured. The JSON validation and explicit-connection Mermaid conversion are
-local data helpers, not callable Voyager agent tools.
+The drawing model and board snapshot remain in `desktop/src/ui/whiteboard/`.
+Only the explicit Snip action captures underlying applications. Voyager hides
+its own windows while the native picker is open and imports the returned PNG;
+the desktop may retain the original in its usual screenshots folder. Images
+are embedded in the in-memory board. The JSON validation and explicit-connection
+Mermaid conversion are local data helpers, not callable Voyager agent tools.
+The converter does not interpret image contents.
 
 The prototype covers the display containing the panel. Other apps receive input
 after leaving drawing mode. Changing displays ends drawing mode; marks keep
 pixel coordinates and may be clipped on a smaller display. Linux/XWayland is the
-only tested platform.
+only tested platform. Snip requires a desktop screenshot portal; the native
+picker flow is being exercised on Fedora GNOME, not macOS or Windows.
 
 ## Isolation and checks
 
@@ -75,6 +85,12 @@ astronaut toggle. It verifies transparent background pixels, native drag regions
 and the astronaut's position in the actual X11 window stack. A deliberate
 canvas-above-controls counterexample must block the Box click before the correct
 order is restored. The service instance must remain unchanged.
+
+The image editing check uses a controlled PNG to exercise movement, proportional
+resizing, drawing above images, group selection and undo. Add
+`VOYAGER_SNIP_INTERACTIVE=1` to the proof command to test the real native picker:
+select across both colours of the pink-and-green card and capture. That separate
+check verifies actual desktop pixels; image editing alone does not prove capture.
 
 Programmatic input and native stack observations do not establish physical
 drawing feel or every compositor interaction. The live app remains the final

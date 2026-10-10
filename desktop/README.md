@@ -46,7 +46,8 @@ If Electron's binary download was skipped during installation, run
 | `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                                |
 | `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                                  |
 | `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                              |
-| `src/whiteboard.cjs` | Drawing mode and panel bounds |
+| `src/whiteboard.cjs` | Drawing mode, panel bounds and snippet insertion |
+| `src/screenshot.py` | One interactive Linux screenshot portal request via Python GI |
 | `src/ui/whiteboard/` | Drawing, direct text editing and selection |
 | `assets/`                                | Astronaut artwork and its attribution                                         |
 

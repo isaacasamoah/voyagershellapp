@@ -266,6 +266,18 @@ exports.run = async ({ win, avatarWin, whiteboard, setExpanded, rpc, inventory }
     ).toPNG(),
   );
   await assertAvatarReachable();
+  await require('./snip-proof.cjs').run({
+    win,
+    whiteboard,
+    button,
+    tool,
+    drag,
+    click,
+    snapshot,
+    panel,
+    output,
+  });
+  await assertAvatarReachable();
   avatarWin.focus();
   avatarWin.webContents.sendInputEvent({
     type: 'mouseDown',

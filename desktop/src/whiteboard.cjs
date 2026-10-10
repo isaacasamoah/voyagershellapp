@@ -1,6 +1,13 @@
-const { ipcMain, screen, globalShortcut } = require('electron');
+const { ipcMain, screen, globalShortcut, nativeImage } = require('electron');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const { readFile, stat } = require('node:fs/promises');
+const { fileURLToPath } = require('node:url');
+const path = require('node:path');
+const exec = promisify(execFile);
+const { setTimeout: delay } = require('node:timers/promises');
 // Drawing and controls share the panel's native window, so tool clicks stay reachable.
-exports.createWhiteboard = (panel, resizePanel, changed) => {
+exports.createWhiteboard = (panel, avatar, resizePanel, changed) => {
   const state = {
     active: false,
     tool: 'pen',
@@ -9,18 +16,97 @@ exports.createWhiteboard = (panel, resizePanel, changed) => {
     strokes: 0,
     canUndo: false,
     selectedCount: 0,
+    capturing: false,
+    error: '',
   };
   let sidebarBounds = null;
+  let capture = null;
   const snapshot = () => panel.webContents.executeJavaScript('window.whiteboard.snapshot()');
   const update = () => changed({ ...state });
   const send = (command) => panel.webContents.send('whiteboard-command', command);
   const hide = () => {
+    capture?.abort();
     state.active = false;
     send({ action: 'cancel' });
     if (sidebarBounds) resizePanel(sidebarBounds, false);
     sidebarBounds = null;
     globalShortcut.unregister('Escape');
     update();
+  };
+  const snip = async () => {
+    if (capture) return;
+    if (process.platform !== 'linux') {
+      state.error = 'Snip currently requires the Linux screenshot portal.';
+      update();
+      return;
+    }
+    command({ action: 'tool', tool: 'select' });
+    const request = new AbortController();
+    capture = request;
+    state.capturing = true;
+    state.error = '';
+    update();
+    const visible = [panel, avatar].filter((win) => win.isVisible());
+    // The native picker owns Escape while it is open.
+    globalShortcut.unregister('Escape');
+    try {
+      for (const win of visible) win.hide();
+      await delay(180);
+      if (request.signal.aborted) return;
+      const { stdout } = await exec('python3', [path.join(__dirname, 'screenshot.py')], {
+        signal: request.signal,
+        timeout: 130000,
+        maxBuffer: 64 * 1024,
+      });
+      const result = JSON.parse(stdout);
+      if (result.cancelled || request.signal.aborted) return;
+      if (result.error) throw Error(result.error);
+      const file = fileURLToPath(result.uri);
+      if ((await stat(file)).size > 12 * 1024 * 1024)
+        throw Error('That image is too large. Snip a smaller area.');
+      const bytes = await readFile(file);
+      if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+        throw Error('The desktop did not return a PNG image.');
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) throw Error('The desktop returned an empty image.');
+      const size = image.getSize();
+      const data = image.toDataURL();
+      if (data.length > 16 * 1024 * 1024)
+        throw Error('That image is too large. Snip a smaller area.');
+      const scale = Math.min(
+        1,
+        800 / size.width,
+        600 / size.height,
+        (state.canvas.width - 40) / size.width,
+        (state.canvas.height - 40) / size.height,
+      );
+      const width = Math.max(8, size.width * scale),
+        height = Math.max(8, size.height * scale);
+      if (request.signal.aborted) return;
+      send({
+        action: 'insert-image',
+        image: data,
+        rect: {
+          x: (state.canvas.width - width) / 2,
+          y: (state.canvas.height - height) / 2,
+          width,
+          height,
+        },
+      });
+    } catch (error) {
+      if (!request.signal.aborted) state.error = `Couldn’t snip: ${error.message}`;
+    } finally {
+      capture = null;
+      state.capturing = false;
+      for (const win of visible) if (!win.isDestroyed()) win.showInactive();
+      if (!panel.isDestroyed()) {
+        if (state.active) {
+          globalShortcut.register('Escape', hide);
+          panel.focus();
+        }
+        update();
+      }
+    }
   };
   const report = (event, value) => {
     if (
@@ -42,6 +128,7 @@ exports.createWhiteboard = (panel, resizePanel, changed) => {
   screen.on('display-metrics-changed', hide);
   screen.on('display-removed', hide);
   panel.on('closed', () => {
+    capture?.abort();
     globalShortcut.unregister('Escape');
     ipcMain.removeListener('whiteboard-report', report);
     screen.removeListener('display-metrics-changed', hide);
@@ -49,9 +136,12 @@ exports.createWhiteboard = (panel, resizePanel, changed) => {
   });
   const command = (message) => {
     if (message.action === 'hide') return hide();
+    if (message.action === 'snip') return snip();
+    if (capture) return;
     if (message.action === 'tool') {
       if (!['pen', 'box', 'text', 'arrow', 'select'].includes(message.tool))
         throw Error('Unknown drawing tool');
+      state.error = '';
       state.tool = message.tool;
       if (!state.active) {
         sidebarBounds = panel.getBounds();

@@ -18,9 +18,6 @@ const clearSelection = () => {
   nodes.clear();
   strokes.clear();
 };
-function hint(text) {
-  document.getElementById('hint').textContent = text;
-}
 function element(tag, attrs = {}, text) {
   const el = document.createElementNS(ns, tag);
   for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
@@ -46,6 +43,19 @@ function render() {
   marker.append(element('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: '#527d72' }));
   defs.append(marker);
   svg.append(defs);
+  // Images sit beneath ink, so the pen can annotate a captured snippet.
+  for (const n of board.nodes.filter((n) => n.kind === 'image'))
+    svg.append(
+      element('image', {
+        'data-node': n.id,
+        href: n.image,
+        x: n.x - n.width / 2,
+        y: n.y - n.height / 2,
+        width: n.width,
+        height: n.height,
+        preserveAspectRatio: 'xMidYMid meet',
+      }),
+    );
   board.strokes.forEach((stroke, i) =>
     svg.append(
       element('polyline', {
@@ -88,6 +98,7 @@ function render() {
         height: n.height,
         rx: 12,
         fill: n.kind === 'box' ? '#eef3e8' : 'transparent',
+        'pointer-events': n.kind === 'image' ? 'none' : 'auto',
         stroke: nodes.has(n.id)
           ? '#56c5ff'
           : from === n.id
@@ -118,7 +129,7 @@ function render() {
       t.setAttribute('textLength', String(n.width - 20));
       t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
     }
-    g.append(t);
+    if (n.kind !== 'image') g.append(t);
     if (single()?.id === n.id)
       for (const [key, sx, sy] of [
         ['nw', -1, -1],
@@ -196,7 +207,7 @@ function startEditor(id, created = false) {
   commitEditor();
   cancelGesture();
   const n = board.nodes.find((n) => n.id === id);
-  if (!n) return;
+  if (!n || n.kind === 'image') return;
   clearSelection();
   nodes.add(id);
   editing = { id, created };
@@ -213,7 +224,6 @@ function startEditor(id, created = false) {
   render();
   editor.focus();
   editor.select();
-  hint('Type directly here · Enter or click outside to finish · double-click to edit again');
 }
 window.whiteboard = {
   snapshot: () => {
@@ -277,14 +287,25 @@ window.whiteboard = {
       board = next;
       clearSelection();
     }
+    if (command.action === 'insert-image') {
+      const { x, y, width, height } = command.rect;
+      checkpoint();
+      const n = {
+        id: `n${crypto.randomUUID()}`,
+        kind: 'image',
+        label: 'Snippet',
+        x: x + width / 2,
+        y: y + height / 2,
+        width,
+        height,
+        image: command.image,
+      };
+      board.nodes.push(n);
+      clearSelection();
+      nodes.add(n.id);
+      tool = 'select';
+    }
     render();
-    hint(
-      tool === 'select'
-        ? 'Drag around items to select · Shift-click adds or removes · drag a selection to move it'
-        : tool === 'arrow'
-          ? 'Click the source item, then its destination'
-          : 'Draw on the desktop · Escape returns to your apps',
-    );
   },
 };
 svg.addEventListener('pointerdown', (event) => {
@@ -307,7 +328,8 @@ svg.addEventListener('pointerdown', (event) => {
     return;
   }
   const resize = event.target.dataset.resize;
-  if (id || stroke !== undefined) {
+  const inkOnImage = tool === 'pen' && board.nodes.find((n) => n.id === id)?.kind === 'image';
+  if (!inkOnImage && (id || stroke !== undefined)) {
     const set = id ? nodes : strokes,
       key = id ?? Number(stroke);
     if (event.shiftKey) {
@@ -407,6 +429,19 @@ svg.addEventListener('pointermove', (event) => {
       sy = g.corner.includes('n') ? -1 : 1;
     n.width = Math.max(40, Math.min(4096, sx * (p[0] - g.anchor[0])));
     n.height = Math.max(32, Math.min(4096, sy * (p[1] - g.anchor[1])));
+    if (n.kind === 'image') {
+      const original = g.before.nodes.find((item) => item.id === n.id);
+      const scale = Math.min(
+        4096 / Math.max(original.width, original.height),
+        Math.max(
+          8 / Math.min(original.width, original.height),
+          (sx * (p[0] - g.anchor[0])) / original.width,
+          (sy * (p[1] - g.anchor[1])) / original.height,
+        ),
+      );
+      n.width = original.width * scale;
+      n.height = original.height * scale;
+    }
     n.x = g.anchor[0] + (sx * n.width) / 2;
     n.y = g.anchor[1] + (sy * n.height) / 2;
   }

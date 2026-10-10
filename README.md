@@ -29,7 +29,8 @@ Captain/crew authority, supervisor priority, automatic native voice, knowledge
 extraction and shared graphs are later work. Voyager is an experimental prototype.
 
 The [desktop whiteboard experiment](docs/whiteboard.md) adds collapsible drawing
-controls to the glass panel, with direct text editing and group selection. Agent
+controls to the glass panel, with direct text editing, group selection and a
+native Snip action that adds desktop images on Fedora GNOME. Agent
 MCP tools and board persistence are still planned.
 
 

@@ -9,18 +9,6 @@
 #board [data-node] {
   cursor: pointer;
 }
-#hint {
-  position: fixed;
-  left: 24px;
-  bottom: 22px;
-  padding: 9px 14px;
-  border: 1px solid #ffffff40;
-  border-radius: 10px;
-  color: #eef7f3;
-  background: #16202cee;
-  font: 12px system-ui;
-  pointer-events: none;
-}
 
 #editor {
   position: absolute;
