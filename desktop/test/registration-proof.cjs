@@ -92,7 +92,7 @@ exports.run = async ({
   assert.equal(getState().binding.record.frontend.start, frontendBefore.start);
   const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
   const stack = await inventory();
-  assert(stack.findIndex((w) => w.id === avatarId) < stack.findIndex((w) => w.id === terminal.id));
+  assert(stack.findIndex((w) => w.id === avatarId) > stack.findIndex((w) => w.id === terminal.id));
   assert.deepEqual(
     stack.find((w) => w.id === avatarId).input_region,
     [{ x: 0, y: 0, width: 1, height: 1 }],
@@ -106,11 +106,11 @@ exports.run = async ({
     '0.3',
   );
   receipts.push(
-    'Exact existing native session registered; original frontend retained; faded marker is below Ghostty in native stack',
+    'Exact existing native session registered; original frontend retained; faded overlay is above Ghostty in native stack',
   );
   await save('running', { sessionId: session.id, firstRegistration: !existing });
 
-  // The return route is the panel: behind-text pixels deliberately cannot take clicks.
+  // Rejoin the panel without altering the registered native session.
   await setExpanded(true);
   assert.equal(
     await avatarWin.webContents.executeJavaScript(

@@ -10,6 +10,7 @@ exports.run = async ({
   avatarWin,
   panelWin,
   advanceDrag,
+  updateDockHover,
   rpc,
   refresh,
   inventory,
@@ -39,7 +40,7 @@ exports.run = async ({
     'drag',
     'The panel background must move its native window',
   );
-  for (const selector of ['#quit', '#undock', '.session'])
+  for (const selector of ['#quit', '.session'])
     assert.equal(await region(panelWin, selector), 'no-drag', `${selector} must remain clickable`);
   receipts.push('Native drag regions exclude the astronaut and panel buttons');
   const existing = getState().records.find((r) => {
@@ -102,6 +103,8 @@ exports.run = async ({
     assert(!panelWin.isVisible(), 'Docking the floating astronaut must not open the panel');
     assert.equal(getState().binding.session.id, session.id);
     const markerId = avatarWin.getNativeWindowHandle().readUInt32LE();
+    const stack = await inventory();
+    assert(stack.findIndex((w) => w.id === markerId) > stack.findIndex((w) => w.id === ours.id));
     assert.deepEqual(
       (await inventory()).find((w) => w.id === markerId).input_region,
       [{ x: 0, y: 0, width: 1, height: 1 }],
@@ -116,6 +119,33 @@ exports.run = async ({
       'Only the terminal marker fades',
     );
     receipts.push('Exact native session accepted; unrelated same-title terminal refused');
+    const bounds = avatarWin.getBounds();
+    const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    // Exercise the same hover transition with explicit pointer samples, without
+    // moving the desktop pointer or making a claim about physical mouse delivery.
+    updateDockHover({ windows: stack, pointer: { buttons: 256 } }, center);
+    assert(!getState().dockHovered, 'An existing text-selection drag must stay with the terminal');
+    updateDockHover({ windows: [], pointer: { buttons: 0 } }, center);
+    assert(!getState().dockHovered, 'A covered or missing target must not activate');
+    updateDockHover({ windows: stack, pointer: { buttons: 0 } }, center);
+    assert(getState().dockHovered, 'Hover over the visible marker enables grabbing');
+    assert.equal(avatarWin.isFocusable(), false, 'Hover must leave keyboard focus alone');
+    const region = (await inventory()).find((w) => w.id === markerId).input_region;
+    assert(
+      region.some((r) => r.width > 1 && r.height > 1),
+      'Hover restores native pointer input',
+    );
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        "getComputedStyle(document.getElementById('avatar')).opacity",
+      ),
+      '1',
+    );
+    updateDockHover({ windows: stack, pointer: { buttons: 0 } }, { x: bounds.x - 20, y: bounds.y });
+    assert(!getState().dockHovered, 'Leaving restores the passive marker');
+    receipts.push(
+      'Hover brightened and enabled native input; leave, held button and covered target stayed passive',
+    );
   } finally {
     other.kill('SIGTERM');
   }
@@ -274,10 +304,11 @@ exports.run = async ({
     hasDockButtons:Boolean(document.getElementById('targets')),
     hasNotice:Boolean(document.getElementById('notice')),
     hasLauncher:Boolean(document.getElementById('open-terminal')),
+    hasDetach:Boolean(document.getElementById('undock')),
     scroll:document.getElementById('sessions').scrollHeight>document.getElementById('sessions').clientHeight,
     sessionCount:document.querySelectorAll('.session').length
   })`);
-  assert(!ui.hasEvents && !ui.hasDockButtons && !ui.hasNotice && !ui.hasLauncher);
+  assert(!ui.hasEvents && !ui.hasDockButtons && !ui.hasNotice && !ui.hasLauncher && !ui.hasDetach);
   assert(!ui.scroll, 'The real agent list must fit without scrolling');
   for (const s of getState().sessions)
     assert(!ui.text.includes(s.id) && !ui.text.includes(s.native_thread_id));
@@ -331,7 +362,7 @@ exports.run = async ({
   assert.equal((await processIdentity(after.pid)).start, original.start);
   assert.equal((await rpc('status')).instance, serviceBefore.instance);
   receipts.push('Detach preserved the same native process and service instance');
-  // Leave the real marker behind its terminal, with the panel available to detach.
+  // Leave the real overlay docked for physical hover, drag and sound checks.
   assert.equal(await dock(ours.id), true);
   await delay(250);
   await fs.writeFile(

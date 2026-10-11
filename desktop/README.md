@@ -78,7 +78,13 @@ open matching terminal. It registers that session and submits a harmless marker
 request. It proves capture while undocked and identity on rejoin. See the user
 guide before running it; it uses your native model account.
 
-When docked to a terminal, the avatar is non-focusable, ignores mouse events and
-is stacked below the terminal. `voyager-windows behind` can reposition only a
-window belonging to its calling Electron process; it never types into Ghostty.
-The panel's Detach button or Ctrl+Alt+V restores the interactive astronaut.
+When docked to a terminal, the astronaut is a faded overlay above it. It normally
+ignores mouse events; hovering restores pointer input without taking keyboard
+focus. Pulling detaches with the same cue as leaving the panel. A held pointer
+button prevents activation during an existing selection drag. Ctrl+Alt+V is the
+keyboard alternative; there is no separate Detach button.
+
+`voyager-windows above` can reposition only a window belonging to its calling
+Electron process. It also reports pointer button state for hover, without injecting
+input or typing into the terminal. Opaque terminals need no appearance settings.
+An X11 window covering the marker hides it; native Wayland occlusion is unproved.

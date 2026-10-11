@@ -22,8 +22,8 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if !args.is_empty() {
         ensure!(
-            args.len() == 3 && args[0] == "behind",
-            "usage: voyager-windows [behind AVATAR TARGET]"
+            args.len() == 3 && args[0] == "above",
+            "usage: voyager-windows [above AVATAR TARGET]"
         );
         let avatar: u32 = args[1].parse()?;
         let target: u32 = args[2].parse()?;
@@ -48,14 +48,14 @@ fn main() -> Result<()> {
                 32,
                 avatar,
                 atom(b"_NET_RESTACK_WINDOW")?,
-                [2, target, StackMode::BELOW.into(), 0, 0],
+                [2, target, StackMode::ABOVE.into(), 0, 0],
             ),
         )?
         .check()?;
         conn.flush()?;
         println!(
             "{}",
-            json!({"requested":"behind","avatar":avatar,"target":target})
+            json!({"requested":"above","avatar":avatar,"target":target})
         );
         return Ok(());
     }
@@ -111,6 +111,14 @@ fn main() -> Result<()> {
             windows.push(window);
         }
     }
-    println!("{}", json!({"platform":"x11","windows":windows}));
+    let pointer = conn.query_pointer(root)?.reply()?;
+    // Button state prevents a hover from stealing an existing text-selection drag.
+    // X11's first eight mask bits are modifiers; the next five are pointer buttons.
+    let buttons = u16::from(pointer.mask) & 0x1f00;
+    println!(
+        "{}",
+        json!({"platform":"x11","windows":windows,
+            "pointer":{"x":pointer.root_x,"y":pointer.root_y,"buttons":buttons}})
+    );
     Ok(())
 }

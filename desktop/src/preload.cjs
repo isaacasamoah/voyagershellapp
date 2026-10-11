@@ -6,7 +6,6 @@ contextBridge.exposeInMainWorld(
     beginDrag: (x, y) => ipcRenderer.invoke('begin-drag', x, y),
     endDrag: () => ipcRenderer.invoke('end-drag'),
     cancelDrag: () => ipcRenderer.invoke('cancel-drag'),
-    undock: () => ipcRenderer.invoke('undock'),
     select: (id) => ipcRenderer.invoke('select', id),
     quit: () => ipcRenderer.invoke('quit-ui'),
     onDockSound: (callback) => {

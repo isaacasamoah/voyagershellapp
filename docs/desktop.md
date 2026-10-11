@@ -25,17 +25,21 @@ restores the previous attachment. The highlight clears on release. Moving a
 standalone astronaut never opens the panel automatically.
 
 **Only the terminal-docked marker fades.** It sits centrally in the lower third
-of the terminal, below that window in the native stacking order. It ignores mouse
-input and cannot take keyboard focus, so terminal text, selection and clicks stay
-in front. The floating and panel-seated astronaut keep their normal brightness.
-Use **Detach** in the panel, or **Ctrl+Alt+V**, to bring back the interactive
-astronaut. A behind-text marker cannot also intercept a drag intended for the
-terminal. If another app owns that shortcut, keep the panel available.
+as an overlay above the terminal, so the terminal can have an opaque background.
+It is normally click-through and non-focusable. Hover over the astronaut to
+brighten it and enable grabbing; pull it away to detach. Hover does not take
+keyboard focus. Moving away returns the faded, passive marker. A held mouse
+button suppresses hover activation so an existing terminal selection drag can
+continue. The same falling/rising sound pair is used for panel and terminal
+undock/dock. There is no separate Detach button; Ctrl+Alt+V remains a keyboard
+alternative.
 
-This behind-window approach requires a translucent terminal background. An opaque
-terminal hides the marker. Voyager does not change terminal configuration. The
-browser reference can place artwork directly behind text; a separate Electron
-window does not have access to the terminal's internal rendering layers.
+This is an overlay **over** text, not an image between the terminal's text and
+background. The browser reference can render those layers together; an external
+window cannot. The avatar's hover area is reserved for grabbing once activated.
+The floating and panel-seated astronaut keep their normal brightness. Hovering
+over the open panel makes its existing glass colours opaque for readability;
+leaving restores transparency, without changing its colour palette.
 
 The panel shows Online/Offline and project names with connection dots. Green
 means connected; gray means disconnected, stopped or unknown. Tooltips and
@@ -63,11 +67,10 @@ Start the [service](service.md) against that same explicit socket. Set
 `VOYAGER_CODEX_BIN` when starting it to the native executable your terminal uses;
 different CLI/daemon installations may have different executable paths.
 
-For a separate translucent demo window, from a graphical-session terminal:
+For a separate demo window, from a graphical-session terminal:
 
 ```sh
 GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
-  --background-opacity=0.45 --background-blur=false \
   -e /absolute/path/to/codex --remote "unix://$CODEX_SOCKET" \
   resume "$THREAD_ID" --no-alt-screen
 ```
@@ -75,9 +78,8 @@ GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
 The remote terminal inherits the existing thread’s permissions. Codex 0.162.1
 rejects permission flags on remote resume; configure the session when starting
 it. Voyager-launched workers default to YOLO. Docking does not change permissions.
-The Ghostty flags affect only that new window; existing settings remain unchanged.
-Applications that paint opaque cell backgrounds can obscure the
-underlay even when the window background is translucent.
+No transparency setting is required or changed. The Ghostty flag gives this
+prototype an unambiguous window-to-process mapping; it is not a visual requirement.
 
 Build and open Voyager:
 
@@ -104,7 +106,8 @@ run the service independently of the terminal clients for persistence.
    Rust service checks that the thread is loaded and acknowledges registration.
 3. Converse normally. Supported future user/assistant messages and lifecycle
    events are recorded. Repeated docking keeps the same registration.
-4. Detach using the panel or shortcut. Capture continues; nothing is unregistered.
+4. Hover over the astronaut, then pull it away. Capture continues; nothing is
+   unregistered. The keyboard alternative is Ctrl+Alt+V.
 5. Dock again to rejoin. An unrelated same-title terminal must be refused.
 6. Use the [worker commands](workers.md) from the native agent or a script to start
    one managed worker. Open its native interface in another terminal. Docking to
@@ -135,9 +138,13 @@ verified drop. Process identities are rechecked after acknowledgement before the
 avatar joins. Registration may succeed even if subsequent visual placement fails;
 the agent still appears in the service registry.
 
-`voyager-windows` reads X11 inventory. Its narrow `behind` operation may reposition
+`voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
 only a window belonging to its calling process; it does not move or type into the
-terminal. Electron checks the actual native stack after asking for placement.
+terminal. Electron checks the actual native stack after asking for placement. A covered
+marker hides rather than painting over another X11 app. Linux hover uses a
+bounded pointer/button probe near the dock, because Electron forwards ignored
+mouse movement only on macOS/Windows; it does not inject input. Native Wayland
+windows are absent from this inventory, so occlusion by those windows is unproved.
 Panel and avatar remain separate windows. A seated avatar is a child of the mapped
 panel, preserving the fix for row selection covering the astronaut.
 The passive candidate outline is a third transparent, non-focusable window.
@@ -170,20 +177,47 @@ user/assistant marker exchange while detached and verifies the same registration
 on rejoin. Receipts stay in the private state directory. First registration and
 rejoining an earlier registration are reported separately.
 
-Observed on Fedora on 11 October: new registration by the desktop docking path,
-same-title refusal, unchanged original native client, real conversation capture
-while detached, same-ID rejoin, and faded marker below Ghostty in the native stack.
-The UI regression also observed terminal-only fading, the native input-region
-change and restoration, panel toggling, hold/pull/return cues and row-selection
-stacking. The target outline is implemented but still needs a physical drag check.
-The composited multi-monitor sample did not yet establish a clearly visible
-behind-text marker; terminal transparency, opaque cells and intervening native
-Wayland windows remain visual constraints to resolve in that check.
-The verdict remains **surface**: programmatic docking does not prove a physical
-pointer gesture or perceived appearance, sound, typing and selection. There is no
-desktop-wide mouse injection or remote-control permission request.
+Earlier on 11 October, the user physically docked the selected native terminal
+and its subsequent user/assistant exchange was captured. That establishes the
+registration path, independently of this newer overlay refinement.
+
+The overlay's live regression check then observed an above-terminal native stack,
+passive and interactive native input regions, hover brightness and unchanged
+keyboard focusability. Explicit pointer samples exercised hover, leaving, a held
+button and a covered/missing target. Panel toggling, hold/pull/return sound events,
+row-selection stacking, and the unchanged service/native process also passed.
+These samples exercise the real UI transitions without moving the physical mouse.
+
+The verdict remains **surface**: the current native terminal in that check was
+translucent. The layering removes the transparency dependency by construction,
+but an opaque-terminal visual check, physical hover/drag, perceived panel contrast
+and audible cues still need human desktop acceptance. There is no desktop-wide
+mouse injection or remote-control permission request.
 
 Native Wayland windows can cover XWayland windows without appearing in this
 inventory. Keep the demo target visible. Native Wayland/macOS, arbitrary running
 CLIs, thread switching, compositor blur and a knowledge graph remain unproved.
 See [the source map](../desktop/README.md) for contributor guidance.
+
+## Extending terminal support
+
+Keep three boundaries separate:
+
+- **Agent adapter:** commands, conversation identity and event formats belong to
+  Codex, Claude or another harness, independently of which terminal displays it.
+- **Desktop adapter:** identifying windows, following movement, stacking and hit
+  testing depend on X11, the Wayland compositor or macOS. Electron alone does not
+  make these foreign-window operations portable.
+- **Session binding:** a window must identify its current agent conversation.
+  This prototype uses a dedicated Ghostty process and one exact native child.
+  Shared terminal processes, tabs, panes, nested shells and in-app thread switches
+  need explicit evidence, potentially shell integration or terminal-specific APIs.
+
+The overlay can be shared across terminals on a supported desktop. There is no
+promise that every terminal can register an agent out of the box. Prove a second
+terminal against the same session contract before extracting an adapter framework;
+never infer identity from a title or the foreground window alone.
+
+References: [Electron's Wayland limitations](https://www.electronjs.org/docs/latest/api/browser-window#platform-notices),
+[mouse pass-through](https://www.electronjs.org/docs/latest/api/base-window#winsetignoremouseeventsignore-options),
+and [Ghostty shell integration](https://ghostty.org/docs/features/shell-integration).

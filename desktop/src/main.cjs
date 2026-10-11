@@ -46,7 +46,11 @@ let service = null,
   dockError = '';
 let busy = false;
 let dockGeneration = 0;
-let underlay = false;
+let layer = '';
+let dockHovered = false,
+  panelHovered = false,
+  hoverBusy = false,
+  lastHoverProbe = 0;
 
 async function rpc(...args) {
   const result = await exec(binary, ['--state', stateDir, ...args], {
@@ -56,8 +60,11 @@ async function rpc(...args) {
   return JSON.parse(result.stdout);
 }
 async function inventory() {
+  return (await desktopSnapshot()).windows;
+}
+async function desktopSnapshot() {
   const { stdout } = await exec(probe, [], { timeout: 2000, maxBuffer: 1024 * 1024 });
-  return JSON.parse(stdout).windows;
+  return JSON.parse(stdout);
 }
 async function identities() {
   const result = new Map();
@@ -104,31 +111,50 @@ async function discoverTerminals() {
   records = found;
 }
 function syncLayer() {
-  const next = Boolean(binding && !seated && !dragging);
-  if (next === underlay) return;
-  underlay = next;
-  // Docked content is passive; the real terminal receives every click/key.
-  avatarWin.setIgnoreMouseEvents(next);
-  avatarWin.setFocusable(!next);
-  avatarWin.setAlwaysOnTop(!next);
+  const terminal = Boolean(binding && !seated && !dragging);
+  const next = terminal ? (dockHovered ? 'hover' : 'passive') : 'floating';
+  if (next === layer) return;
+  const wasTerminal = layer === 'hover' || layer === 'passive';
+  layer = next;
+  // Hover enables grabbing, but does not take keyboard focus from the terminal.
+  avatarWin.setIgnoreMouseEvents(terminal && !dockHovered);
+  if (terminal !== wasTerminal) {
+    avatarWin.setFocusable(!terminal);
+    avatarWin.setAlwaysOnTop(!terminal);
+  }
+  if (!terminal && !avatarWin.isVisible()) avatarWin.showInactive();
 }
-async function placeBehindTerminal() {
-  if (!underlay || !binding) return;
+async function placeAboveTerminal() {
+  if (layer === 'floating' || !binding) return;
   const target = binding.window.id;
+  const generation = dockGeneration;
   const avatar = avatarWin.getNativeWindowHandle().readUInt32LE();
   let stack = await inventory();
+  if (generation !== dockGeneration || layer === 'floating' || binding?.window.id !== target)
+    return;
+  const p = avatarPosition();
+  const center = screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 });
+  // Window managers can keep a group together rather than honor exact adjacency.
+  // Hide a covered marker instead of leaving it painted over another app.
+  if (windowAt(stack, center, process.pid)?.id !== target) {
+    avatarWin.hide();
+    setDockHovered(false);
+    return;
+  }
+  if (!avatarWin.isVisible()) avatarWin.showInactive();
   const a = stack.findIndex((w) => w.id === avatar),
     t = stack.findIndex((w) => w.id === target);
-  if (a >= 0 && t === a + 1) return;
-  await exec(probe, ['behind', String(avatar), String(target)], { timeout: 2000 });
+  if (t >= 0 && a > t) return;
+  await exec(probe, ['above', String(avatar), String(target)], { timeout: 2000 });
   // Request accepted is not proof of compositor placement.
   const deadline = performance.now() + 1000;
-  while (underlay && binding?.window.id === target) {
+  while (layer !== 'floating' && binding?.window.id === target) {
     stack = await inventory();
     const a = stack.findIndex((w) => w.id === avatar),
       t = stack.findIndex((w) => w.id === target);
-    if (a >= 0 && t > a) return;
-    if (performance.now() >= deadline) throw Error('The desktop did not place the docked marker');
+    if (t >= 0 && a > t) return;
+    if (performance.now() >= deadline)
+      throw Error(`The desktop did not place the docked marker (avatar ${a}, terminal ${t})`);
     await delay(25);
   }
 }
@@ -137,6 +163,8 @@ function sendState() {
   const state = {
     expanded,
     seated,
+    dockHovered,
+    panelHovered,
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(({ id, cwd, ownership, capture, worker_state }) => ({
@@ -168,10 +196,7 @@ function placePanel() {
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
-  const height = Math.min(
-    area.height,
-    252 + Math.max(1, sessions.length) * 44 + (binding ? 38 : 0),
-  );
+  const height = Math.min(area.height, 252 + Math.max(1, sessions.length) * 44);
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
   setBoundsIfChanged(panelWin, { x, y, width, height });
@@ -226,6 +251,62 @@ function park() {
   setExpanded(false);
   placeAvatar(area.x + area.width - avatarSize - 24, area.y + 28);
 }
+function overAvatar(point) {
+  const p = avatarPosition();
+  return (
+    Math.hypot(point.x - p.x - avatarSize / 2, point.y - p.y - avatarSize / 2) < avatarSize / 2
+  );
+}
+function setDockHovered(value) {
+  if (dockHovered === value) return;
+  dockHovered = value;
+  sendState();
+}
+function updateDockHover(snapshot, point = screen.getCursorScreenPoint()) {
+  const top = windowAt(snapshot.windows, screen.dipToScreenPoint(point), process.pid);
+  setDockHovered(
+    Boolean(
+      binding &&
+      !seated &&
+      !dragging &&
+      overAvatar(point) &&
+      snapshot.pointer.buttons === 0 &&
+      top?.id === binding.window.id,
+    ),
+  );
+}
+function updatePointer() {
+  const point = screen.getCursorScreenPoint();
+  advanceDrag(point);
+  const panel = panelWin.getBounds();
+  const overPanel =
+    expanded &&
+    point.x >= panel.x + margin &&
+    point.x < panel.x + panel.width - margin &&
+    point.y >= panel.y + margin &&
+    point.y < panel.y + panel.height - margin;
+  if (panelHovered !== overPanel) {
+    panelHovered = overPanel;
+    sendState();
+  }
+  if (!binding || seated || dragging || !overAvatar(point)) {
+    setDockHovered(false);
+    return;
+  }
+  // Linux cannot forward hover events through an ignored input region. Read
+  // pointer/button state only near the dock, with at most one probe in flight.
+  if (hoverBusy || performance.now() - lastHoverProbe < 100) return;
+  hoverBusy = true;
+  lastHoverProbe = performance.now();
+  desktopSnapshot()
+    .then((snapshot) => {
+      if (!dragging) updateDockHover(snapshot);
+    })
+    .catch(() => setDockHovered(false))
+    .finally(() => {
+      hoverBusy = false;
+    });
+}
 function advanceDrag(p, now = performance.now()) {
   if (!dragging) return;
   if (!dragging.held && now - dragging.startedAt >= 350) {
@@ -238,6 +319,7 @@ function advanceDrag(p, now = performance.now()) {
     setSeated(false);
     dockGeneration++;
     binding = null;
+    dockHovered = false;
     dockError = '';
     sendState();
     if (wasAttached) avatarWin.webContents.send('dock-sound', 'undock');
@@ -269,6 +351,7 @@ function advanceDrag(p, now = performance.now()) {
 function undock(message = '') {
   dockGeneration++;
   binding = null;
+  dockHovered = false;
   dockError = message;
   sendState();
 }
@@ -309,14 +392,16 @@ async function dock(id) {
     return false;
   }
   binding = { ...fresh, session };
+  dockHovered = false;
   selected = session.id;
   dockError = '';
   setSeated(false);
   follow();
   sendState();
   try {
-    await placeBehindTerminal();
-  } catch {
+    await placeAboveTerminal();
+  } catch (error) {
+    console.error(error.message);
     undock('Agent registered; the desktop could not place its marker.');
     return false;
   }
@@ -382,10 +467,10 @@ async function refresh() {
       follow();
       const generation = dockGeneration;
       try {
-        await placeBehindTerminal();
+        await placeAboveTerminal();
       } catch {
         if (generation === dockGeneration)
-          undock('The desktop could not keep the marker behind the terminal.');
+          undock('The desktop could not keep the marker with the terminal.');
       }
     }
   }
@@ -446,7 +531,6 @@ app.whenReady().then(async () => {
     });
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
-  handle('undock', [panelWin], () => undock());
   handle('select', [panelWin], (id) => {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown session');
     selected = id;
@@ -468,6 +552,9 @@ app.whenReady().then(async () => {
       binding,
       seated,
     };
+    sendState();
+    // A deliberate press may focus the astronaut for Escape; hover never does.
+    avatarWin.focus();
   });
   handle('cancel-drag', [avatarWin], () => {
     if (!dragging) return;
@@ -478,7 +565,7 @@ app.whenReady().then(async () => {
     binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
-    placeBehindTerminal().catch(() => undock('The terminal is unavailable.'));
+    placeAboveTerminal().catch(() => undock('The terminal is unavailable.'));
     if (previous.moved && (previous.seated || previous.binding))
       avatarWin.webContents.send('dock-sound', 'dock');
   });
@@ -529,17 +616,17 @@ app.whenReady().then(async () => {
   avatarWin.showInactive();
   await refresh();
   if (process.argv.includes('--expanded')) await setExpanded(true);
-  // A behind-text marker cannot also intercept the terminal's pointer input.
-  // This brings the interactive avatar back even if its panel was collapsed.
+  // Keyboard alternative to hovering and pulling the terminal marker.
   if (
     !globalShortcut.register('Control+Alt+V', () => {
+      if (binding) avatarWin.webContents.send('dock-sound', 'undock');
       undock();
       setExpanded(true).catch((error) => console.error(error.message));
     })
   )
-    console.error('Ctrl+Alt+V is unavailable; use Detach in the panel');
+    console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
   timer = setInterval(refresh, 750);
-  dragTimer = setInterval(() => advanceDrag(screen.getCursorScreenPoint()), 32);
+  dragTimer = setInterval(updatePointer, 32);
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (process.argv.includes('--proof') || process.argv.includes('--proof-registration')) {
     require(
@@ -551,6 +638,7 @@ app.whenReady().then(async () => {
         avatarWin,
         panelWin,
         advanceDrag,
+        updateDockHover,
         rpc,
         refresh,
         inventory,
@@ -568,6 +656,7 @@ app.whenReady().then(async () => {
           expanded,
           seated,
           dragging,
+          dockHovered,
         }),
         stateDir,
       })

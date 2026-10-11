@@ -35,6 +35,8 @@ api.onState((value) => {
   $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
   document.body.dataset.seated = String(value.seated);
+  document.body.dataset.panelHovered = String(value.panelHovered);
+  $('avatar').dataset.hovered = String(value.dockHovered);
   document.body.dataset.connected = String(!value.serviceError);
   $('avatar').setAttribute('aria-expanded', String(value.expanded));
   $('avatar').dataset.state = value.dragging
@@ -46,7 +48,6 @@ api.onState((value) => {
   $('avatar').title = value.platformError || value.dockError || '';
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
-  $('undock').hidden = !value.docked;
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
   if (rows === lastRows) return;
   lastRows = rows;
@@ -117,6 +118,5 @@ $('avatar').addEventListener('keydown', (event) => {
     api.cancelDrag();
   }
 });
-$('undock').onclick = () => api.undock();
 $('quit').onclick = () => api.quit();
 api.ready();
