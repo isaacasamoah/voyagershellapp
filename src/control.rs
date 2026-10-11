@@ -153,7 +153,7 @@ impl Control {
     }
 
     pub fn voice(&self) -> Value {
-        // Thread realtime APIs do not control an existing terminal's microphone.
+        // Thread realtime APIs have not proved control of a native client's microphone.
         // Report this capability gap instead of starting a second audio interface.
         json!({"follows_dock":self.voice_follows_dock,"state":if self.voice_follows_dock {"unsupported"} else {"disabled"},"reason":if self.voice_follows_dock {Some("native_client_voice_control_unproved")} else {None}})
     }

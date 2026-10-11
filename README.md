@@ -13,7 +13,9 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 - It launches one local Codex worker with a service-owned app server. The native
   terminal client can disconnect and reconnect while that worker keeps running.
   Launched sessions default to YOLO: no command sandbox or approval prompts.
-  Registering an existing session preserves its permissions.
+  Voyager does not intentionally change an external session's permissions.
+  The latest manual run exposed read-only turns after a YOLO setup; effective
+  permissions across native attachment still need investigation.
 - The Electron prototype shows a glass astronaut and a small panel of project
   names and connection dots. Click to toggle the panel, drag its background to
   move it, or pull the astronaut away and return it with paired sound cues.
@@ -30,6 +32,9 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 
 Start with [running the service](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
+The reusable [worker skill](skills/voyager-worker/SKILL.md) gives an agent the
+existing CLI workflow; [installation and its current proof](docs/workers.md#worker-skill)
+are documented separately from successful worker execution.
 
 This is a Linux prototype under active development. Native Wayland, arbitrary
 running-CLI adoption, macOS behavior, knowledge extraction and team sharing
@@ -37,6 +42,12 @@ remain unproved or unimplemented. Persistence currently means surviving client
 disconnect, not a daemon crash or reboot. The desktop's tested adapter requires
 a dedicated Ghostty XWayland process; tabs and switching agent threads are not
 supported.
+
+**The ordinary-terminal docking brief is not complete.** The demonstrated
+binding requires a prepared Ghostty launch containing an explicit Codex server
+address and conversation ID. Opening a terminal normally and typing `codex`
+does not satisfy that matcher. Real registration and capture behind that setup
+prove a mechanism, not the requested everyday docking workflow.
 
 ## The boundary we are keeping
 
@@ -87,6 +98,7 @@ confuse its programmatic checks with a human testing the gestures.
 | `desktop/src/ui/` | Local HTML, CSS and browser-side interface code                  |
 | `desktop/test/`   | Binding tests and the explicit live desktop proof                |
 | `docs/`           | Run guides, experiments, evidence and limitations                |
+| `skills/`         | Agent instructions for using the real service CLI               |
 
 The [desktop developer guide](desktop/README.md) explains the small process
 boundary and how to change the UI. Earlier [mechanism experiments](docs/experiments.md)
@@ -95,11 +107,18 @@ used for those fixtures, not the Rust service runtime.
 
 ## Next experiment
 
-Try the control handoff: dock, inspect its event, pull away, and dock another
-client while capture continues. Click the docked astronaut to toggle the panel
-where it was left, without changing control. Native voice handoff and priority
-over supervisor instructions remain separate experiments; the setting does not
-yet activate audio. Multiple simultaneous workers, a general current-thread
-signal and knowledge extraction remain later increments.
+Open a terminal normally, start Codex normally, and dock without a Voyager
+launcher or pre-supplied conversation identity. Establish the actual native
+session identity and register it; ambiguous targets must be explained rather
+than guessed. Start with that ordinary flow, then expand terminal coverage.
+Window placement support and agent-session identification are separate problems.
+The product target is docking onto any terminal; a plain shell must not be
+misrepresented as an identified agent.
+
+Before repeating the worker demonstration, verify a tool call from the native
+lead can reach Voyager and determine why the latest resumed turns ran read-only.
+The worker skill guides the existing CLI; it does not fix that permission issue.
+Native voice handoff, supervisor priority, multiple simultaneous workers and
+knowledge extraction remain later increments.
 
 Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.

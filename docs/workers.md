@@ -8,7 +8,15 @@ This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/
 
 Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. Authentication and model selection stay with the user's native Codex configuration; Voyager never copies credentials.
 
-Every Voyager-launched session defaults to **YOLO**: `approvalPolicy: never` and `sandbox: danger-full-access`. Commands run with the user's permissions, without the command sandbox or approval prompts. The remote native terminal inherits the thread’s policy. Do not pass permission flags to `codex --remote ... resume`: Codex 0.162.1 rejects them. This prototype has one launch policy; a user-selectable alternative belongs to a later app increment. Registration of an already-running external session does not change its permissions. Such a lead must itself have permission to call Voyager's local socket.
+Every Voyager worker creation requests **YOLO**: `approvalPolicy: never` and
+`sandbox: danger-full-access`. This permits commands without the command sandbox
+or approval prompts. Do not assume a subsequently attached native client retains
+that effective policy; the latest external-lead experiment below exposed a
+read-only turn after full-access setup. The tested Codex 0.162.1 remote resume
+rejects permission CLI flags. This prototype has one launch policy; a
+user-selectable alternative belongs to a later app increment. Registration does
+not intentionally change an external session's permissions. The lead must itself
+have permission to call Voyager's local socket.
 
 With an existing lead registration:
 
@@ -36,7 +44,7 @@ ghostty --gtk-single-instance=false --title="Voyager worker" \
 
 Window creation belongs to the desktop client/caller. `launch` starts the worker, and `attach` uses the terminal where it is called. A headless agent can launch work without needing a display. The Ghostty command requires the caller's normal graphical-session environment; an acknowledged process launch alone is not proof that a window is visible.
 
-The native interface displays history and handles its own input. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. YOLO is selected when launching or attaching the worker; Voyager does not answer native approval requests on an agent's behalf.
+The native interface displays history and handles its own input. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. Voyager requests YOLO at worker creation; `attach` only executes the native resume command and does not select permissions. Voyager does not answer native approval requests on an agent's behalf.
 
 Inspect activity or send another task:
 
@@ -54,6 +62,49 @@ target/debug/voyager --state "$VOYAGER_STATE" stop
 ```
 
 `stop-worker` terminates the process group Voyager created for that worker server. It is not a task-cancellation acknowledgement: unfinished task outcomes remain uncertain without native evidence. Cleanup of commands that independently escape that process group is not proved. Ordinary `stop` refuses while the owned server is alive, even if it is idle. External sessions are never valid `stop-worker` targets.
+
+## Worker skill
+
+[voyager-worker](../skills/voyager-worker/SKILL.md) describes the existing CLI
+workflow for an agent. It checks current control, launches one bounded task and,
+when requested, opens the worker's native terminal. It introduces no executable
+wrapper or new service API. It does not grant permissions or discover an
+arbitrary running terminal.
+
+Install the skill directory in your harness's skill location. For Codex, from
+the repository root, this links the maintained source into the user skill catalog:
+
+```sh
+mkdir -p "$HOME/.codex/skills"
+ln -s "$PWD/skills/voyager-worker" "$HOME/.codex/skills/voyager-worker"
+```
+
+Do not replace an existing installation without inspecting it. Supply the CLI
+path and private state directory in the agent's task context, or through
+`VOYAGER_BIN` and `VOYAGER_STATE` in its actual execution environment. Do not
+assume a terminal's environment reaches a separately running agent server.
+Keep private paths, conversation IDs and credentials out of the shared skill.
+
+Invoke `$voyager-worker` with a working directory and initial task. Refresh the
+harness's skill catalog if needed. Catalog discovery and format validation do
+not prove a successful launch; verify the service's receipt and turn events.
+
+The initial skill passed format validation and was discovered as enabled by the
+running native Codex server's `skills/list` with `forceReload`. Its first live
+worker launch is still pending the permission check below.
+
+## Latest manual run: permission failure
+
+The 11 October fresh lead's setup turn recorded `never` approvals and
+`danger-full-access`. Subsequent turns entered through its native terminal
+recorded `read-only`. Its attempt to call Voyager's `status` failed with
+`Operation not permitted`; no worker was launched in this run. Earlier successful
+worker experiments below remain historical evidence, not proof of this launch.
+
+The transition that changed the effective policy has not yet been isolated.
+Check a real tool call from the native interface after correcting its permissions,
+then retry the same bounded worker request. Neither a YOLO launch request nor an
+attachment response alone proves the policy of the next terminal-entered turn.
 
 ## Persistence boundary
 

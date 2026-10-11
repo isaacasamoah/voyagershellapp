@@ -55,6 +55,13 @@ Electron. Connection is observation status, not proof of task completion.
 
 ## Supported setup
 
+This setup proves part of the mechanism. It does **not** fulfil the product
+brief of docking onto a normally opened terminal. The next acceptance test must
+start with a user-opened terminal and an ordinary Codex launch, without a special
+launcher, injected identity or pre-registration. A simpler implementation must
+still perform that requested workflow. Keep window placement, agent identity,
+capture and process ownership as separate, explicitly proved capabilities.
+
 The first adapter is **Codex in a dedicated Ghostty XWayland window**, with one
 direct native client launched against an explicit Unix endpoint and fixed thread
 UUID. It supports the native command below, with optional `--no-alt-screen`:
@@ -81,9 +88,12 @@ GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
   resume "$THREAD_ID" --no-alt-screen
 ```
 
-The remote terminal inherits the existing thread’s permissions. Codex 0.162.1
-rejects permission flags on remote resume; configure the session when starting
-it. Voyager-launched workers default to YOLO. Docking does not change permissions.
+The latest manual run recorded read-only native terminal turns after a full-access
+setup turn. Do not assume the remote terminal preserves the setup permissions.
+The tested Codex 0.162.1 remote resume rejected permission CLI flags. Effective
+native-client policy still needs investigation and a real service-status call
+before another worker launch. Voyager requests YOLO when creating a worker;
+docking does not intentionally grant permissions.
 No transparency setting is required or changed. The Ghostty flag gives this
 prototype an unambiguous window-to-process mapping; it is not a visual requirement.
 
@@ -123,12 +133,12 @@ run the service independently of the terminal clients for persistence.
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
 (`Operation not permitted`). No worker was created, and no permission was changed.
-YOLO is now the explicit default for Voyager-launched sessions. External
-registration continues to preserve its session's permissions; changing launch
-policy is separate from docking.
-The corrected demo lead subsequently launched a worker, which successfully
-called Voyager's status API. Both sessions were verified as YOLO after their
-native terminal clients opened; see the [worker evidence](workers.md#yolo-default-verified-on-11-october-2026).
+YOLO is the explicit creation policy for Voyager-launched sessions; changing
+launch policy is separate from docking. An earlier corrected demo lead launched
+a worker, which successfully called Voyager's status API. Both sessions were verified as YOLO after their
+native terminal clients opened; see the [historical worker evidence](workers.md#yolo-default-verified-on-11-october-2026).
+The [latest manual run](workers.md#latest-manual-run-permission-failure) failed
+again on native-turn permissions and launched no worker. That failure remains open.
 
 The selected session is the person's **current bridge**, not automatically a new
 supervisor. Moving the astronaut does not reparent workers, change permissions or
