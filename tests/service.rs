@@ -366,6 +366,18 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     assert!(client(&f.dir, json!({"op":"stop-worker","session_id":parent})).is_err());
     let info = f.call(json!({"op":"attach-info","session_id":session}));
     assert_eq!(info["pid"], receipt["pid"]);
+    // Remote Codex resume rejects permission overrides. The client inherits
+    // the worker thread's YOLO policy instead of reconfiguring it.
+    assert_eq!(
+        info["args"],
+        json!([
+            "--remote",
+            info["args"][1],
+            "resume",
+            "worker-thread",
+            "--no-alt-screen"
+        ])
+    );
     let socket = info["args"][1]
         .as_str()
         .unwrap()

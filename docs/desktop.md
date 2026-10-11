@@ -67,8 +67,11 @@ GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
   resume "$THREAD_ID" --no-alt-screen
 ```
 
-These flags affect only that new window. Your existing Ghostty settings remain
-unchanged. Applications that paint opaque cell backgrounds can obscure the
+The remote terminal inherits the existing thread’s permissions. Codex 0.162.1
+rejects permission flags on remote resume; configure the session when starting
+it. Voyager-launched workers default to YOLO. Docking does not change permissions.
+The Ghostty flags affect only that new window; existing settings remain unchanged.
+Applications that paint opaque cell backgrounds can obscure the
 underlay even when the window background is translucent.
 
 Build and open Voyager:
@@ -103,11 +106,15 @@ run the service independently of the terminal clients for persistence.
    that worker joins its existing registration. Window creation remains a desktop
    action, independent of the service's worker lifetime.
 
-The latest attempt to launch a worker from the registered native lead was blocked
+An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
 (`Operation not permitted`). No worker was created, and no permission was changed.
-The service's worker mechanism has earlier proof; the full docking-to-agent-launch
-journey still needs an approved tool route from the native harness.
+YOLO is now the explicit default for Voyager-launched sessions. External
+registration continues to preserve its session's permissions; changing launch
+policy is separate from docking.
+The corrected demo lead subsequently launched a worker, which successfully
+called Voyager's status API. Both sessions were verified as YOLO after their
+native terminal clients opened; see the [worker evidence](workers.md#yolo-default-verified-on-11-october-2026).
 
 The selected session is the person's **current bridge**, not automatically a new
 supervisor. Moving the astronaut does not reparent workers, change permissions or

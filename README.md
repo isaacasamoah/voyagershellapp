@@ -12,6 +12,8 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   records future conversation and lifecycle events in private SQLite storage.
 - It launches one local Codex worker with a service-owned app server. The native
   terminal client can disconnect and reconnect while that worker keeps running.
+  Launched sessions default to YOLO: no command sandbox or approval prompts.
+  Registering an existing session preserves its permissions.
 - The Electron prototype shows a glass astronaut and a small panel of project
   names and connection dots. Click to toggle the panel, drag its background to
   move it, or pull the astronaut away and return it with paired sound cues.

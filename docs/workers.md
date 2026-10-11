@@ -6,7 +6,9 @@ This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/
 
 ## Try it
 
-Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. It uses the current user's existing Codex authentication/configuration; Voyager never copies credentials or changes model/approval settings.
+Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. Authentication and model selection stay with the user's native Codex configuration; Voyager never copies credentials.
+
+Every Voyager-launched session defaults to **YOLO**: `approvalPolicy: never` and `sandbox: danger-full-access`. Commands run with the user's permissions, without the command sandbox or approval prompts. The remote native terminal inherits the thread’s policy. Do not pass permission flags to `codex --remote ... resume`: Codex 0.162.1 rejects them. This prototype has one launch policy; a user-selectable alternative belongs to a later app increment. Registration of an already-running external session does not change its permissions. Such a lead must itself have permission to call Voyager's local socket.
 
 With an existing lead registration:
 
@@ -34,7 +36,7 @@ ghostty --gtk-single-instance=false --title="Voyager worker" \
 
 Window creation belongs to the desktop client/caller. `launch` starts the worker, and `attach` uses the terminal where it is called. A headless agent can launch work without needing a display. The Ghostty command requires the caller's normal graphical-session environment; an acknowledged process launch alone is not proof that a window is visible.
 
-The native interface displays history and handles its own input and approvals. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. The worker may wait for a native approval; this service never approves requests automatically.
+The native interface displays history and handles its own input. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. YOLO is selected when launching or attaching the worker; Voyager does not answer native approval requests on an agent's behalf.
 
 Inspect activity or send another task:
 
@@ -72,3 +74,11 @@ On Fedora 43 and Codex 0.162.0:
 The native shell printed an existing startup warning about a read-only shell-environment directory; inspection of its expanded transcript showed the delayed command's marker and successful completion. No shell profile or permission setting was changed to suppress that warning.
 
 The disposable worker test provides the known-different arm: explicit stop during a second task ends the server without manufacturing a successful turn. It also proves duplicate-launch reuse, rejection of another concurrent worker, parent linking and continued access to the unrelated external server. This is one local integration, not a claim of arbitrary CLI adoption or crash/reboot survival.
+
+## YOLO default verified on 11 October 2026
+
+On Fedora and Codex 0.162.1, a selected demo lead in YOLO mode invoked Voyager's `launch` command. The new worker successfully called Voyager's `status` command and returned the requested marker. Both native transcripts recorded `danger-full-access` and `never`. After opening their separate Ghostty clients, native session responses still reported those permissions, and the desktop adapter recognized both exact terminal/session identities.
+
+The earlier read-only lead could not reach Voyager's socket. Passing permission overrides to `thread/resume` did not change that already-loaded thread; a new turn with explicit `sandboxPolicy: {type: dangerFullAccess}` and `approvalPolicy: never` did. That was an explicitly authorized demo setup change, not part of registration. Remote terminal resume rejected a YOLO CLI flag, so attachment keeps its original arguments and inherits the server-side policy. The temporary test worker was explicitly stopped before reloading the corrected service; a fresh lead-launched worker and its terminal were then verified and left available.
+
+The worker fixture rejects missing or different launch policies. The service test also checks that native attachment contains no unsupported permission override, while the external-registration test continues to require unchanged permissions. Physical dragging, the behind-text marker and the final visual feel remain separate user checks.

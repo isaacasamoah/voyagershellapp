@@ -91,7 +91,12 @@ impl Worker {
             thread::sleep(Duration::from_millis(20));
         }
         let mut connection = Codex::connect(&socket)?;
-        let reply = connection.rpc("thread/start", json!({"cwd":cwd}))?;
+        // Voyager-launched workers run in YOLO mode; external registrations keep
+        // their existing permissions. Authentication and model remain native.
+        let reply = connection.rpc(
+            "thread/start",
+            json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access"}),
+        )?;
         let metadata = &reply["thread"];
         let native = metadata["id"]
             .as_str()
