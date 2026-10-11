@@ -11,6 +11,9 @@ exports.run = async ({ win, avatarWin, whiteboard, setExpanded, rpc, inventory }
     throw Error('Set VOYAGER_WHITEBOARD_PROOF to an absolute directory');
   await fs.mkdir(output, { recursive: true });
   const before = await rpc('status');
+  const nativeWindows = BrowserWindow.getAllWindows()
+    .map((window) => window.id)
+    .sort();
   await setExpanded(true);
   win.focus();
   await delay(250);
@@ -112,10 +115,12 @@ exports.run = async ({ win, avatarWin, whiteboard, setExpanded, rpc, inventory }
   await tool('pen');
   assert(whiteboard.getState().active);
   assert.deepEqual(win.getBounds(), screen.getDisplayMatching(normal).bounds);
-  assert.equal(
-    BrowserWindow.getAllWindows().length,
-    2,
-    'Only the existing panel and astronaut windows; no separate canvas window',
+  assert.deepEqual(
+    BrowserWindow.getAllWindows()
+      .map((window) => window.id)
+      .sort(),
+    nativeWindows,
+    'Drawing reuses the panel without creating another native window',
   );
   assert.deepEqual(
     avatarWin.getBounds(),
