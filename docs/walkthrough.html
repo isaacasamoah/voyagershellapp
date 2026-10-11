@@ -124,7 +124,7 @@
       action: 'Press and hold the astronaut, pull it out of the panel, then drop it onto the supported terminal.',
       expect: 'The agent appears in the panel. Its faded dock marker leaves the terminal usable. New conversation events begin recording.',
       underneath: 'Electron checks the window and native session identity. The Rust service checks that the exact thread is already loaded, subscribes to future events, and returns a registration. It does not import earlier messages, change permissions or take ownership. Try one new message to see capture begin.',
-      source: 'desktop/src/main.cjs', line: 275,
+      source: 'desktop/src/main.cjs', line: 358,
       code: "if (target.record.external)\n  await rpc('register', target.record.nativeId);\n\n// src/service.rs: register → thread/resume\n// src/events.rs: normalize notifications\n// src/store.rs: record attributed events",
       nodes: ['electron','service','leadClient','lead','store'], edges: ['panel','leadClient','capture','store'], marker: 'lead'
     },
@@ -139,11 +139,11 @@
     },
     {
       label: 'Detach', title: 'The interface leaves. Work stays.', bridge: 'No terminal attached',
-      action: 'Use Detach in the panel, or Ctrl+Alt+V, to retrieve the passive docked astronaut. Let the worker continue its task.',
+      action: 'Hover over the docked astronaut to brighten it, then pull it away. Ctrl+Alt+V is the keyboard alternative. Let the worker continue its task.',
       expect: 'Both registrations and event capture remain. The worker keeps running.',
-      underneath: 'Undocking clears only Electron’s window binding. It sends no unregister or stop request. The faded terminal marker is deliberately click-through, so we use the panel or shortcut to retrieve it. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
-      source: 'desktop/src/main.cjs', line: 269,
-      code: "function undock(message = '') {\n  dockGeneration++;\n  binding = null;\n  dockError = message;\n  sendState();\n}",
+      underneath: 'Undocking clears only Electron’s window binding. It sends no unregister or stop request. The faded overlay is normally click-through; hovering enables grabbing without taking keyboard focus. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
+      source: 'desktop/src/main.cjs', line: 351,
+      code: "function undock(message = '') {\n  dockGeneration++;\n  binding = null;\n  dockHovered = false;\n  dockError = message;\n  sendState();\n}",
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: null
     },
     {
@@ -151,13 +151,13 @@
       action: 'Move the astronaut onto the worker’s terminal. Open the panel to see the other registered agent too.',
       expect: 'The same worker and conversation remain. We have changed which interface is attached, not restarted any work.',
       underneath: 'The worker was registered when Voyager launched it. Electron matches that existing registration and changes its visual binding. Moving the avatar does not change parents, appoint a supervisor, redirect a task or change permissions. Returning to the lead likewise rejoins its existing registration.',
-      source: 'desktop/src/main.cjs', line: 306,
+      source: 'desktop/src/main.cjs', line: 389,
       code: 'const session = registeredSession(\n  fresh.record, sessions\n);\nbinding = { ...fresh, session };\nselected = session.id;\n\n// Registration persists independently of this binding.',
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'worker'
     }
   ];
   const nav = document.querySelector('nav');
-  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/e500fa2a7aee9f0a0c31b56f1df09425efb4f6bf/';
+  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/1eabbef270533512540726b9badf41ec279a0d99/';
   let current = 0;
   steps.forEach((step, index) => {
     const button = document.createElement('button');
