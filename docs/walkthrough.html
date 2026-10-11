@@ -106,7 +106,7 @@
       action: 'Open Voyager. Click the floating astronaut to show or hide its panel.',
       expect: 'Online, with no registered sessions. No conversation is being captured.',
       underneath: 'For this prototype, our demo launcher starts the Rust service and Electron separately. Electron reads status over a local Unix socket. It does not own agents or start the service automatically. The existing shared Codex daemon stays outside Voyager.',
-      source: 'desktop/src/main.cjs', line: 48,
+      source: 'desktop/src/main.cjs', line: 58,
       code: "exec(binary, ['--state', stateDir, ...args])\n\n// Electron asks the Rust CLI for:\nstatus\nlist\nconnection-info",
       nodes: ['electron','service'], edges: ['panel'], marker: null
     },
@@ -115,7 +115,7 @@
       action: 'We open one dedicated Ghostty terminal with Codex’s own interface. Leave Voyager beside it.',
       expect: 'You can talk to Codex normally. Voyager still has no registered sessions.',
       underneath: 'Our demo helper creates a fresh YOLO Codex thread and opens its native remote client. The desktop can identify its exact executable, socket and thread ID. Finding it does not subscribe to its conversation. This requires the supported fixed resume command; it is not any arbitrary terminal.',
-      source: 'desktop/src/binding.cjs', line: 40,
+      source: 'desktop/src/binding.cjs', line: 45,
       code: 'codex --remote unix://CODEX_SOCKET \\\n  resume THREAD_ID --no-alt-screen\n\n// The thread is configured as YOLO on the server.\n// Remote resume rejects permission flags.',
       nodes: ['electron','service','leadClient','lead'], edges: ['panel','leadClient'], marker: null
     },
@@ -124,7 +124,7 @@
       action: 'Press and hold the astronaut, pull it out of the panel, then drop it onto the supported terminal.',
       expect: 'The agent appears in the panel. Rust records interface.docked and selects current control. New conversation events begin recording.',
       underneath: 'Electron checks the window and native session identity. The Rust service checks that the exact thread is already loaded, subscribes to future events, and returns a registration. A separate open socket represents the control attachment; acknowledgement precedes the dock cue. It does not import earlier messages, change permissions or take process ownership. Click the astronaut to toggle the panel where you left it; control stays with the terminal.',
-      source: 'desktop/src/main.cjs', line: 358,
+      source: 'desktop/src/main.cjs', line: 379,
       code: "if (target.record.external)\n  await rpc('register', target.record.nativeId);\n\n// src/service.rs: register → thread/resume\n// src/events.rs: normalize notifications\n// src/store.rs: record attributed events",
       nodes: ['electron','service','leadClient','lead','store'], edges: ['panel','leadClient','capture','store'], marker: 'lead'
     },
@@ -133,7 +133,7 @@
       action: 'Ask the registered lead to launch a small worker task. We then open a separate native terminal for that worker.',
       expect: 'A second agent appears. Its work belongs to the service; its native terminal is just another client.',
       underneath: 'The lead calls Voyager’s launch command. Voyager starts a private Codex app server, creates a YOLO thread, records its parent, then submits the task. Opening the terminal is a separate demo action. An accepted task still needs a completed turn and result before we call it finished.',
-      source: 'src/worker.rs', line: 94,
+      source: 'src/worker.rs', line: 97,
       code: 'connection.rpc("thread/start", json!({\n  "cwd": cwd,\n  "approvalPolicy": "never",\n  "sandbox": "danger-full-access"\n}))?;\n\n// service.rs then sends the initial task.\n// voyager attach WORKER_SESSION opens its native UI.',
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'lead'
     },
@@ -142,7 +142,7 @@
       action: 'Hover over the docked astronaut to brighten it, then pull it away. Ctrl+Alt+V is the keyboard alternative. Let the worker continue its task.',
       expect: 'Both registrations and event capture remain. The worker keeps running.',
       underneath: 'Undocking releases the exact current-control attachment and records interface.undocked. It sends no unregister or stop request. The faded overlay is normally click-through; hovering enables grabbing without taking keyboard focus. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
-      source: 'desktop/src/main.cjs', line: 351,
+      source: 'desktop/src/main.cjs', line: 357,
       code: "// Electron releases the exact attachment.\nawait rpc('undock', generation);\nconnection.close();\n\n// Rust records interface.undocked.\n// EOF also releases control if Electron exits.\n// Registration, capture and agent work continue.",
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: null
     },
@@ -151,13 +151,13 @@
       action: 'Move the astronaut onto the worker’s terminal. Open the panel to see the other registered agent too.',
       expect: 'The same worker and conversation remain. We have changed which interface is attached, not restarted any work.',
       underneath: 'The worker was registered when Voyager launched it. Electron matches that registration and Rust acknowledges a new current-control attachment. Moving the avatar does not change parents, interrupt a task or change permissions. Returning to the lead likewise rejoins its existing registration.',
-      source: 'desktop/src/main.cjs', line: 389,
+      source: 'desktop/src/main.cjs', line: 434,
       code: 'const session = registeredSession(\n  fresh.record, sessions\n);\nbinding = { ...fresh, session };\nselected = session.id;\n\n// Rust acknowledges a control attachment before this binding.\n// Registration persists independently.',
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'worker'
     }
   ];
   const nav = document.querySelector('nav');
-  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/feat/desktop-registration/';
+  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/bd6103217d8b5697cf35a3701b1d7f6a7813a16e/';
   let current = 0;
   steps.forEach((step, index) => {
     const button = document.createElement('button');
