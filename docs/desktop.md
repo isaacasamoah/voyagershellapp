@@ -142,7 +142,7 @@ the agent still appears in the service registry.
 only a window belonging to its calling process; it does not move or type into the
 terminal. Electron checks the actual native stack after asking for placement. A covered
 marker hides rather than painting over another X11 app. Linux hover uses a
-bounded pointer/button probe near the dock, because Electron forwards ignored
+bounded pointer/button probe while a dock or panel is visible, because Electron forwards ignored
 mouse movement only on macOS/Windows; it does not inject input. Native Wayland
 windows are absent from this inventory, so occlusion by those windows is unproved.
 Panel and avatar remain separate windows. A seated avatar is a child of the mapped
@@ -188,11 +188,15 @@ button and a covered/missing target. Panel toggling, hold/pull/return sound even
 row-selection stacking, and the unchanged service/native process also passed.
 These samples exercise the real UI transitions without moving the physical mouse.
 
-The verdict remains **surface**: the current native terminal in that check was
-translucent. The layering removes the transparency dependency by construction,
-but an opaque-terminal visual check, physical hover/drag, perceived panel contrast
-and audible cues still need human desktop acceptance. There is no desktop-wide
-mouse injection or remote-control permission request.
+The first physical test exposed a missed boundary: Electron's cursor position
+stayed cached while the astronaut ignored input. The supplied-coordinate test
+had bypassed that acquisition failure. Hover now uses the native X11 pointer
+snapshot for both entry and exit; the cached Electron point never gates sampling.
+The live trace then observed Isaac hovering, lifting, dragging and releasing the
+astronaut on the opaque Ghostty demo. Isaac confirmed the result looked good.
+This establishes that specific desktop interaction, not every terminal or desktop.
+The diagnostic check also moved the X11 pointer briefly over the exact avatar;
+it used no keyboard/button injection, XTEST or remote-control permission.
 
 Native Wayland windows can cover XWayland windows without appearing in this
 inventory. Keep the demo target visible. Native Wayland/macOS, arbitrary running

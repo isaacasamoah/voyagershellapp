@@ -88,3 +88,9 @@ keyboard alternative; there is no separate Detach button.
 Electron process. It also reports pointer button state for hover, without injecting
 input or typing into the terminal. Opaque terminals need no appearance settings.
 An X11 window covering the marker hides it; native Wayland occlusion is unproved.
+
+Hover must read the native pointer snapshot: Electron's cursor position can stay
+cached while the window ignores mouse input. Do not use that cached point to
+decide whether to poll the desktop. The sample-based regression alone missed
+this boundary; physical opaque-terminal hover and pulling exposed and verified
+the fix.

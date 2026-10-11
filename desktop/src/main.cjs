@@ -262,7 +262,8 @@ function setDockHovered(value) {
   dockHovered = value;
   sendState();
 }
-function updateDockHover(snapshot, point = screen.getCursorScreenPoint()) {
+function updateDockHover(snapshot) {
+  const point = screen.screenToDipPoint(snapshot.pointer);
   const top = windowAt(snapshot.windows, screen.dipToScreenPoint(point), process.pid);
   setDockHovered(
     Boolean(
@@ -276,30 +277,28 @@ function updateDockHover(snapshot, point = screen.getCursorScreenPoint()) {
   );
 }
 function updatePointer() {
-  const point = screen.getCursorScreenPoint();
-  advanceDrag(point);
-  const panel = panelWin.getBounds();
-  const overPanel =
-    expanded &&
-    point.x >= panel.x + margin &&
-    point.x < panel.x + panel.width - margin &&
-    point.y >= panel.y + margin &&
-    point.y < panel.y + panel.height - margin;
-  if (panelHovered !== overPanel) {
-    panelHovered = overPanel;
-    sendState();
-  }
-  if (!binding || seated || dragging || !overAvatar(point)) {
-    setDockHovered(false);
-    return;
-  }
-  // Linux cannot forward hover events through an ignored input region. Read
-  // pointer/button state only near the dock, with at most one probe in flight.
-  if (hoverBusy || performance.now() - lastHoverProbe < 100) return;
+  advanceDrag(screen.getCursorScreenPoint());
+  if (!binding || seated || dragging) setDockHovered(false);
+  // Electron's cursor position can stay cached while our X11 windows ignore
+  // input. Sample the desktop itself; never gate that sample on the cached point.
+  // One bounded probe at a time, at most 10/s while a dock or panel is visible.
+  if ((!binding && !expanded) || hoverBusy || performance.now() - lastHoverProbe < 100) return;
   hoverBusy = true;
   lastHoverProbe = performance.now();
   desktopSnapshot()
     .then((snapshot) => {
+      const point = screen.screenToDipPoint(snapshot.pointer);
+      const panel = panelWin.getBounds();
+      const overPanel =
+        expanded &&
+        point.x >= panel.x + margin &&
+        point.x < panel.x + panel.width - margin &&
+        point.y >= panel.y + margin &&
+        point.y < panel.y + panel.height - margin;
+      if (panelHovered !== overPanel) {
+        panelHovered = overPanel;
+        sendState();
+      }
       if (!dragging) updateDockHover(snapshot);
     })
     .catch(() => setDockHovered(false))

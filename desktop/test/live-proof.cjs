@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { screen } = require('electron');
 const { processIdentity, registeredSession, windowAt } = require('../src/binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
@@ -121,13 +122,17 @@ exports.run = async ({
     receipts.push('Exact native session accepted; unrelated same-title terminal refused');
     const bounds = avatarWin.getBounds();
     const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    const sample = (point, buttons) => ({
+      windows: stack,
+      pointer: { ...screen.dipToScreenPoint(point), buttons },
+    });
     // Exercise the same hover transition with explicit pointer samples, without
     // moving the desktop pointer or making a claim about physical mouse delivery.
-    updateDockHover({ windows: stack, pointer: { buttons: 256 } }, center);
+    updateDockHover(sample(center, 256));
     assert(!getState().dockHovered, 'An existing text-selection drag must stay with the terminal');
-    updateDockHover({ windows: [], pointer: { buttons: 0 } }, center);
+    updateDockHover({ ...sample(center, 0), windows: [] });
     assert(!getState().dockHovered, 'A covered or missing target must not activate');
-    updateDockHover({ windows: stack, pointer: { buttons: 0 } }, center);
+    updateDockHover(sample(center, 0));
     assert(getState().dockHovered, 'Hover over the visible marker enables grabbing');
     assert.equal(avatarWin.isFocusable(), false, 'Hover must leave keyboard focus alone');
     const region = (await inventory()).find((w) => w.id === markerId).input_region;
@@ -141,7 +146,7 @@ exports.run = async ({
       ),
       '1',
     );
-    updateDockHover({ windows: stack, pointer: { buttons: 0 } }, { x: bounds.x - 20, y: bounds.y });
+    updateDockHover(sample({ x: bounds.x - 20, y: bounds.y }, 0));
     assert(!getState().dockHovered, 'Leaving restores the passive marker');
     receipts.push(
       'Hover brightened and enabled native input; leave, held button and covered target stayed passive',

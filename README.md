@@ -21,8 +21,8 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   registers its fixed native conversation, or rejoins its existing registration.
   Discovery alone does not start recording. The terminal marker is a faded overlay; hover to brighten and grab it.
   It no longer depends on terminal transparency. The panel becomes opaque on
-  hover for readability. Physical hover and opaque-terminal appearance still
-  need a desktop check.
+  hover for readability. The opaque Ghostty hover-and-pull interaction has been tried on the
+  current Fedora desktop; other terminals and desktops remain unproved.
 
 Start with [running the service](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
