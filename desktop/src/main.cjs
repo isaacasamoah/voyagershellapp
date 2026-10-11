@@ -3,6 +3,8 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { randomUUID } = require('node:crypto');
+const { connectControl } = require('./control.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
@@ -46,6 +48,7 @@ let service = null,
   dockError = '';
 let busy = false;
 let dockGeneration = 0;
+let controlConnection = null;
 let layer = '';
 let dockHovered = false,
   panelHovered = false,
@@ -220,6 +223,13 @@ function setSeated(value) {
 async function setExpanded(value) {
   expanded = value;
   if (value) {
+    // A terminal-docked click reveals the panel where it was left. The astronaut
+    // and its service attachment stay at the terminal until a deliberate pull.
+    if (binding) {
+      sendState();
+      panelWin.showInactive();
+      return;
+    }
     setSeated(true);
     placePanel();
     sendState();
@@ -250,6 +260,7 @@ function park() {
   const area = screen.getPrimaryDisplay().workArea;
   setExpanded(false);
   placeAvatar(area.x + area.width - avatarSize - 24, area.y + 28);
+  placePanel(); // Establish the home position even if the panel starts hidden.
 }
 function overAvatar(point) {
   const p = avatarPosition();
@@ -316,11 +327,7 @@ function advanceDrag(p, now = performance.now()) {
     dragging.moved = true;
     const wasAttached = seated || Boolean(binding);
     setSeated(false);
-    dockGeneration++;
-    binding = null;
-    dockHovered = false;
-    dockError = '';
-    sendState();
+    undock();
     if (wasAttached) avatarWin.webContents.send('dock-sound', 'undock');
   }
   if (dragging.moved) {
@@ -349,13 +356,29 @@ function advanceDrag(p, now = performance.now()) {
 }
 function undock(message = '') {
   dockGeneration++;
+  const previous = controlConnection;
+  controlConnection = null;
+  if (previous && service?.control?.generation === previous.attachment.generation)
+    service = { ...service, control: null };
+  if (previous) releaseControl(previous);
   binding = null;
   dockHovered = false;
   dockError = message;
   sendState();
 }
+async function releaseControl(connection) {
+  try {
+    await rpc('undock', connection.attachment.generation);
+  } catch (error) {
+    console.error(`Control release: ${error.message}`);
+  } finally {
+    // EOF also releases control if the acknowledgement was lost.
+    connection.close();
+  }
+}
 async function dock(id) {
   if (serviceError || platformError) throw Error(serviceError || platformError);
+  if (binding) undock();
   const generation = ++dockGeneration;
   windows = await inventory();
   sessions = await rpc('list');
@@ -390,6 +413,26 @@ async function dock(id) {
     undock('This agent is disconnected.');
     return false;
   }
+  const identity = ({ pid, start }) => ({ pid, start });
+  const connection = await connectControl(
+    stateDir,
+    {
+      generation: randomUUID(),
+      session_id: session.id,
+      window_id: fresh.window.id,
+      terminal: identity(fresh.record),
+      frontend: identity(fresh.record.frontend),
+    },
+    () => {
+      if (controlConnection === connection) undock('Control attachment ended.');
+    },
+  );
+  if (generation !== dockGeneration) {
+    await releaseControl(connection);
+    return false;
+  }
+  controlConnection = connection;
+  service = { ...service, control: connection.attachment, voice: connection.voice };
   binding = { ...fresh, session };
   dockHovered = false;
   selected = session.id;
@@ -420,6 +463,7 @@ function follow() {
 async function refresh() {
   if (busy) return;
   busy = true;
+  const refreshGeneration = dockGeneration;
   try {
     const [nextService, nextSessions] = await Promise.all([rpc('status'), rpc('list')]);
     service = nextService;
@@ -458,7 +502,9 @@ async function refresh() {
       result.error ||
       serviceError ||
       session?.capture !== 'connected' ||
-      session.id !== binding.session.id
+      session.id !== binding.session.id ||
+      (refreshGeneration === dockGeneration &&
+        service?.control?.generation !== controlConnection?.attachment.generation)
     )
       undock(result.error || serviceError || 'This agent is disconnected.');
     else {
@@ -555,13 +601,16 @@ app.whenReady().then(async () => {
     // A deliberate press may focus the astronaut for Escape; hover never does.
     avatarWin.focus();
   });
-  handle('cancel-drag', [avatarWin], () => {
+  handle('cancel-drag', [avatarWin], async () => {
     if (!dragging) return;
     candidateWin.hide();
     const previous = dragging;
     dragging = null;
+    if (previous.moved && previous.binding) {
+      await dock(previous.binding.window.id);
+      return;
+    }
     setSeated(previous.seated);
-    binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
     placeAboveTerminal().catch(() => undock('The terminal is unavailable.'));
@@ -627,11 +676,17 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
-  if (process.argv.includes('--proof') || process.argv.includes('--proof-registration')) {
+  if (
+    process.argv.includes('--proof') ||
+    process.argv.includes('--proof-registration') ||
+    process.argv.includes('--proof-control')
+  ) {
     require(
-      process.argv.includes('--proof-registration')
-        ? '../test/registration-proof.cjs'
-        : '../test/live-proof.cjs',
+      process.argv.includes('--proof-control')
+        ? '../test/control-proof.cjs'
+        : process.argv.includes('--proof-registration')
+          ? '../test/registration-proof.cjs'
+          : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -663,9 +718,11 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-registration')
-            ? 'registration-proof.json'
-            : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-control')
+            ? 'control-proof.json'
+            : process.argv.includes('--proof-registration')
+              ? 'registration-proof.json'
+              : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(
@@ -696,6 +753,8 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
+  // The OS closes this connection on crashes too. Agents are independent.
+  controlConnection?.close();
   globalShortcut.unregisterAll();
   clearInterval(timer);
   clearInterval(dragTimer);

@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::{self, Write},
+    io::{self, BufRead, BufReader, Write},
     os::unix::{
         fs::PermissionsExt,
         net::{UnixListener, UnixStream},
@@ -68,11 +68,12 @@ impl Fixture {
                                 let p=&request["params"];
                                 let result=match request["method"].as_str().unwrap() {
                                     "initialize" => json!({"userAgent":"fixture"}),
-                                    "thread/loaded/list" => json!({"data":["live-thread"],"nextCursor":null}),
+                                    "thread/loaded/list" => json!({"data":["live-thread","other-thread"],"nextCursor":null}),
                                     "thread/read" => json!({"thread":metadata(p["threadId"].as_str().unwrap())}),
                                     "thread/resume" => {
-                                        assert_eq!(*p,json!({"threadId":"live-thread","excludeTurns":true}));
-                                        json!({"thread":metadata("live-thread")})
+                                        assert_eq!(p["excludeTurns"],true);
+                                        assert_eq!(p.as_object().unwrap().len(),2);
+                                        json!({"thread":metadata(p["threadId"].as_str().unwrap())})
                                     }
                                     "turn/start" => {
                                         assert_eq!(p["threadId"],"live-thread");
@@ -132,8 +133,12 @@ impl Fixture {
         }
     }
     fn start(&mut self) {
+        self.start_with_voice("0");
+    }
+    fn start_with_voice(&mut self, voice: &str) {
         self.service = Some(
             Command::new(env!("CARGO_BIN_EXE_voyager"))
+                .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
                     "VOYAGER_CODEX_BIN",
                     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),
@@ -288,7 +293,7 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
     f.halt();
     assert_eq!(
         Codex::connect(&f.socket).unwrap().loaded().unwrap(),
-        vec!["live-thread"]
+        vec!["live-thread", "other-thread"]
     );
     f.start();
     assert_ne!(f.call(json!({"op":"status"}))["instance"], instance);
@@ -487,4 +492,177 @@ fn source_ids_deduplicate_and_unicode_truncation_is_explicit() {
     assert_eq!(messages[0]["payload"]["truncated"], true);
     assert!(messages[0]["payload"]["text"].as_str().unwrap().len() <= events::TEXT_LIMIT);
     assert_eq!(messages[0]["occurred_ms"], 42);
+}
+
+fn process_claim(pid: u32) -> Value {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let start = stat
+        .rsplit_once(')')
+        .unwrap()
+        .1
+        .split_whitespace()
+        .nth(19)
+        .unwrap();
+    json!({"pid":pid,"start":start})
+}
+
+fn dock_request(session: &Value, window: u32, process: Value) -> Value {
+    json!({"op":"dock","session_id":session,"generation":uuid::Uuid::new_v4().to_string(),
+        "window_id":window,"terminal":process,"frontend":process})
+}
+
+fn open_control(f: &Fixture, request: &Value) -> (UnixStream, Value) {
+    let mut socket = UnixStream::connect(f.dir.join("service.sock")).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    writeln!(socket, "{request}").unwrap();
+    let mut line = String::new();
+    BufReader::new(&socket).read_line(&mut line).unwrap();
+    let reply: Value = serde_json::from_str(&line).unwrap();
+    assert!(reply.get("error").is_none(), "{reply}");
+    (socket, reply["result"].clone())
+}
+
+#[test]
+fn control_switch_stale_release_disconnect_and_capture_are_independent() {
+    let mut f = Fixture::new();
+    f.start_with_voice("1");
+    let session = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let a = dock_request(&session, 1, process_claim(std::process::id()));
+    let (old, ack) = open_control(&f, &a);
+    assert_eq!(ack["active"], true);
+    assert_eq!(ack["voice"]["state"], "unsupported");
+    assert_eq!(
+        f.call(json!({"op":"status"}))["control"]["generation"],
+        a["generation"]
+    );
+    let (retry, again) = open_control(&f, &a);
+    assert_eq!(ack, again);
+    drop(old); // Closing the replaced connection cannot clear the retried claim.
+    assert_eq!(
+        f.call(json!({"op":"status"}))["control"]["generation"],
+        a["generation"]
+    );
+    let mut conflict = a.clone();
+    conflict["window_id"] = json!(99);
+    assert!(client(&f.dir, conflict).is_err());
+    let mut reused_pid = dock_request(&session, 2, process_claim(std::process::id()));
+    reused_pid["frontend"]["start"] = json!("0");
+    assert!(client(&f.dir, reused_pid).is_err());
+    let other = f.call(json!({"op":"register","thread_id":"other-thread"}))["session_id"].clone();
+    let b = dock_request(&other, 2, process_claim(std::process::id()));
+    let (current, _) = open_control(&f, &b);
+    assert_eq!(
+        f.call(json!({"op":"undock","generation":a["generation"]}))["released"],
+        false
+    );
+    drop(retry);
+    assert_eq!(f.call(json!({"op":"status"}))["control"]["window_id"], 2);
+    let stale = json!({"op":"send","session_id":session,"request_id":"stale","message":"hello","control_generation":a["generation"]});
+    assert!(client(&f.dir, stale).is_err());
+    assert_eq!(*f.sends.lock().unwrap(), 0);
+    assert_eq!(f.call(json!({"op":"send","session_id":session,"request_id":"current","message":"hello","control_generation":b["generation"]}))["state"], "accepted");
+    drop(current); // Simulate abrupt UI loss; no explicit undock command.
+    wait(|| f.call(json!({"op":"status"}))["control"].is_null());
+    assert_eq!(f.call(json!({"op":"list"}))[0]["capture"], "connected");
+    f.call(
+        json!({"op":"send","session_id":session,"request_id":"detached","message":"still working"}),
+    );
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["native_turn_id"] == "turn-2" && e["type"] == "turn.completed")
+    });
+    let (_, ended) = open_control(&f, &b);
+    assert_eq!(
+        ended["active"], false,
+        "retry after release must not reacquire control"
+    );
+    let events = f.events();
+    let control: Vec<_> = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["type"].as_str().unwrap().starts_with("interface."))
+        .collect();
+    assert_eq!(control.len(), 4);
+    assert_eq!(control[0]["type"], "interface.docked");
+    assert_eq!(control[1]["payload"]["reason"], "switched");
+    assert_eq!(control[2]["payload"]["attachment"]["window_id"], 2);
+    assert_eq!(control[3]["payload"]["reason"], "interface_disconnected");
+}
+
+#[test]
+fn control_release_is_durable_and_restart_never_restores_authority() {
+    let mut f = Fixture::new();
+    f.start();
+    assert_eq!(f.call(json!({"op":"status"}))["voice"]["state"], "disabled");
+    let session = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let a = dock_request(&session, 1, process_claim(std::process::id()));
+    let (_socket, _) = open_control(&f, &a);
+    assert_eq!(
+        f.call(json!({"op":"undock","generation":a["generation"]}))["released"],
+        true
+    );
+    assert_eq!(
+        f.call(json!({"op":"undock","generation":a["generation"]}))["released"],
+        false
+    );
+    let b = dock_request(&session, 2, process_claim(std::process::id()));
+    let (_socket, _) = open_control(&f, &b);
+    let mut service = f.service.take().unwrap();
+    service.kill().unwrap();
+    service.wait().unwrap();
+    f.start();
+    assert!(f.call(json!({"op":"status"}))["control"].is_null());
+    f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let (_, retry) = open_control(&f, &b);
+    assert_eq!(retry["active"], false);
+    assert!(
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "interface.undocked"
+                && e["payload"]["reason"] == "service_restarted")
+    );
+    let c = dock_request(&session, 3, process_claim(std::process::id()));
+    let (_socket, _) = open_control(&f, &c);
+    f.halt();
+    let stored = Store::open(&f.dir.join("events.sqlite"))
+        .unwrap()
+        .events(0)
+        .unwrap();
+    assert!(
+        stored["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "interface.undocked"
+                && e["payload"]["reason"] == "service_stopped")
+    );
+}
+
+#[test]
+fn closing_terminal_releases_control_without_stopping_external_server() {
+    let mut f = Fixture::new();
+    f.start();
+    let session = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let mut process = Command::new("sleep").arg("30").spawn().unwrap();
+    let a = dock_request(&session, 1, process_claim(process.id()));
+    let (_socket, _) = open_control(&f, &a);
+    process.kill().unwrap();
+    process.wait().unwrap();
+    wait(|| f.call(json!({"op":"status"}))["control"].is_null());
+    assert_eq!(f.call(json!({"op":"status"}))["capturing"], 1);
+    assert!(
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["payload"]["reason"] == "terminal_closed")
+    );
 }

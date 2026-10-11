@@ -2,8 +2,9 @@
 
 Voyager's Electron client shows the local Rust service through a floating glass
 astronaut and a small panel. The native terminal remains your conversational
-interface. Docking registers an identified session or rejoins its registration;
-undocking disconnects the interface. Neither undocking nor quitting Electron
+interface. Docking registers an identified session or rejoins its registration,
+then selects it as [current control](control.md). Undocking records a release.
+Neither undocking nor quitting Electron
 stops capture or a service-owned worker.
 
 Open [the self-contained walkthrough](walkthrough.html) in a browser for a
@@ -17,6 +18,11 @@ The floating 104 px astronaut has no text or square shadow. A click opens the
 continuous curved glass panel, with rainbow VOYAGER lettering above the seated
 astronaut and “Let’s Go Together” below the agent list. Click again to collapse.
 Drag the panel background to move it. Buttons remain clickable.
+
+When the astronaut is docked to a terminal, clicking it toggles the panel where
+you last left it. The astronaut stays at the terminal and control is unchanged.
+The panel does not follow it. Pressing and pulling releases terminal control;
+returning to the panel's seat is a separate drag action.
 
 Holding the astronaut leaves the panel visible. Pulling it away lifts it out
 with a short falling tone; returning to the panel or a supported terminal uses

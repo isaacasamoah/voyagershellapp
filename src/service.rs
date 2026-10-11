@@ -1,4 +1,4 @@
-use crate::{codex::Codex, events, store::Store, worker::Worker};
+use crate::{codex::Codex, control::Control, events, store::Store, worker::Worker};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
@@ -122,6 +122,7 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
     }
     let server = fs::canonicalize(codex_path)?.to_string_lossy().into_owned();
     let mut runtime = Runtime {
+        control: Control::new(&store)?,
         store,
         codex: Some(Codex::connect(Path::new(&server))?),
         server,
@@ -146,7 +147,23 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
                             == Uid::effective().as_raw(),
                         "different-user peer"
                     );
-                    runtime.dispatch(frame(&mut stream)?)
+                    let request = frame(&mut stream)?;
+                    runtime.observe_control()?;
+                    if request["op"] == "dock" {
+                        runtime.connection(string(&request, "session_id")?)?;
+                        let peer =
+                            u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
+                        return Ok((
+                            runtime.control.dock(
+                                &runtime.store,
+                                &request,
+                                peer,
+                                stream.try_clone()?,
+                            )?,
+                            false,
+                        ));
+                    }
+                    runtime.dispatch(request)
                 })();
                 let (reply, stop) = match result {
                     Ok((value, stop)) => (json!({"result":value}), stop),
@@ -166,11 +183,15 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+    runtime
+        .control
+        .release(&runtime.store, None, "service_stopped")?;
     runtime.gap("service_stopped")?;
     Ok(())
 }
 
 struct Runtime {
+    control: Control,
     store: Store,
     codex: Option<Codex>,
     server: String,
@@ -196,9 +217,30 @@ impl Runtime {
     }
 
     fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
+        // Optional current-control precondition for commands sent on the human's
+        // behalf. Direct local CLI access remains available; this is coordination,
+        // not isolation between programs running as the same Unix user.
+        if let Some(generation) = request.get("control_generation") {
+            ensure!(
+                ["send", "launch", "stop-worker"].contains(&string(&request, "op")?),
+                "control precondition is only for agent commands"
+            );
+            let source = self
+                .control
+                .require(generation.as_str().context("invalid control generation")?)?;
+            if request["op"] == "launch" {
+                ensure!(
+                    request["parent_id"] == source,
+                    "launch parent must be the current control session"
+                );
+            }
+        }
         let value = match string(&request, "op")? {
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+usize::from(self.worker.as_ref().is_some_and(|w|w.connection.is_some())),"owns_agents":self.worker.as_ref().is_some_and(|w|w.alive)})
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+usize::from(self.worker.as_ref().is_some_and(|w|w.connection.is_some())),"owns_agents":self.worker.as_ref().is_some_and(|w|w.alive),"control":self.control.current(),"voice":self.control.voice()})
+            }
+            "undock" => {
+                json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
             }
             "discover" => {
                 let c = self.codex()?;
@@ -430,6 +472,17 @@ impl Runtime {
                         "Codex disconnected; capture stopped; native work is not controlled by Voyager"
                     );
                 }
+            }
+        }
+        self.observe_control()
+    }
+
+    fn observe_control(&mut self) -> Result<()> {
+        self.control.observe(&self.store)?;
+        if let Some(session) = self.control.session().map(str::to_owned) {
+            if self.connection(&session).is_err() {
+                self.control
+                    .release(&self.store, None, "capture_disconnected")?;
             }
         }
         Ok(())

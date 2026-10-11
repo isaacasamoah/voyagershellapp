@@ -21,7 +21,21 @@ fn main() -> Result<()> {
         )
         .join(".local/share/voyagershell")
     };
-    let request = match args.as_slice() {
+    let control = if args.first().map(String::as_str) == Some("--control") && args.len() >= 2 {
+        let generation = args[1].clone();
+        args.drain(..2);
+        Some(generation)
+    } else {
+        None
+    };
+    if control.is_some()
+        && !args
+            .first()
+            .is_some_and(|op| ["send", "launch", "stop-worker"].contains(&op.as_str()))
+    {
+        bail!("--control is only supported by send, launch and stop-worker");
+    }
+    let mut request = match args.as_slice() {
         [op, socket] if op == "serve" => return service::serve(&state, &PathBuf::from(socket)),
         [op] if ["status", "discover", "connection-info", "list", "stop"]
             .contains(&op.as_str()) =>
@@ -29,6 +43,7 @@ fn main() -> Result<()> {
             json!({"op":op})
         }
         [op, thread] if op == "register" => json!({"op":op,"thread_id":thread}),
+        [op, generation] if op == "undock" => json!({"op":op,"generation":generation}),
         [op, session, id, message] if op == "send" => {
             json!({"op":op,"session_id":session,"request_id":id,"message":message})
         }
@@ -63,12 +78,16 @@ fn main() -> Result<()> {
         }
         [op, cursor] if op == "watch" => return watch(&state, cursor.parse::<i64>()?, false),
         _ => bail!(
-            "usage: voyager [--state PRIVATE_DIR] COMMAND\n\
+            "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             serve CODEX_SOCKET | status | discover | connection-info | register THREAD_ID | list\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
-            launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-worker SESSION_ID"
+            launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-worker SESSION_ID\n\
+            undock GENERATION (--control is supported by send, launch and stop-worker)"
         ),
     };
+    if let Some(generation) = control {
+        request["control_generation"] = json!(generation);
+    }
     println!(
         "{}",
         serde_json::to_string_pretty(&service::client(&state, request)?)?

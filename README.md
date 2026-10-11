@@ -23,6 +23,10 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   It no longer depends on terminal transparency. The panel becomes opaque on
   hover for readability. The opaque Ghostty hover-and-pull interaction has been tried on the
   current Fedora desktop; other terminals and desktops remain unproved.
+- The service records one current control attachment and dock/undock events.
+  A stale release cannot clear a newer attachment. Losing Electron releases
+  control while capture and agents continue. The [control guide](docs/control.md)
+  explains the behavior, command preconditions and voice setting's limits.
 
 Start with [running the service](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
@@ -91,16 +95,11 @@ used for those fixtures, not the Rust service runtime.
 
 ## Next experiment
 
-Physically try the drop, typing/selection, detach and rejoin on Fedora. The native
-registration check has observed real user/assistant events, the same registration
-on rejoin and refusal of an unrelated same-title terminal. Physical gesture feel,
-terminal transparency and sound remain a human check.
-
-Then use the registered agent to launch one worker, open its native terminal,
-and move the bridge between them. In the latest native lead test, the harness
-sandbox denied access to Voyager's local socket and no worker was started.
-That path needs an approved harness tool connection; docking grants no extra
-permissions. Multiple simultaneous workers, a general
-current-thread signal and knowledge extraction remain later increments.
+Try the control handoff: dock, inspect its event, pull away, and dock another
+client while capture continues. Click the docked astronaut to toggle the panel
+where it was left, without changing control. Native voice handoff and priority
+over supervisor instructions remain separate experiments; the setting does not
+yet activate audio. Multiple simultaneous workers, a general current-thread
+signal and knowledge extraction remain later increments.
 
 Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.

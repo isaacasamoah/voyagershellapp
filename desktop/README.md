@@ -34,15 +34,16 @@ If Electron's binary download was skipped during installation, run
 
 ## Source map
 
-| File                                     | Owns                                                          |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls |
-| `src/binding.cjs`                        | Process identity and exact terminal-to-session matching       |
-| `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                     |
-| `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                |
-| `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                  |
-| `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target              |
-| `assets/`                                | Astronaut artwork and its attribution                         |
+| File                                     | Owns                                                              |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls     |
+| `src/binding.cjs`                        | Process identity and exact terminal-to-session matching           |
+| `src/control.cjs`                        | Persistent attachment socket, acknowledgement and connection loss |
+| `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                         |
+| `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                    |
+| `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                      |
+| `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                  |
+| `assets/`                                | Astronaut artwork and its attribution                             |
 
 There is no frontend framework or bundler. Main owns the state; the renderer
 receives a display snapshot and sends explicit user actions. Keep filesystem,
@@ -54,6 +55,14 @@ the astronaut can leave the panel in place. A seated astronaut is a child of the
 visible panel; floating detaches that relationship. The native panel background
 is draggable. The astronaut and buttons are excluded from native drag regions so
 their clicks reach the renderer.
+
+Terminal docking now also holds a service control connection. Its lifetime is
+independent of panel visibility. Clicking the docked astronaut reveals the panel
+at its saved position; it never moves the astronaut or releases control.
+See [the control contract](../docs/control.md) for events, exact-generation release,
+restart behavior and the unimplemented voice handoff. `test/control.test.cjs`
+checks socket lifetime; `npm start -- --proof-control` exercises two existing
+native clients without model calls.
 
 ## Testing changes
 

@@ -200,7 +200,7 @@ exports.run = async ({
   assert.equal(await outline(), 'none', 'A released click must not leave a focus ring');
   receipts.push('Clicks toggled the separate panel without resizing the avatar');
 
-  assert.equal(await dock(ours.id), true);
+  undock();
   await setExpanded(true);
   await delay(100);
   await avatarWin.webContents.executeJavaScript('window.dockSounds = []');
@@ -210,7 +210,7 @@ exports.run = async ({
   assert.notEqual(await outline(), 'none', 'Holding highlights the astronaut');
   assert(panelWin.isVisible(), 'Holding must leave the panel visible');
   assert(getState().seated, 'Holding alone must not lift the astronaut');
-  assert.equal(getState().binding?.session.id, session.id);
+  assert.equal(getState().binding, null, 'Bringing the avatar home releases terminal control');
   await pointer('mouseUp');
   await delay(100);
   assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
@@ -250,7 +250,11 @@ exports.run = async ({
   assert(getState().seated && panelWin.isVisible());
   assert.equal(avatarWin.getParentWindow(), panelWin, 'Escape restores the native parent');
   assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
-  assert.equal(getState().binding?.session.id, session.id, 'Escape restores the prior attachment');
+  assert.equal(
+    getState().binding,
+    null,
+    'Escape returns to the panel without inventing terminal control',
+  );
   assert.deepEqual(
     await sounds(),
     ['undock', 'dock'],

@@ -45,7 +45,14 @@ api.onState((value) => {
       ? 'docked'
       : 'floating';
   $('connection').textContent = value.serviceError ? 'Offline' : 'Online';
-  $('avatar').title = value.platformError || value.dockError || '';
+  $('avatar').title =
+    value.platformError ||
+    value.dockError ||
+    (value.docked && value.service?.voice?.state === 'unsupported'
+      ? 'Master control · automatic voice is not available yet'
+      : value.docked
+        ? 'Master control'
+        : '');
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);

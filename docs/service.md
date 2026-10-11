@@ -44,7 +44,7 @@ The message goes to the existing agent. No model, instructions, credentials or p
 
 | Command | Result |
 | --- | --- |
-| `status` | Service instance, connection/capture count and whether it currently owns a worker |
+| `status` | Service instance, connection/capture count, worker ownership, current control attachment and voice capability |
 | `connection-info` | Connected native server identity and configured native executable; no subscription |
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
@@ -58,6 +58,12 @@ The message goes to the existing agent. No model, instructions, credentials or p
 | `attach-info SESSION_ID` | Inspect the worker's native connection command and process identity |
 | `stop-worker SESSION_ID` | Explicitly stop the owned worker server; never stop an external session |
 | `stop` | Refuse while a worker is alive; otherwise stop Voyager and record a capture gap |
+| `undock GENERATION` | Release only that current control attachment, leaving registration and work alone |
+
+See [docking and control](control.md) for the persistent desktop connection,
+`interface.docked`/`interface.undocked` events and optional `--control GENERATION`
+precondition on agent commands. The interface events are recorded alongside
+conversation events; they are not model-generated observations.
 
 Reusing a request ID with the same inputs returns the prior submission record. Changing its inputs is rejected. Delivery whose acknowledgement was lost remains uncertain and is never retried automatically. The request record stays about submission; the event stream carries the observed turn outcome.
 
@@ -91,7 +97,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Eight earlier black-box process fixtures remain. Five Rust tests exercise the service against local WebSocket protocol fixtures and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
+Eight earlier black-box process fixtures remain. Eight Rust tests exercise the service against local WebSocket protocol fixtures and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
 
 ## Real Codex check — 9 October 2026
 

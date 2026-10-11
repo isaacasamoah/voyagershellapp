@@ -120,10 +120,10 @@
       nodes: ['electron','service','leadClient','lead'], edges: ['panel','leadClient'], marker: null
     },
     {
-      label: 'Dock', title: 'The drop registers this agent.', bridge: 'Bridge: your agent',
+      label: 'Dock', title: 'The drop selects current control.', bridge: 'Control: your agent',
       action: 'Press and hold the astronaut, pull it out of the panel, then drop it onto the supported terminal.',
-      expect: 'The agent appears in the panel. Its faded dock marker leaves the terminal usable. New conversation events begin recording.',
-      underneath: 'Electron checks the window and native session identity. The Rust service checks that the exact thread is already loaded, subscribes to future events, and returns a registration. It does not import earlier messages, change permissions or take ownership. Try one new message to see capture begin.',
+      expect: 'The agent appears in the panel. Rust records interface.docked and selects current control. New conversation events begin recording.',
+      underneath: 'Electron checks the window and native session identity. The Rust service checks that the exact thread is already loaded, subscribes to future events, and returns a registration. A separate open socket represents the control attachment; acknowledgement precedes the dock cue. It does not import earlier messages, change permissions or take process ownership. Click the astronaut to toggle the panel where you left it; control stays with the terminal.',
       source: 'desktop/src/main.cjs', line: 358,
       code: "if (target.record.external)\n  await rpc('register', target.record.nativeId);\n\n// src/service.rs: register → thread/resume\n// src/events.rs: normalize notifications\n// src/store.rs: record attributed events",
       nodes: ['electron','service','leadClient','lead','store'], edges: ['panel','leadClient','capture','store'], marker: 'lead'
@@ -141,23 +141,23 @@
       label: 'Detach', title: 'The interface leaves. Work stays.', bridge: 'No terminal attached',
       action: 'Hover over the docked astronaut to brighten it, then pull it away. Ctrl+Alt+V is the keyboard alternative. Let the worker continue its task.',
       expect: 'Both registrations and event capture remain. The worker keeps running.',
-      underneath: 'Undocking clears only Electron’s window binding. It sends no unregister or stop request. The faded overlay is normally click-through; hovering enables grabbing without taking keyboard focus. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
+      underneath: 'Undocking releases the exact current-control attachment and records interface.undocked. It sends no unregister or stop request. The faded overlay is normally click-through; hovering enables grabbing without taking keyboard focus. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
       source: 'desktop/src/main.cjs', line: 351,
-      code: "function undock(message = '') {\n  dockGeneration++;\n  binding = null;\n  dockHovered = false;\n  dockError = message;\n  sendState();\n}",
+      code: "// Electron releases the exact attachment.\nawait rpc('undock', generation);\nconnection.close();\n\n// Rust records interface.undocked.\n// EOF also releases control if Electron exits.\n// Registration, capture and agent work continue.",
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: null
     },
     {
-      label: 'Switch agent', title: 'Dock to the worker.', bridge: 'Bridge: worker',
+      label: 'Switch agent', title: 'Dock to the worker.', bridge: 'Control: worker',
       action: 'Move the astronaut onto the worker’s terminal. Open the panel to see the other registered agent too.',
       expect: 'The same worker and conversation remain. We have changed which interface is attached, not restarted any work.',
-      underneath: 'The worker was registered when Voyager launched it. Electron matches that existing registration and changes its visual binding. Moving the avatar does not change parents, appoint a supervisor, redirect a task or change permissions. Returning to the lead likewise rejoins its existing registration.',
+      underneath: 'The worker was registered when Voyager launched it. Electron matches that registration and Rust acknowledges a new current-control attachment. Moving the avatar does not change parents, interrupt a task or change permissions. Returning to the lead likewise rejoins its existing registration.',
       source: 'desktop/src/main.cjs', line: 389,
-      code: 'const session = registeredSession(\n  fresh.record, sessions\n);\nbinding = { ...fresh, session };\nselected = session.id;\n\n// Registration persists independently of this binding.',
+      code: 'const session = registeredSession(\n  fresh.record, sessions\n);\nbinding = { ...fresh, session };\nselected = session.id;\n\n// Rust acknowledges a control attachment before this binding.\n// Registration persists independently.',
       nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'worker'
     }
   ];
   const nav = document.querySelector('nav');
-  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/1eabbef270533512540726b9badf41ec279a0d99/';
+  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/feat/desktop-registration/';
   let current = 0;
   steps.forEach((step, index) => {
     const button = document.createElement('button');

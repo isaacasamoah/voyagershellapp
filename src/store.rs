@@ -172,7 +172,7 @@ impl Store {
         self.insert(session, kind, None, None, None, payload)
     }
 
-    fn insert(
+    pub(crate) fn insert(
         &self,
         session: &str,
         kind: &str,
