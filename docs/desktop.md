@@ -1,156 +1,177 @@
-# Desktop experiment: a glass avatar and your agents
+# Desktop experiment: dock a native agent
 
-Voyager parks near the top-right of the screen. Click the astronaut to reveal a
-compact glass panel; click again to collapse it. The 104 px avatar has no text
-while floating. Opening the panel reveals one continuous glass surface with a
-full-width curved top and rainbow VOYAGER lettering above the astronaut.
-The seated avatar has no separate background or circular rim.
-“Let’s Go Together” appears in a warm-to-blue gradient at the bottom of the panel.
-Avatar and panel share the same translucent material.
-The astronaut keeps its full brightness in every state, including terminal docking.
-The floating avatar keeps its circular highlights without an outer shadow;
-the transparent native window also disables its shadow.
-Drag the panel background to move it around the screen. A seated astronaut moves
-with it; a detached astronaut stays independent. Buttons remain clickable.
-Only the panel background is an Electron window-drag region. The astronaut
-uses its own pointer gestures and, like the other buttons, must stay outside
-that region so native clicks reach its handler.
+Voyager's Electron client shows the local Rust service through a floating glass
+astronaut and a small panel. The native terminal remains your conversational
+interface. Docking registers an identified session or rejoins its registration;
+undocking disconnects the interface. Neither undocking nor quitting Electron
+stops capture or a service-owned worker.
 
-The panel shows **Online / Offline** and project names, each with a small green
-dot for a connected agent or gray for other states. Hover or a screen reader
-provides the full connection status. Names currently come from the working
-directory; custom session names and duplicate-name disambiguation are future work.
-It grows to fit the current list, within the display height. No event feed,
-internal IDs, terminal-launch button or instructional footer is shown. A small
-close × appears on hover or keyboard focus; it quits only the desktop client.
-A Detach button appears while docked. Work stays with the Rust service.
+## Appearance and gestures
 
-This remains a Fedora experiment for an **already registered worker**, not
-registration or ownership transfer of arbitrary running CLIs. Native Codex
-interaction stays in the terminal. Open terminals using your normal workflow.
+The floating 104 px astronaut has no text or square shadow. A click opens the
+continuous curved glass panel, with rainbow VOYAGER lettering above the seated
+astronaut and “Let’s Go Together” below the agent list. Click again to collapse.
+Drag the panel background to move it. Buttons remain clickable.
 
-## Run
+Holding the astronaut leaves the panel visible. Pulling it away lifts it out
+with a short falling tone; returning to the panel or a supported terminal uses
+the inverse rising tone. A stationary hold is silent. Escape during a pull
+restores the previous attachment. The highlight clears on release. Moving a
+standalone astronaut never opens the panel automatically.
 
-Prerequisites: Linux, X11/XWayland, Ghostty, Rust and Node 24. Follow
-[the service](service.md) and [worker](workers.md) instructions first. A supported
-window is a dedicated Ghostty XWayland process with a direct native Codex client
-attached to the service-owned worker. Tabs and switching native threads are not
-supported.
+**Only the terminal-docked marker fades.** It sits centrally in the lower third
+of the terminal, below that window in the native stacking order. It ignores mouse
+input and cannot take keyboard focus, so terminal text, selection and clicks stay
+in front. The floating and panel-seated astronaut keep their normal brightness.
+Use **Detach** in the panel, or **Ctrl+Alt+V**, to bring back the interactive
+astronaut. A behind-text marker cannot also intercept a drag intended for the
+terminal. If another app owns that shortcut, keep the panel available.
+
+This behind-window approach requires a translucent terminal background. An opaque
+terminal hides the marker. Voyager does not change terminal configuration. The
+browser reference can place artwork directly behind text; a separate Electron
+window does not have access to the terminal's internal rendering layers.
+
+The panel shows Online/Offline and project names with connection dots. Green
+means connected; gray means disconnected, stopped or unknown. Tooltips and
+accessible labels retain the full status. No event feed, internal IDs,
+terminal-launch button or instructional footer is shown. The close × quits only
+Electron. Connection is observation status, not proof of task completion.
+
+## Supported setup
+
+The first adapter is **Codex in a dedicated Ghostty XWayland window**, with one
+direct native client launched against an explicit Unix endpoint and fixed thread
+UUID. It supports the native command below, with optional `--no-alt-screen`:
+
+```sh
+codex --remote "unix://$CODEX_SOCKET" resume "$THREAD_ID" --no-alt-screen
+```
+
+The conversation must already exist and be loaded. A session picker, `--last`,
+tabs, an implicit default daemon, extra shell layers, and switching threads inside
+that client are unsupported. Launch arguments establish the fixed resume target;
+they cannot report later in-app thread switches. This is a bounded integration,
+not detection of every running CLI. No native agent is restarted by docking.
+
+Start the [service](service.md) against that same explicit socket. Set
+`VOYAGER_CODEX_BIN` when starting it to the native executable your terminal uses;
+different CLI/daemon installations may have different executable paths.
+
+For a separate translucent demo window, from a graphical-session terminal:
+
+```sh
+GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
+  --background-opacity=0.45 --background-blur=false \
+  -e /absolute/path/to/codex --remote "unix://$CODEX_SOCKET" \
+  resume "$THREAD_ID" --no-alt-screen
+```
+
+These flags affect only that new window. Your existing Ghostty settings remain
+unchanged. Applications that paint opaque cell backgrounds can obscure the
+underlay even when the window background is translucent.
+
+Build and open Voyager:
 
 ```sh
 cargo build --locked --bins
 cd desktop
 npm ci
 node node_modules/electron/install.js
-VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start
+VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start -- --expanded
 ```
 
-Use your actual private service directory. Start from a graphical-session
-terminal so the normal DISPLAY/X authorization is available. The app does not
-change those permissions. `npm start -- --expanded` opens the panel immediately.
+Use your actual private state directory. Start from the graphical session so
+DISPLAY and X authorization are available. There is no installed OS service yet;
+run the service independently of the terminal clients for persistence.
 
-1. Open the native worker terminal using the worker guide; it can already be open
-   before Voyager's desktop client starts.
-2. Click the avatar to see the real service and agent connection states.
-3. Hold the astronaut, then pull it away. Holding alone leaves it seated and the
-   panel visible; moving lifts it out with one short falling undock tone. Returning
-   it to the panel or docking to a supported terminal plays the inverse rising tone.
-   Escape also plays that return cue if it restores an attachment after movement.
-   The panel stays
-   where it was. A quick click opens or closes the panel; releasing a stationary
-   hold (350 ms or longer) does neither. Escape during the gesture puts it back.
-   The outline appears while pressed and clears on release or cancellation.
-   Moving the standalone astronaut leaves the panel closed, even when dropping
-   onto an unsupported window. Only a quick click toggles the panel.
-   Drag the avatar onto that terminal. The app matches a known worker session,
-   then follows its window. An unrelated window with the same title is refused.
-4. Drag away or choose Detach. Quit with × when finished. The service and native
-   agent continue; reopening the app can rediscover the existing native client.
+## Try the journey
 
-“Connected” describes the observation connection. It does not claim a task is
-working or complete. When the service is unreachable, the panel says Offline and
-retained rows say Unknown. Docking problems have an amber avatar indicator and a
-short tooltip, rather than a persistent instruction along the bottom.
+1. Start the native conversation and open its dedicated terminal before docking.
+   It is discoverable but unregistered; Voyager has not captured its history.
+2. Pull the astronaut from the panel onto that terminal. Electron verifies the
+   candidate window with a passive outline; that preview does not register it.
+   On release it checks the
+   native executable, process/start identity, explicit endpoint and thread. The
+   Rust service checks that the thread is loaded and acknowledges registration.
+3. Converse normally. Supported future user/assistant messages and lifecycle
+   events are recorded. Repeated docking keeps the same registration.
+4. Detach using the panel or shortcut. Capture continues; nothing is unregistered.
+5. Dock again to rejoin. An unrelated same-title terminal must be refused.
+6. Use the [worker commands](workers.md) from the native agent or a script to start
+   one managed worker. Open its native interface in another terminal. Docking to
+   that worker joins its existing registration. Window creation remains a desktop
+   action, independent of the service's worker lifetime.
 
-## How terminal recognition works
+The latest attempt to launch a worker from the registered native lead was blocked
+by that harness's sandbox: it could not connect to Voyager's local socket
+(`Operation not permitted`). No worker was created, and no permission was changed.
+The service's worker mechanism has earlier proof; the full docking-to-agent-launch
+journey still needs an approved tool route from the native harness.
 
-Electron main calls the Rust CLI over the existing private service contract.
-The read-only `voyager-windows` helper supplies X11 window geometry and process
-IDs. For a connected managed worker, the service supplies its exact native attach
-command. The client looks for a dedicated Ghostty process with a direct child
-whose executable and arguments match that command, including its native socket
-and thread identity. It reads all spawning threads' direct children.
+The selected session is the person's **current bridge**, not automatically a new
+supervisor. Moving the astronaut does not reparent workers, change permissions or
+redirect accepted tasks. External agents retain their original process owner;
+registration does not guarantee they survive their original terminal closing.
 
-Before docking, fresh service, window and process/start-time evidence must agree.
-A title is never identity, and several windows sharing one terminal process are
-ambiguous. This works for a matching client opened before the desktop app, as
-well as after it. It does not register or take over an unknown agent.
+## Implementation boundary
 
-The renderer is isolated, has no Node access, cannot navigate remote pages, and
-has only a narrow preload API. It no longer requests or receives conversation
-events. No terminal-launch path remains in the UI. Closing it sends no agent stop
-command.
+Electron main calls the Rust service CLI; the isolated renderer receives only
+presentation state. `connection-info` reveals connection identity without
+subscribing or importing conversation history. `register` is called only on a
+verified drop. Process identities are rechecked after acknowledgement before the
+avatar joins. Registration may succeed even if subsequent visual placement fails;
+the agent still appears in the service registry.
 
-The avatar and panel have separate transparent windows. The avatar keeps a fixed
-size while the panel is shown or hidden, avoiding the previous resize-and-repaint
-transition. Unchanged window geometry and agent rows are not redrawn on polling.
-While seated, the astronaut is a non-modal child of the panel, so selecting an
-agent cannot raise the panel over it and block clicks. The panel is shown before
-assigning that relationship so X11 can resolve the parent window.
-The client waits for that exact panel to appear in the managed X11 window list
-before assigning its child. A show request alone can race with the compositor.
-Pulling it away or hiding the panel removes that parent relationship; Escape
-restores it when reseating.
-Only the avatar renderer may send drag commands; only the panel may select agents
-or quit. Both cues use the same quiet, locally synthesized tone: falling on undock,
-rising on return. There is no media dependency or second model. Clicking and
-holding still are silent. Perceived flicker and sound need a real desktop check.
+`voyager-windows` reads X11 inventory. Its narrow `behind` operation may reposition
+only a window belonging to its calling process; it does not move or type into the
+terminal. Electron checks the actual native stack after asking for placement.
+Panel and avatar remain separate windows. A seated avatar is a child of the mapped
+panel, preserving the fix for row selection covering the astronaut.
+The passive candidate outline is a third transparent, non-focusable window.
 
-## Limits and proof
+## Checks and evidence
 
-- Dedicated Ghostty **XWayland** clients of the known worker only. Native Wayland,
-  arbitrary standalone CLI registration and macOS remain unproved.
-- Matching describes the native client's **fixed launch thread**. Switching
-  threads or tabs needs a cooperative current-session signal; argv alone cannot
-  establish that change.
-- Keep the target visible. X11 hit testing cannot detect a native Wayland window
-  covering it.
-- Glass here means transparency, highlights and shared CSS material. CSS backdrop
-  filtering does not establish compositor-level blur of other desktop apps.
-- No new-agent launch, knowledge graph, voice interface or whiteboard in this
-  client increment.
+`npm test` covers endpoint and fixed-thread recognition, identical titles, extra
+windows, duplicate candidates, PID reuse, changed native arguments and hit testing.
+Rust tests cover registration, capture, ownership, failures and worker detach.
 
-`npm test` verifies same-title refusal, ambiguous windows, PID reuse, missing
-clients, disconnected capture and frontmost-window hit testing. `npm run proof`
-is an opt-in check against the real service and an already-open worker terminal.
-It discovers that terminal without a UI launch record, refuses a same-title
-unrelated shell, exercises clicks and stationary holds in the renderer, drives
-the main-process movement transition, checks that the panel stays put and one
-sound cue is emitted, then exercises Escape-to-cancel. It captures each window
-separately and verifies that detach preserves the worker process and service
-instance. The temporary unrelated shell is closed; the panel stays open. Receipts/screenshots
-are private. No model call or desktop-wide input injection is used.
-The proof also checks computed native drag regions: renderer-injected clicks
-alone bypass native hit testing and can pass even when a real click is swallowed.
-After selecting each agent row it reads the real X11 window stack and checks
-that the astronaut remains above the panel at the click target. This caught the
-earlier focus-handler approach allowing the panel to cover the astronaut.
+`npm run proof` is the UI regression check with a registered native terminal.
+It makes no model call. It opens and closes one unrelated shell, exercises
+app-local gestures, checks the native stack and preserves the service/native client.
+It checks native input regions as well as CSS: Electron 44.7.0 implements ignored
+mouse events using a 1×1 region at the transparent corner, outside the artwork;
+the interactive avatar has its full input region restored. See the
+[pinned Electron implementation](https://github.com/electron/electron/blob/v44.7.0/shell/browser/ui/electron_desktop_window_tree_host_linux.cc#L226).
 
-Observed on 10 October: existing native client rediscovered, correct session
-accepted, unrelated shell refused, click handler toggled, the agent list
-fit without scrolling, and internal IDs/event feed were absent. The updated
-gesture keeps the panel visible during a hold; movement detaches the avatar and
-Escape restores the prior attachment. The final pointer-use preview has a
-continuous curved glass panel with
-no separate banner fill or seated-avatar rim. Pointer highlights clear on release;
-keyboard navigation still has a visible focus outline.
+The separate **live registration proof makes one real model request**:
 
-Isaac subsequently confirmed the click, panel movement and avatar pull/return
-flow on his desktop. The row-selection regression was reproduced against the
-native stack and corrected; the private live proof also covers it. The latest
-name/dot layout and paired sounds are ready for his next check. This still does
-not prove physical docking to an arbitrary terminal or registration by dropping.
-The previous XTEST input experiment was removed after it raised
-a GNOME remote-desktop prompt; this app and its proof do not request it.
+```sh
+VOYAGER_STATE=/absolute/private/state \
+VOYAGER_DEMO_THREAD=exact-native-thread-uuid \
+npm start -- --proof-registration
+```
 
-For the source layout and contributor workflow, see [desktop/README](../desktop/README.md).
+Use only a deliberately selected demo conversation. The check rejects an unrelated
+same-title window, registers the selected existing session, records a harmless
+user/assistant marker exchange while detached and verifies the same registration
+on rejoin. Receipts stay in the private state directory. First registration and
+rejoining an earlier registration are reported separately.
+
+Observed on Fedora on 11 October: new registration by the desktop docking path,
+same-title refusal, unchanged original native client, real conversation capture
+while detached, same-ID rejoin, and faded marker below Ghostty in the native stack.
+The UI regression also observed terminal-only fading, the native input-region
+change and restoration, panel toggling, hold/pull/return cues and row-selection
+stacking. The target outline is implemented but still needs a physical drag check.
+The composited multi-monitor sample did not yet establish a clearly visible
+behind-text marker; terminal transparency, opaque cells and intervening native
+Wayland windows remain visual constraints to resolve in that check.
+The verdict remains **surface**: programmatic docking does not prove a physical
+pointer gesture or perceived appearance, sound, typing and selection. There is no
+desktop-wide mouse injection or remote-control permission request.
+
+Native Wayland windows can cover XWayland windows without appearing in this
+inventory. Keep the demo target visible. Native Wayland/macOS, arbitrary running
+CLIs, thread switching, compositor blur and a knowledge graph remain unproved.
+See [the source map](../desktop/README.md) for contributor guidance.

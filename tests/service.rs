@@ -205,6 +205,16 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
     let mut f = Fixture::new();
     f.start();
     let instance = f.call(json!({"op":"status"}))["instance"].clone();
+    let connection = f.call(json!({"op":"connection-info"}));
+    assert_eq!(connection["server"], f.socket.to_str().unwrap());
+    assert_eq!(connection["pid"], std::process::id());
+    assert!(f.call(json!({"op":"list"})).as_array().unwrap().is_empty());
+    assert!(
+        f.call(json!({"op":"events","after":0}))["events"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     let duplicate = Command::new(env!("CARGO_BIN_EXE_voyager"))
         .args([
             "--state",

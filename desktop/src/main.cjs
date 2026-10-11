@@ -1,9 +1,16 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const { setTimeout: delay } = require('node:timers/promises');
-const { processIdentity, identifyTerminal, resolveWindow, windowAt } = require('./binding.cjs');
+const {
+  processIdentity,
+  identifyTerminal,
+  resolveWindow,
+  registeredSession,
+  windowAt,
+} = require('./binding.cjs');
 const exec = promisify(execFile);
 const root = path.resolve(__dirname, '../..');
 const stateDir = process.env.VOYAGER_STATE;
@@ -22,6 +29,7 @@ if (!primaryInstance) app.quit();
 
 let avatarWin,
   panelWin,
+  candidateWin,
   timer,
   dragTimer,
   expanded = false,
@@ -37,6 +45,8 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
+let dockGeneration = 0;
+let underlay = false;
 
 async function rpc(...args) {
   const result = await exec(binary, ['--state', stateDir, ...args], {
@@ -61,14 +71,30 @@ async function identities() {
   return result;
 }
 async function discoverTerminals() {
-  const found = [];
+  const endpoints = [];
+  if (service?.codex_connected) {
+    const info = await rpc('connection-info');
+    endpoints.push({
+      server: info.server,
+      executable: await fs.realpath(info.executable),
+      external: true,
+    });
+  }
   for (const session of sessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
   )) {
     const info = await rpc('attach-info', session.id);
+    endpoints.push({
+      server: session.server,
+      executable: await fs.realpath(info.executable),
+      external: false,
+    });
+  }
+  const found = [];
+  for (const endpoint of endpoints) {
     for (const pid of new Set(windows.map((w) => w.pid))) {
       try {
-        const record = await identifyTerminal(pid, session.id, info);
+        const record = await identifyTerminal(pid, endpoint);
         if (record) found.push(record);
       } catch {
         /* Window or native client exited during inventory. */
@@ -77,7 +103,37 @@ async function discoverTerminals() {
   }
   records = found;
 }
+function syncLayer() {
+  const next = Boolean(binding && !seated && !dragging);
+  if (next === underlay) return;
+  underlay = next;
+  // Docked content is passive; the real terminal receives every click/key.
+  avatarWin.setIgnoreMouseEvents(next);
+  avatarWin.setFocusable(!next);
+  avatarWin.setAlwaysOnTop(!next);
+}
+async function placeBehindTerminal() {
+  if (!underlay || !binding) return;
+  const target = binding.window.id;
+  const avatar = avatarWin.getNativeWindowHandle().readUInt32LE();
+  let stack = await inventory();
+  const a = stack.findIndex((w) => w.id === avatar),
+    t = stack.findIndex((w) => w.id === target);
+  if (a >= 0 && t === a + 1) return;
+  await exec(probe, ['behind', String(avatar), String(target)], { timeout: 2000 });
+  // Request accepted is not proof of compositor placement.
+  const deadline = performance.now() + 1000;
+  while (underlay && binding?.window.id === target) {
+    stack = await inventory();
+    const a = stack.findIndex((w) => w.id === avatar),
+      t = stack.findIndex((w) => w.id === target);
+    if (a >= 0 && t > a) return;
+    if (performance.now() >= deadline) throw Error('The desktop did not place the docked marker');
+    await delay(25);
+  }
+}
 function sendState() {
+  syncLayer();
   const state = {
     expanded,
     seated,
@@ -180,52 +236,102 @@ function advanceDrag(p, now = performance.now()) {
     dragging.moved = true;
     const wasAttached = seated || Boolean(binding);
     setSeated(false);
+    dockGeneration++;
     binding = null;
     dockError = '';
     sendState();
     if (wasAttached) avatarWin.webContents.send('dock-sound', 'undock');
   }
-  if (dragging.moved) placeAvatar(p.x - dragging.x, p.y - dragging.y);
+  if (dragging.moved) {
+    placeAvatar(p.x - dragging.x, p.y - dragging.y);
+    const target = windowAt(windows, screen.dipToScreenPoint(p), process.pid);
+    // A preview is only a candidate. Drop performs fresh identity checks and registration.
+    if (
+      target &&
+      records.filter((r) => r.pid === target.pid).length === 1 &&
+      windows.filter((w) => w.pid === target.pid).length === 1
+    ) {
+      const top = screen.screenToDipPoint({ x: target.x, y: target.y });
+      const bottom = screen.screenToDipPoint({
+        x: target.x + target.width,
+        y: target.y + target.height,
+      });
+      setBoundsIfChanged(candidateWin, {
+        x: top.x,
+        y: top.y,
+        width: bottom.x - top.x,
+        height: bottom.y - top.y,
+      });
+      if (!candidateWin.isVisible()) candidateWin.showInactive();
+    } else candidateWin.hide();
+  }
 }
 function undock(message = '') {
+  dockGeneration++;
   binding = null;
   dockError = message;
   sendState();
 }
 async function dock(id) {
   if (serviceError || platformError) throw Error(serviceError || platformError);
+  const generation = ++dockGeneration;
   windows = await inventory();
-  // Fresh service acknowledgement and fresh process/window identities before joining.
   sessions = await rpc('list');
   await discoverTerminals();
-  const result = resolveWindow(
+  const target = resolveWindow(
     windows.find((w) => w.id === id),
     windows,
     records,
-    sessions,
     await identities(),
   );
-  if (result.error) {
-    undock(result.error);
+  if (target.error) {
+    undock(target.error);
     return false;
   }
-  const joined = binding?.window.id !== result.window.id;
-  binding = result;
-  selected = result.session.id;
+  // Only this deliberate drop authorizes subscription. Discovery above is metadata-only.
+  if (target.record.external) await rpc('register', target.record.nativeId);
+  sessions = await rpc('list');
+  windows = await inventory();
+  const fresh = resolveWindow(
+    windows.find((w) => w.id === id),
+    windows,
+    [target.record],
+    await identities(),
+  );
+  if (generation !== dockGeneration) return false; // User moved away while awaiting acknowledgement.
+  if (fresh.error) {
+    undock(fresh.error);
+    return false;
+  }
+  const session = registeredSession(fresh.record, sessions);
+  if (!session || session.capture !== 'connected') {
+    undock('This agent is disconnected.');
+    return false;
+  }
+  binding = { ...fresh, session };
+  selected = session.id;
   dockError = '';
+  setSeated(false);
   follow();
   sendState();
-  if (joined) avatarWin.webContents.send('dock-sound', 'dock');
+  try {
+    await placeBehindTerminal();
+  } catch {
+    undock('Agent registered; the desktop could not place its marker.');
+    return false;
+  }
+  if (generation !== dockGeneration) return false;
+  avatarWin.webContents.send('dock-sound', 'dock');
   return true;
 }
 function follow() {
-  if (!binding || dragging) return;
+  if (!binding || dragging || seated) return;
   const w = binding.window;
   const anchor = screen.screenToDipPoint({
-    x: w.x + w.width,
-    y: Math.round(w.y + w.height * 0.65),
+    x: Math.round(w.x + w.width / 2),
+    y: Math.round(w.y + w.height * 0.76),
   });
-  placeAvatar(anchor.x - avatarSize - margin, anchor.y - avatarSize / 2);
+  placeAvatar(anchor.x - avatarSize / 2, anchor.y - avatarSize / 2);
 }
 async function refresh() {
   if (busy) return;
@@ -250,17 +356,37 @@ async function refresh() {
     platformError = 'Docking isn’t available on this desktop right now.';
   }
   if (binding) {
+    const current = binding;
+    const processes = await identities();
+    // A detach or another drop can arrive while process identities are read.
+    if (binding !== current) {
+      busy = false;
+      return;
+    }
     const result = resolveWindow(
-      windows.find((w) => w.id === binding.window.id),
+      windows.find((w) => w.id === current.window.id),
       windows,
       records,
-      sessions,
-      await identities(),
+      processes,
     );
-    if (result.error || serviceError) undock(result.error || serviceError);
+    const session = result.record && registeredSession(result.record, sessions);
+    if (
+      result.error ||
+      serviceError ||
+      session?.capture !== 'connected' ||
+      session.id !== binding.session.id
+    )
+      undock(result.error || serviceError || 'This agent is disconnected.');
     else {
-      binding = result;
+      binding = { ...result, session };
       follow();
+      const generation = dockGeneration;
+      try {
+        await placeBehindTerminal();
+      } catch {
+        if (generation === dockGeneration)
+          undock('The desktop could not keep the marker behind the terminal.');
+      }
     }
   }
   busy = false;
@@ -298,6 +424,9 @@ app.whenReady().then(async () => {
   if (!primaryInstance) return;
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
+  candidateWin = createWindow(100, 100);
+  candidateWin.setFocusable(false);
+  candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('move', () => {
     if (!expanded || !seated || dragging) return;
     const panel = panelWin.getBounds();
@@ -325,6 +454,7 @@ app.whenReady().then(async () => {
   });
   handle('quit-ui', [panelWin], () => app.quit());
   handle('begin-drag', [avatarWin], (x, y) => {
+    dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
     dragging = {
@@ -341,17 +471,20 @@ app.whenReady().then(async () => {
   });
   handle('cancel-drag', [avatarWin], () => {
     if (!dragging) return;
+    candidateWin.hide();
     const previous = dragging;
     dragging = null;
     setSeated(previous.seated);
     binding = previous.binding;
     placeAvatar(previous.original.x, previous.original.y);
     sendState();
+    placeBehindTerminal().catch(() => undock('The terminal is unavailable.'));
     if (previous.moved && (previous.seated || previous.binding))
       avatarWin.webContents.send('dock-sound', 'dock');
   });
   handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
+    candidateWin.hide();
     const { held, moved } = dragging;
     dragging = null;
     if (!held && !moved) {
@@ -388,6 +521,7 @@ app.whenReady().then(async () => {
     sendState();
   });
   await Promise.all([
+    candidateWin.loadFile(path.join(__dirname, 'ui/candidate.html')),
     panelWin.loadFile(path.join(__dirname, 'ui/index.html'), { query: { view: 'panel' } }),
     avatarWin.loadFile(path.join(__dirname, 'ui/index.html'), { query: { view: 'avatar' } }),
   ]);
@@ -395,11 +529,24 @@ app.whenReady().then(async () => {
   avatarWin.showInactive();
   await refresh();
   if (process.argv.includes('--expanded')) await setExpanded(true);
+  // A behind-text marker cannot also intercept the terminal's pointer input.
+  // This brings the interactive avatar back even if its panel was collapsed.
+  if (
+    !globalShortcut.register('Control+Alt+V', () => {
+      undock();
+      setExpanded(true).catch((error) => console.error(error.message));
+    })
+  )
+    console.error('Ctrl+Alt+V is unavailable; use Detach in the panel');
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(() => advanceDrag(screen.getCursorScreenPoint()), 32);
   // The opt-in local proof drives the same main/renderer operations, not a mock service.
-  if (process.argv.includes('--proof')) {
-    require('../test/live-proof.cjs')
+  if (process.argv.includes('--proof') || process.argv.includes('--proof-registration')) {
+    require(
+      process.argv.includes('--proof-registration')
+        ? '../test/registration-proof.cjs'
+        : '../test/live-proof.cjs',
+    )
       .run({
         avatarWin,
         panelWin,
@@ -417,14 +564,43 @@ app.whenReady().then(async () => {
           records,
           binding,
           serviceError,
+          dockError,
           expanded,
           seated,
           dragging,
         }),
         stateDir,
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error(error);
+        const file = path.join(
+          stateDir,
+          process.argv.includes('--proof-registration')
+            ? 'registration-proof.json'
+            : 'desktop-refinement-proof.json',
+        );
+        const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
+        await fs.writeFile(
+          file,
+          JSON.stringify(
+            {
+              ...receipt,
+              verdict: 'rework',
+              error: error.message,
+              dockError,
+              gesture: dragging && {
+                start: dragging.start,
+                cursor: screen.getCursorScreenPoint(),
+                held: dragging.held,
+                moved: dragging.moved,
+              },
+              expanded,
+              seated,
+            },
+            null,
+            2,
+          ),
+        );
         process.exitCode = 1;
         app.quit();
       });
@@ -432,6 +608,7 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll();
   clearInterval(timer);
   clearInterval(dragTimer);
 });

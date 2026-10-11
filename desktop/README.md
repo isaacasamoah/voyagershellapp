@@ -19,7 +19,7 @@ npm test
 ```
 
 Build the Rust binaries from the repository root with `cargo build --locked
---bins`, then start the [service and worker](../docs/workers.md). From this
+--bins`, then start the [service](../docs/service.md) with the native endpoint already in use. From this
 directory, in a graphical-session terminal:
 
 ```sh
@@ -34,14 +34,15 @@ If Electron's binary download was skipped during installation, run
 
 ## Source map
 
-| File                             | Owns                                                          |
-| -------------------------------- | ------------------------------------------------------------- |
-| `src/main.cjs`                   | Native windows, gestures, IPC authorization and service calls |
-| `src/binding.cjs`                | Process identity and exact terminal-to-worker matching        |
-| `src/preload.cjs`                | The renderer's small, allowlisted IPC API                     |
-| `src/ui/renderer.js`             | Agent rows, pointer input and local sound cues                |
-| `src/ui/index.html`, `style.css` | The glass interface and accessibility labels                  |
-| `assets/`                        | Astronaut artwork and its attribution                         |
+| File                                     | Owns                                                          |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls |
+| `src/binding.cjs`                        | Process identity and exact terminal-to-session matching       |
+| `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                     |
+| `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                |
+| `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                  |
+| `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target              |
+| `assets/`                                | Astronaut artwork and its attribution                         |
 
 There is no frontend framework or bundler. Main owns the state; the renderer
 receives a display snapshot and sends explicit user actions. Keep filesystem,
@@ -59,14 +60,25 @@ their clicks reach the renderer.
 `test/binding.test.cjs` checks identity mistakes and refusal cases without a
 desktop, model or credentials. `test/live-proof.cjs` is an explicit integration
 check, invoked by `npm run proof`, using an already running service and supported
-worker terminal. It checks the actual X11 window stack as well as the renderer:
+registered native terminal. It checks the actual X11 window stack as well as the renderer:
 injected clicks can pass even when another native window covers the astronaut.
 
 The live proof creates and closes one unrelated shell as a counterexample. It
 does not submit work to a model or inject desktop-wide mouse input. Its receipts
 and screenshots stay in the private service directory. It leaves the panel open
-for a human to check appearance, physical gestures and the sounds.
+and the marker docked for a human to check appearance, physical gestures and sounds.
 
 Keep changes small, explain what was actually observed, and update the user guide
 with behavior changes. Reports of a failed native interaction are useful: include
 the OS, display setup and steps, with private session details removed.
+
+`test/registration-proof.cjs` is the separate opt-in native registration check.
+`npm start -- --proof-registration` requires `VOYAGER_DEMO_THREAD` and an already
+open matching terminal. It registers that session and submits a harmless marker
+request. It proves capture while undocked and identity on rejoin. See the user
+guide before running it; it uses your native model account.
+
+When docked to a terminal, the avatar is non-focusable, ignores mouse events and
+is stacked below the terminal. `voyager-windows behind` can reposition only a
+window belonging to its calling Electron process; it never types into Ghostty.
+The panel's Detach button or Ctrl+Alt+V restores the interactive astronaut.

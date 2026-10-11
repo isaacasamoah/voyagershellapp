@@ -32,10 +32,20 @@ async function directChildren(pid) {
   return [...new Set(children.flat())];
 }
 
-async function identifyTerminal(pid, sessionId, info) {
+// Deliberately support one fixed native resume command. No title, cwd, session
+// picker, --last, extra shell layer, or implicit default daemon is an identity.
+function resumeThread(argv, server) {
+  const args = argv.slice(1);
+  if (args.length !== 4 && args.length !== 5) return null;
+  if (args[0] !== '--remote' || args[1] !== `unix://${server}` || args[2] !== 'resume') return null;
+  if (args.length === 5 && args[4] !== '--no-alt-screen') return null;
+  return /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(args[3]) ? args[3] : null;
+}
+
+async function identifyTerminal(pid, endpoint) {
   const terminal = await processIdentity(pid);
   if (terminal.executable !== '/usr/bin/ghostty') return null;
-  const expectedExecutable = await fs.realpath(info.executable);
+  const matches = [];
   for (const child of await directChildren(pid)) {
     let frontend;
     try {
@@ -43,20 +53,25 @@ async function identifyTerminal(pid, sessionId, info) {
     } catch {
       continue;
     }
-    if (
-      frontend.executable === expectedExecutable &&
-      JSON.stringify(frontend.argv.slice(1)) === JSON.stringify(info.args)
-    ) {
-      return { ...terminal, frontend, sessionId, nativeId: info.native_thread_id };
+    const nativeId = resumeThread(frontend.argv, endpoint.server);
+    if (frontend.executable === endpoint.executable && nativeId) {
+      matches.push({
+        ...terminal,
+        frontend,
+        nativeId,
+        server: endpoint.server,
+        external: endpoint.external,
+      });
     }
   }
-  return null;
+  return matches.length === 1 ? matches[0] : null;
 }
 
-function resolveWindow(window, windows, records, sessions, identities) {
+function resolveWindow(window, windows, records, identities) {
   if (!window?.visible) return { error: 'This terminal is unavailable.' };
-  const record = records.find((r) => r.pid === window.pid);
-  if (!record) return { error: 'Can’t connect to this terminal yet.' };
+  const matches = records.filter((r) => r.pid === window.pid);
+  if (matches.length !== 1) return { error: 'Can’t identify this terminal’s agent.' };
+  const record = matches[0];
   // Even hidden siblings make a process-to-window association ambiguous.
   if (windows.filter((w) => w.pid === record.pid).length !== 1)
     return { error: 'Use a separate terminal window for this agent.' };
@@ -72,12 +87,11 @@ function resolveWindow(window, windows, records, sessions, identities) {
     JSON.stringify(frontend.argv) !== JSON.stringify(record.frontend.argv)
   )
     return { error: 'This terminal has changed. Try docking again.' };
-  const session = sessions.find(
-    (s) => s.id === record.sessionId && s.native_thread_id === record.nativeId,
-  );
-  if (!session || session.capture !== 'connected' || session.worker_state !== 'running')
-    return { error: 'This agent is disconnected.' };
-  return { window, session, record };
+  return { window, record };
+}
+
+function registeredSession(record, sessions) {
+  return sessions.find((s) => s.server === record.server && s.native_thread_id === record.nativeId);
 }
 
 function windowAt(windows, point, excludedPid) {
@@ -94,4 +108,11 @@ function windowAt(windows, point, excludedPid) {
     );
 }
 
-module.exports = { processIdentity, identifyTerminal, resolveWindow, windowAt };
+module.exports = {
+  processIdentity,
+  identifyTerminal,
+  resumeThread,
+  resolveWindow,
+  registeredSession,
+  windowAt,
+};

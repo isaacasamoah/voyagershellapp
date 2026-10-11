@@ -16,6 +16,7 @@ use std::{
 use tungstenite::{Message, WebSocket};
 
 pub struct Codex {
+    pub peer_pid: u32,
     socket: WebSocket<UnixStream>,
     next_id: u64,
     failed: bool,
@@ -25,8 +26,9 @@ pub struct Codex {
 impl Codex {
     pub fn connect(path: &Path) -> Result<Self> {
         let stream = UnixStream::connect(path).context("connect to existing Codex socket")?;
+        let peer = getsockopt(&stream, sockopt::PeerCredentials)?;
         ensure!(
-            getsockopt(&stream, sockopt::PeerCredentials)?.uid() == Uid::effective().as_raw(),
+            peer.uid() == Uid::effective().as_raw(),
             "different-user Codex server"
         );
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -40,6 +42,7 @@ impl Codex {
             .get_mut()
             .set_read_timeout(Some(Duration::from_millis(50)))?;
         let mut this = Self {
+            peer_pid: u32::try_from(peer.pid()).context("invalid native server PID")?,
             socket,
             next_id: 1,
             failed: false,

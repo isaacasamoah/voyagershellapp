@@ -1,11 +1,14 @@
-//! Read-only X11/XWayland window inventory for the bounded desktop experiment.
+//! X11/XWayland inventory and placement of the calling Electron avatar only.
 //! Titles are display labels, never session identities. Native Wayland windows
 //! are intentionally absent; that integration needs a compositor adapter.
-use anyhow::Result;
+use anyhow::{Context, Result, ensure};
 use serde_json::json;
 use x11rb::{
     connection::Connection,
-    protocol::xproto::{AtomEnum, ConnectionExt, MapState},
+    protocol::shape::{ConnectionExt as _, SK},
+    protocol::xproto::{
+        AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, MapState, StackMode,
+    },
 };
 
 fn main() -> Result<()> {
@@ -16,6 +19,46 @@ fn main() -> Result<()> {
     let pid_atom = atom(b"_NET_WM_PID")?;
     let title_atom = atom(b"_NET_WM_NAME")?;
     let utf8 = atom(b"UTF8_STRING")?;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        ensure!(
+            args.len() == 3 && args[0] == "behind",
+            "usage: voyager-windows [behind AVATAR TARGET]"
+        );
+        let avatar: u32 = args[1].parse()?;
+        let target: u32 = args[2].parse()?;
+        ensure!(avatar != target, "avatar and terminal must differ");
+        let owner = conn
+            .get_property(false, avatar, pid_atom, AtomEnum::CARDINAL, 0, 1)?
+            .reply()?;
+        let pid = owner
+            .value32()
+            .and_then(|mut v| v.next())
+            .context("avatar has no owner")?;
+        ensure!(
+            pid == nix::unistd::getppid().as_raw() as u32,
+            "only the calling app's window may be moved"
+        );
+        conn.get_window_attributes(target)?.reply()?;
+        conn.send_event(
+            false,
+            root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            ClientMessageEvent::new(
+                32,
+                avatar,
+                atom(b"_NET_RESTACK_WINDOW")?,
+                [2, target, StackMode::BELOW.into(), 0, 0],
+            ),
+        )?
+        .check()?;
+        conn.flush()?;
+        println!(
+            "{}",
+            json!({"requested":"behind","avatar":avatar,"target":target})
+        );
+        return Ok(());
+    }
     let ids = conn
         .get_property(false, root, stacking, AtomEnum::WINDOW, 0, 4096)?
         .reply()?;
@@ -37,6 +80,20 @@ fn main() -> Result<()> {
             let class = conn
                 .get_property(false, id, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 256)?
                 .reply()?;
+            // Only inspect the caller's input regions. Electron uses a 1x1
+            // region at the transparent corner for ignore-mouse-events on Linux.
+            let input_region = if pid == Some(nix::unistd::getppid().as_raw() as u32) {
+                Some(
+                    conn.shape_get_rectangles(id, SK::INPUT)?
+                        .reply()?
+                        .rectangles
+                        .iter()
+                        .map(|r| json!({"x":r.x,"y":r.y,"width":r.width,"height":r.height}))
+                        .collect::<Vec<_>>(),
+                )
+            } else {
+                None
+            };
             Ok(json!({
                 "id": id,
                 "pid": pid,
@@ -47,6 +104,7 @@ fn main() -> Result<()> {
                 "height": geometry.height,
                 "title": String::from_utf8_lossy(&title.value),
                 "class": String::from_utf8_lossy(&class.value).replace('\0', " "),
+                "input_region": input_region,
             }))
         })();
         if let Ok(window) = window {

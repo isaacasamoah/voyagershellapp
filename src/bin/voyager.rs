@@ -23,7 +23,11 @@ fn main() -> Result<()> {
     };
     let request = match args.as_slice() {
         [op, socket] if op == "serve" => return service::serve(&state, &PathBuf::from(socket)),
-        [op] if ["status", "discover", "list", "stop"].contains(&op.as_str()) => json!({"op":op}),
+        [op] if ["status", "discover", "connection-info", "list", "stop"]
+            .contains(&op.as_str()) =>
+        {
+            json!({"op":op})
+        }
         [op, thread] if op == "register" => json!({"op":op,"thread_id":thread}),
         [op, session, id, message] if op == "send" => {
             json!({"op":op,"session_id":session,"request_id":id,"message":message})
@@ -60,7 +64,7 @@ fn main() -> Result<()> {
         [op, cursor] if op == "watch" => return watch(&state, cursor.parse::<i64>()?, false),
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] COMMAND\n\
-            serve CODEX_SOCKET | status | discover | register THREAD_ID | list\n\
+            serve CODEX_SOCKET | status | discover | connection-info | register THREAD_ID | list\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-worker SESSION_ID"
         ),

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { processIdentity, windowAt } = require('../src/binding.cjs');
+const { processIdentity, registeredSession, windowAt } = require('../src/binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
   avatarWin,
@@ -42,28 +42,33 @@ exports.run = async ({
   for (const selector of ['#quit', '#undock', '.session'])
     assert.equal(await region(panelWin, selector), 'no-drag', `${selector} must remain clickable`);
   receipts.push('Native drag regions exclude the astronaut and panel buttons');
-  const worker = getState().sessions.find(
-    (s) => s.ownership === 'managed' && s.capture === 'connected',
-  );
-  assert(worker, 'A connected real worker is required');
+  const existing = getState().records.find((r) => {
+    const session = registeredSession(r, getState().sessions);
+    return (
+      session?.capture === 'connected' &&
+      getState().windows.some((w) => w.pid === r.pid && w.visible)
+    );
+  });
+  assert(existing, 'Open a registered native terminal before running this proof');
+  const session = registeredSession(existing, getState().sessions);
   const serviceBefore = await rpc('status');
-  const workerBefore = await rpc('attach-info', worker.id);
-  const original = await processIdentity(workerBefore.pid);
-  const existing = getState().records.find(
-    (r) =>
-      r.sessionId === worker.id && getState().windows.some((w) => w.pid === r.pid && w.visible),
-  );
-  assert(existing, 'Open the native worker terminal before running this proof');
+  const nativeBefore =
+    session.ownership === 'managed'
+      ? await rpc('attach-info', session.id)
+      : { pid: existing.frontend.pid };
+  const original = await processIdentity(nativeBefore.pid);
   const opened = {
     terminalPid: existing.pid,
     frontendPid: existing.frontend.pid,
-    sessionId: worker.id,
+    sessionId: session.id,
   };
   await refresh();
   const ours = getState().windows.find((w) => w.pid === opened.terminalPid && w.visible);
   assert(ours, 'The native terminal must be present');
   if (existing)
-    receipts.push('Rediscovered an already-open native worker terminal without a UI launch record');
+    receipts.push(
+      'Rediscovered an already-open native session terminal without a UI launch record',
+    );
   const other = spawn(
     '/usr/bin/ghostty',
     [
@@ -86,7 +91,7 @@ exports.run = async ({
       await delay(250);
       await refresh();
       unrelated = getState().windows.find((w) => w.pid === other.pid && w.visible);
-      if (unrelated) break;
+      if (unrelated?.title === ours.title) break;
     }
     assert(unrelated, 'The unrelated terminal must be visible');
     assert.equal(unrelated.title, ours.title);
@@ -95,20 +100,35 @@ exports.run = async ({
     assert(!panelWin.isVisible(), 'Dropping on an unsupported window must not open the panel');
     assert.equal(await dock(ours.id), true);
     assert(!panelWin.isVisible(), 'Docking the floating astronaut must not open the panel');
-    assert.equal(getState().binding.session.id, worker.id);
+    assert.equal(getState().binding.session.id, session.id);
+    const markerId = avatarWin.getNativeWindowHandle().readUInt32LE();
+    assert.deepEqual(
+      (await inventory()).find((w) => w.id === markerId).input_region,
+      [{ x: 0, y: 0, width: 1, height: 1 }],
+      'Docked marker yields input except its transparent corner pixel',
+    );
     await delay(250);
     assert.equal(
       await avatarWin.webContents.executeJavaScript(
         "getComputedStyle(document.getElementById('avatar')).opacity",
       ),
-      '1',
-      'The docked astronaut keeps its full brightness',
+      '0.3',
+      'Only the terminal marker fades',
     );
-    receipts.push('Exact native worker accepted; unrelated same-title terminal refused');
+    receipts.push('Exact native session accepted; unrelated same-title terminal refused');
   } finally {
     other.kill('SIGTERM');
   }
+  undock();
   await setExpanded(false);
+  const floatingRegion = (await inventory()).find(
+    (w) => w.id === avatarWin.getNativeWindowHandle().readUInt32LE(),
+  ).input_region;
+  assert(
+    floatingRegion.some((r) => r.width > 1 && r.height > 1),
+    'Floating avatar accepts input again',
+  );
+  receipts.push('Native input shape yields the docked artwork and returns for the floating avatar');
   avatarWin.focus();
   await delay(300);
   const pointer = async (type) => {
@@ -145,15 +165,17 @@ exports.run = async ({
   assert.equal(await outline(), 'none', 'A released click must not leave a focus ring');
   receipts.push('Clicks toggled the separate panel without resizing the avatar');
 
+  assert.equal(await dock(ours.id), true);
   await setExpanded(true);
   await delay(100);
+  await avatarWin.webContents.executeJavaScript('window.dockSounds = []');
   const panelBefore = panelWin.getBounds();
   await pointer('mouseDown');
   await delay(450);
   assert.notEqual(await outline(), 'none', 'Holding highlights the astronaut');
   assert(panelWin.isVisible(), 'Holding must leave the panel visible');
   assert(getState().seated, 'Holding alone must not lift the astronaut');
-  assert.equal(getState().binding?.session.id, worker.id);
+  assert.equal(getState().binding?.session.id, session.id);
   await pointer('mouseUp');
   await delay(100);
   assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
@@ -193,7 +215,7 @@ exports.run = async ({
   assert(getState().seated && panelWin.isVisible());
   assert.equal(avatarWin.getParentWindow(), panelWin, 'Escape restores the native parent');
   assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
-  assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
+  assert.equal(getState().binding?.session.id, session.id, 'Escape restores the prior attachment');
   assert.deepEqual(
     await sounds(),
     ['undock', 'dock'],
@@ -301,11 +323,21 @@ exports.run = async ({
     path.join(stateDir, 'desktop-refinement-avatar.png'),
     (await avatarWin.webContents.capturePage()).toPNG(),
   );
-  const after = await rpc('attach-info', worker.id);
-  assert.equal(after.pid, workerBefore.pid);
+  const after =
+    session.ownership === 'managed'
+      ? await rpc('attach-info', session.id)
+      : { pid: existing.frontend.pid };
+  assert.equal(after.pid, nativeBefore.pid);
   assert.equal((await processIdentity(after.pid)).start, original.start);
   assert.equal((await rpc('status')).instance, serviceBefore.instance);
-  receipts.push('Detach preserved the same worker process and service instance');
+  receipts.push('Detach preserved the same native process and service instance');
+  // Leave the real marker behind its terminal, with the panel available to detach.
+  assert.equal(await dock(ours.id), true);
+  await delay(250);
+  await fs.writeFile(
+    path.join(stateDir, 'desktop-docked-avatar.png'),
+    (await avatarWin.webContents.capturePage()).toPNG(),
+  );
   await fs.writeFile(
     file,
     JSON.stringify(
@@ -314,11 +346,11 @@ exports.run = async ({
         receipts,
         rediscovered: Boolean(existing),
         opened,
-        workerPid: after.pid,
-        workerStart: original.start,
+        nativePid: after.pid,
+        nativeStart: original.start,
         limits: [
           'Physical drag, perceived flicker and audible cue still need a human desktop test',
-          'Only dedicated Ghostty XWayland clients of the known worker',
+          'Only dedicated Ghostty XWayland clients of the known session',
           'No arbitrary CLI registration or current-thread switching detection',
         ],
       },
@@ -326,5 +358,5 @@ exports.run = async ({
       2,
     ),
   );
-  console.log('Refinement proof saved. Panel left open; unrelated test shell closed.');
+  console.log('Refinement proof saved. Marker docked and panel open; unrelated test shell closed.');
 };

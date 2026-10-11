@@ -37,7 +37,11 @@ api.onState((value) => {
   document.body.dataset.seated = String(value.seated);
   document.body.dataset.connected = String(!value.serviceError);
   $('avatar').setAttribute('aria-expanded', String(value.expanded));
-  $('avatar').dataset.state = value.dragging ? 'moving' : value.docked ? 'docked' : 'floating';
+  $('avatar').dataset.state = value.dragging
+    ? 'moving'
+    : value.docked && !value.seated
+      ? 'docked'
+      : 'floating';
   $('connection').textContent = value.serviceError ? 'Offline' : 'Online';
   $('avatar').title = value.platformError || value.dockError || '';
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));

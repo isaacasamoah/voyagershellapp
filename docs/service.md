@@ -45,6 +45,7 @@ The message goes to the existing agent. No model, instructions, credentials or p
 | Command | Result |
 | --- | --- |
 | `status` | Service instance, connection/capture count and whether it currently owns a worker |
+| `connection-info` | Connected native server identity and configured native executable; no subscription |
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
 | `list` | Saved registrations, ownership and whether capture is currently connected |

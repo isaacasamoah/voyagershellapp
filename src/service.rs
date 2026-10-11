@@ -208,6 +208,20 @@ impl Runtime {
                 }
                 json!(threads)
             }
+            "connection-info" => {
+                // Metadata only: discoverability never subscribes a thread or imports history.
+                let pid = self.codex()?.peer_pid;
+                let executable = if self.executable.contains('/') {
+                    fs::canonicalize(&self.executable)?
+                } else {
+                    std::env::split_paths(&std::env::var_os("PATH").context("PATH is missing")?)
+                        .map(|dir| dir.join(&self.executable))
+                        .find(|path| path.is_file())
+                        .context("native Codex executable is unavailable")?
+                        .canonicalize()?
+                };
+                json!({"server":self.server,"pid":pid,"executable":executable})
+            }
             "list" => {
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {

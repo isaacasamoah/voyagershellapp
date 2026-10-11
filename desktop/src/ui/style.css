@@ -224,3 +224,11 @@ body[data-dock-error='true'] #indicator {
     animation: none;
   }
 }
+
+/* Only the terminal marker recedes; panel and floating avatar stay bright. */
+.avatar[data-state='docked'] {
+  opacity: 0.3;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}

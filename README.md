@@ -15,9 +15,10 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 - The Electron prototype shows a glass astronaut and a small panel of project
   names and connection dots. Click to toggle the panel, drag its background to
   move it, or pull the astronaut away and return it with paired sound cues.
-- The desktop recognises dedicated Ghostty XWayland windows of an already
-  registered worker by process and session identity. It can join that worker;
-  dropping onto an arbitrary terminal does not yet register an agent.
+- Dropping the astronaut onto a supported Ghostty XWayland Codex client now
+  registers its fixed native conversation, or rejoins its existing registration.
+  Discovery alone does not start recording. The terminal marker fades behind a
+  translucent terminal and leaves terminal input untouched.
 
 Start with [running the service](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
@@ -62,8 +63,9 @@ npm test
 ```
 
 These desktop checks do not open windows or call a model. The separate
-[live desktop proof](docs/desktop.md#limits-and-proof) uses a running service and
-an existing supported worker terminal. It deliberately opens windows; do not
+[live desktop proof](docs/desktop.md#checks-and-evidence) uses a running service and
+an existing supported terminal. The registration proof makes a small, explicit
+model request; the UI regression proof does not. Both open windows; do not
 confuse its programmatic checks with a human testing the gestures.
 
 ## Find your way around
@@ -71,7 +73,7 @@ confuse its programmatic checks with a human testing the gestures.
 | Directory         | Responsibility                                                   |
 | ----------------- | ---------------------------------------------------------------- |
 | `src/`            | Rust service, capture, persistence, worker ownership and CLI     |
-| `src/bin/`        | Service CLI entry point and read-only X11 window inventory       |
+| `src/bin/`        | Service CLI entry point and X11 inventory and placement of the calling avatar       |
 | `tests/`          | Disposable service tests and independent Python process fixtures |
 | `desktop/src/`    | Electron main process, window binding and narrow preload API     |
 | `desktop/src/ui/` | Local HTML, CSS and browser-side interface code                  |
@@ -85,11 +87,16 @@ used for those fixtures, not the Rust service runtime.
 
 ## Next experiment
 
-Connect the actual avatar drop to registering or joining a supported native
-session through the Rust service. First prove one exact window-to-session match,
-then capture a conversation, detach the interface, and rejoin the same session.
-Refuse an unrelated or ambiguous terminal. Registration must not pretend to take
-ownership of an externally launched agent. Event-to-knowledge extraction follows
-as a separate increment.
+Physically try the drop, typing/selection, detach and rejoin on Fedora. The native
+registration check has observed real user/assistant events, the same registration
+on rejoin and refusal of an unrelated same-title terminal. Physical gesture feel,
+terminal transparency and sound remain a human check.
+
+Then use the registered agent to launch one worker, open its native terminal,
+and move the bridge between them. In the latest native lead test, the harness
+sandbox denied access to Voyager's local socket and no worker was started.
+That path needs an approved harness tool connection; docking grants no extra
+permissions. Multiple simultaneous workers, a general
+current-thread signal and knowledge extraction remain later increments.
 
 Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.
