@@ -6,6 +6,11 @@ interface. Docking registers an identified session or rejoins its registration;
 undocking disconnects the interface. Neither undocking nor quitting Electron
 stops capture or a service-owned worker.
 
+Open [the self-contained walkthrough](walkthrough.html) in a browser for a
+six-step diagram and linked code: start Voyager, open a native terminal, dock,
+launch a worker, detach, and switch agents. It is an explanatory guide, not a
+live monitor or an app launcher; its buttons only change the diagram.
+
 ## Appearance and gestures
 
 The floating 104 px astronaut has no text or square shadow. A click opens the
