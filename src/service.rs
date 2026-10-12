@@ -411,8 +411,14 @@ impl Runtime {
                 let session = string(&request, "session_id")?;
                 for (id, child) in &mut self.terminals {
                     if id == session && child.try_wait()?.is_none() {
+                        let window = terminal::focus(child.id())?;
+                        self.store.local(
+                            session,
+                            "interface.focus_requested",
+                            json!({"terminal":"ghostty","pid":child.id(),"window_id":window}),
+                        )?;
                         return Ok((
-                            json!({"session_id":session,"pid":child.id(),"state":"already_open"}),
+                            json!({"session_id":session,"pid":child.id(),"window_id":window,"state":"focus_requested"}),
                             false,
                         ));
                     }

@@ -91,9 +91,7 @@ api.onState((value) => {
           open.disabled = true;
           try {
             const result = await api.openInstance(s.id);
-            showError(
-              result?.state === 'already_open' ? 'Already open on your desktop.' : result?.error,
-            );
+            showError(result?.error);
           } catch (error) {
             showError(error.message);
           } finally {

@@ -73,3 +73,18 @@ opaque-terminal interaction was user-tested; this new combined journey still
 needs that check. Other terminals, shell customizations, macOS, native Wayland,
 arbitrary CLI discovery, voice handoff and service crash/reboot recovery remain
 outside the demonstrated boundary.
+
+## Follow-up — bring an existing terminal forward
+
+The panel arrow now calls the same `open` operation for both reopening and
+activation. With two real managed Bash/Ghostty windows on Fedora, window B was
+made active first, then `open` for A changed the window manager's active-window
+property to A. Window IDs, shell PID, registration count and control state did
+not change; no duplicate client or runtime was created. A stopped instance's
+open was refused. This exercises the real backend/desktop operation. The panel's
+arrow wiring is unchanged apart from removing its old “already open” message;
+Isaac's click on the new build remains a separate user check.
+
+The isolated service and both test terminals were explicitly stopped afterward.
+The current voice-test service was not restarted or upgraded. Formatting, the
+12 service tests, 8 process cases, strict Clippy and 8 Electron tests pass.

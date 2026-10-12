@@ -8,7 +8,8 @@ prompt, manually copied conversation ID or dock step is required for creation.
 Dock the astronaut onto that window to select the human command surface.
 Undock to release that selection. Neither operation starts or stops the instance.
 Click **↗** beside a running instance to reopen its native interface after closing
-it. If its launched window is still alive, Voyager reports that it is already open.
+it. If its launched window is still alive, the same operation asks the desktop
+to bring that exact window forward. It does not start another instance or dock it.
 
 This increment supports Codex 0.162.1 and a managed Bash in separate Ghostty
 XWayland windows on Linux. There is one native viewer per shell. Claude, Ptyxis,
@@ -33,6 +34,22 @@ starts one with its own process session and private log. Closing Electron leaves
 the service and instances running. The default state is
 `$HOME/.local/share/voyagershell`; set `VOYAGER_STATE` to use a different private
 directory. This is not an OS service installer or crash/reboot supervisor.
+
+## Current command boundaries
+
+| Operation | Runtime/task effect | Window/control effect |
+| --- | --- | --- |
+| `create` | Creates and registers Codex or Bash, with capture; no initial agent task | No window or dock by itself; the panel then calls `open` |
+| `launch` | Creates a Codex worker with a parent and submits its initial task | Runs in the background; no automatic terminal window |
+| `open` | Keeps the existing runtime and conversation | Opens its native client, or brings the existing client forward; does not dock |
+| `send` | Submits a turn to an existing idle Codex instance | Does not open or dock |
+| `dock` / `undock` | Keeps runtime and capture alive | Acquires/releases the current human control attachment |
+| `stop-instance` | Explicitly stops an owned runtime | This is different from closing its terminal window |
+
+The panel and agents call these same service operations. `launch` acceptance is
+not task completion. To launch work **and** show it, call `launch`, inspect the
+receipt, then `open` using the returned session ID. A fuller CLI design review is
+queued; these are the implemented boundaries, not a proposed rename.
 
 ## The same operations from an agent or script
 
@@ -61,8 +78,9 @@ inputs fail. Unknown delivery is never silently retried with a new ID. The form
 also keeps its creation ID when opening fails, so retry opens the existing
 instance. An invalid folder fails without registration.
 
-`open` reports `opening` after spawning a native client, not after proving a
-usable window. Opening failure does not delete the instance. Native window
+`open` reports `opening` after spawning a native client, or `focus_requested`
+after asking the window manager to activate its existing window. Acknowledgement
+is not proof of a usable or focused window. Opening failure does not delete the instance. Native window
 readiness remains a desktop observation; the prototype has no complete
 compositor launch-failure protocol.
 
@@ -152,3 +170,14 @@ Service tests exercise real PTYs and disposable protocol fixtures: multiple
 owned runtimes, shared shell state, busy/input refusal, viewer close/reopen,
 explicit stop, idempotency, missing executables and migration. Fixtures do not
 establish native desktop behavior. Run [the standard checks](../CONTRIBUTING.md).
+
+### Bringing an existing window forward
+
+The service retains the exact terminal `Child` returned by its launcher. `open`
+checks that child is still alive, identifies its single X11 window by PID, and
+requests activation with the window manager. It never selects a window by title.
+Missing or ambiguous windows produce an error; no duplicate terminal is launched
+as a fallback. The service records `interface.focus_requested`, and control
+ownership is unchanged. This uses the desktop's
+[EWMH activation request](https://specifications.freedesktop.org/wm/latest-single/);
+window-manager focus policy still applies. Native Wayland needs its own adapter.

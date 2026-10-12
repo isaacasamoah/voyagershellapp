@@ -27,7 +27,8 @@ VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start
 ```
 
 The directory is created privately if absent. Use the panel’s **+** to create a
-Codex instance or managed Bash and **↗** to reopen its native interface. `npm start -- --expanded` opens the
+Codex instance or managed Bash and **↗** to reopen its native interface or bring
+its existing window forward. `npm start -- --expanded` opens the
 panel immediately. Quit and restart Electron to pick up changes to the main
 process or preload. The service and its workers keep running independently.
 If Electron's binary download was skipped during installation, run

@@ -108,5 +108,5 @@ a human test. Two terminal views of one conversation prove client distinction,
 not two independent agent tasks.
 
 Support remains Fedora/XWayland, dedicated Ghostty clients and the fixed Codex
-binding. Plain shells, tabs, other terminals, native Wayland and macOS have no
-new support from this increment.
+binding. Managed Bash is supported through the instance-creation flow. Independently
+opened shells, tabs, other terminals, native Wayland and macOS remain unproved.
