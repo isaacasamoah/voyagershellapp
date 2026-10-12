@@ -177,7 +177,7 @@ impl Drop for Fixture {
                     if session["ownership"] == "managed" && session["worker_state"] == "running" {
                         let _ = client(
                             &self.dir,
-                            json!({"op":"stop-worker","session_id":session["id"]}),
+                            json!({"op":"stop-instance","session_id":session["id"]}),
                         );
                     }
                 }
@@ -343,7 +343,8 @@ fn named_instance_starts_without_parent_prompt_or_external_server() {
     wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
     assert_eq!(f.call(json!({"op":"status"}))["capturing"], 0);
     assert_eq!(f.call(json!({"op":"list"})), json!([]));
-    let create = json!({"op":"create","request_id":"named-1","name":"My agent","cwd":f.dir});
+    let create =
+        json!({"op":"create","kind":"codex","request_id":"named-1","name":"My agent","cwd":f.dir});
     let mut invalid = create.clone();
     invalid["cwd"] = json!(f.dir.join("not-a-directory"));
     assert!(client(&f.dir, invalid).is_err());
@@ -389,7 +390,7 @@ fn named_instance_starts_without_parent_prompt_or_external_server() {
             .any(|e| e["type"] == "turn.completed")
     });
     assert!(client(&f.dir, json!({"op":"stop"})).is_err());
-    f.call(json!({"op":"stop-worker","session_id":session}));
+    f.call(json!({"op":"stop-instance","session_id":session}));
     assert_eq!(f.call(create)["state"], "stopped");
     f.halt();
 }
@@ -407,7 +408,7 @@ fn missing_native_executable_leaves_failed_creation_without_registration() {
             .unwrap(),
     );
     wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
-    let create = json!({"op":"create","request_id":"unavailable","name":"My agent","cwd":f.dir});
+    let create = json!({"op":"create","kind":"codex","request_id":"unavailable","name":"My agent","cwd":f.dir});
     assert!(client(&f.dir, create.clone()).is_err());
     let failed = f.call(create);
     assert_eq!(failed["state"], "failed");
@@ -504,9 +505,17 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     let session = receipt["session_id"].clone();
     assert_eq!(f.call(launch)["pid"], receipt["pid"]);
     assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"changed"})).is_err());
-    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"worker-2","cwd":f.dir,"prompt":"second"})).is_err());
+    let second = f.call(json!({"op":"launch","parent_id":parent,"request_id":"worker-2","cwd":f.dir,"prompt":"second"}));
+    assert_ne!(second["session_id"], session);
+    assert_ne!(second["pid"], receipt["pid"]);
+    f.call(json!({"op":"stop-instance","session_id":second["session_id"]}));
+    assert!(
+        f.call(json!({"op":"status"}))["owns_agents"]
+            .as_bool()
+            .unwrap()
+    );
     assert!(client(&f.dir, json!({"op":"stop"})).is_err());
-    assert!(client(&f.dir, json!({"op":"stop-worker","session_id":parent})).is_err());
+    assert!(client(&f.dir, json!({"op":"stop-instance","session_id":parent})).is_err());
     let info = f.call(json!({"op":"attach-info","session_id":session}));
     assert_eq!(info["pid"], receipt["pid"]);
     // Remote Codex resume rejects permission overrides. The client inherits
@@ -560,7 +569,7 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     // Known-different arm: explicit stop during a second turn ends the owned server.
     f.call(json!({"op":"send","session_id":session,"request_id":"second-turn","message":"still working"}));
     assert_eq!(
-        f.call(json!({"op":"stop-worker","session_id":session}))["state"],
+        f.call(json!({"op":"stop-instance","session_id":session}))["state"],
         "stopped"
     );
     assert!(reconnected.metadata("worker-thread").is_err());
@@ -803,4 +812,113 @@ fn closing_terminal_releases_control_without_stopping_external_server() {
             .iter()
             .any(|e| e["payload"]["reason"] == "terminal_closed")
     );
+}
+
+#[test]
+fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
+    let mut f = Fixture::new();
+    f.start();
+    let create =
+        json!({"op":"create","kind":"shell","request_id":"shell-1","name":"Workbench","cwd":f.dir});
+    let receipt = f.call(create.clone());
+    let session = &receipt["session_id"];
+    assert_eq!(f.call(create), receipt);
+    let info = f.call(json!({"op":"attach-info","session_id":session}));
+    let mut terminal = UnixStream::connect(info["socket"].as_str().unwrap()).unwrap();
+    let ready = || f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true;
+    wait(ready);
+    // Human input goes to the PTY. It isn't interpreted by a second shell.
+    let command = b"export SHARED_PROOF=from_human; mkdir child; cd child\n";
+    writeln!(terminal, "{}", json!({"input":command.to_vec()})).unwrap();
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "shell.completed")
+    });
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"verify","command":"printf '%s %s\\n' \"$SHARED_PROOF\" \"$PWD\""}));
+    wait(ready);
+    let output = f.call(json!({"op":"shell-read","session_id":session}));
+    assert!(
+        output["text"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("from_human {}/child", f.dir.display()))
+    );
+    // A person has started a line: tool submission must not append to it.
+    writeln!(terminal, "{}", json!({"input":b"echo unfinished".to_vec()})).unwrap();
+    wait(|| !ready());
+    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"must-refuse","command":"touch should-not-exist"})).is_err());
+    writeln!(terminal, "{}", json!({"input":vec![3u8]})).unwrap();
+    wait(ready);
+    let delayed = json!({"op":"shell-exec","session_id":session,"request_id":"delayed","command":"sleep 0.3; printf survived > proof.txt"});
+    let accepted = f.call(delayed.clone());
+    assert_eq!(f.call(delayed), accepted); // Never replay the same command.
+    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"busy","command":"echo wrong"})).is_err());
+    drop(terminal);
+    wait(|| f.dir.join("child/proof.txt").exists());
+    wait(ready);
+    assert_eq!(
+        fs::read_to_string(f.dir.join("child/proof.txt")).unwrap(),
+        "survived"
+    );
+    assert!(!f.dir.join("child/should-not-exist").exists());
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        receipt["pid"]
+    );
+    let mut again = UnixStream::connect(info["socket"].as_str().unwrap()).unwrap();
+    again
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut response = String::new();
+    BufReader::new(&mut again).read_line(&mut response).unwrap();
+    assert!(serde_json::from_str::<Value>(&response).unwrap()["output"].is_array());
+    let events = f.events();
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "shell.command"
+                && e["payload"]["actor"] == "human"
+                && e["capture_policy"] == "shell-commands-v1")
+    );
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "shell.completed"
+                && e["payload"]["command_id"] == "verify"
+                && e["payload"]["exit_code"] == 0)
+    );
+    // Typeahead while busy stays protected after the running command completes.
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"typeahead","command":"sleep 0.2"}));
+    writeln!(again, "{}", json!({"input":b"echo still editing".to_vec()})).unwrap();
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "shell.completed" && e["payload"]["command_id"] == "typeahead")
+    });
+    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"typeahead-refused","command":"echo wrong"})).is_err());
+    writeln!(again, "{}", json!({"input":vec![3u8]})).unwrap();
+    wait(ready);
+    // Explicit stop cancels a live foreground job, unlike closing its client.
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"sleep 0.3; touch should-not-complete"}));
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "shell.command" && e["payload"]["command_id"] == "stop-live")
+    });
+    f.call(json!({"op":"stop-instance","session_id":session}));
+    thread::sleep(Duration::from_millis(350));
+    assert!(!f.dir.join("child/should-not-complete").exists());
+    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})).is_err());
+    f.halt();
 }

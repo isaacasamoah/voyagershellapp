@@ -5,6 +5,7 @@ document.body.dataset.view = view;
 let pointer = false;
 let audio;
 let lastRows;
+let creating = false;
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -55,6 +56,7 @@ api.onState((value) => {
         : '');
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
+  if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
   if (rows === lastRows) return;
   lastRows = rows;
@@ -63,7 +65,7 @@ api.onState((value) => {
       const b = element('button', '', 'session');
       b.dataset.key = s.id;
       b.setAttribute('aria-pressed', String(s.id === value.selected));
-      const name = s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
+      const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
       const status =
         value.serviceError || s.worker_state === 'unknown'
           ? 'Unknown'
@@ -79,11 +81,31 @@ api.onState((value) => {
       b.append(element('span', name, 'session-name'), dot);
       b.dataset.connected = String(status === 'Connected');
       b.onclick = () => api.select(s.id);
-      return b;
+      const row = element('div', '', 'instance-row');
+      row.append(b);
+      if (s.ownership === 'managed' && s.worker_state === 'running') {
+        const open = element('button', '↗', 'open-instance');
+        open.setAttribute('aria-label', `Open ${name}`);
+        open.title = `Open ${name}`;
+        open.onclick = async () => {
+          open.disabled = true;
+          try {
+            const result = await api.openInstance(s.id);
+            showError(
+              result?.state === 'already_open' ? 'Already open on your desktop.' : result?.error,
+            );
+          } catch (error) {
+            showError(error.message);
+          } finally {
+            open.disabled = false;
+          }
+        };
+        row.append(open);
+      }
+      return row;
     }),
   );
-  if (!value.sessions.length)
-    $('sessions').append(element('p', 'No agents connected yet.', 'empty'));
+  if (!value.sessions.length) $('sessions').append(element('p', 'No instances yet.', 'empty'));
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });
@@ -127,3 +149,46 @@ $('avatar').addEventListener('keydown', (event) => {
 });
 $('quit').onclick = () => api.quit();
 api.ready();
+
+function showError(message) {
+  $('instance-error').textContent = message || '';
+  $('instance-error').hidden = !message;
+}
+function showCreate(open) {
+  if (creating) return;
+  $('create-form').hidden = !open;
+  $('add').setAttribute('aria-expanded', String(open));
+  api.createForm(open);
+  showError('');
+  if (open) $('instance-name').focus();
+}
+$('add').onclick = () => showCreate($('create-form').hidden);
+$('cancel-create').onclick = () => showCreate(false);
+$('choose-folder').onclick = async () => {
+  const path = await api.chooseDirectory();
+  if (typeof path === 'string') $('instance-cwd').value = path;
+};
+$('create-form').onsubmit = async (event) => {
+  event.preventDefault();
+  if (creating) return;
+  creating = true;
+  for (const input of $('create-form').elements) input.disabled = true;
+  $('create').textContent = 'Opening…';
+  try {
+    const result = await api.createInstance({
+      kind: $('instance-kind').value,
+      name: $('instance-name').value.trim(),
+      cwd: $('instance-cwd').value,
+    });
+    if (result?.error) throw Error(result.error);
+    creating = false;
+    showCreate(false);
+    $('instance-name').value = '';
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    creating = false;
+    for (const input of $('create-form').elements) input.disabled = false;
+    $('create').textContent = 'Create and open';
+  }
+};

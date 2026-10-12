@@ -29,14 +29,18 @@ fn main() -> Result<()> {
         None
     };
     if control.is_some()
-        && !args
-            .first()
-            .is_some_and(|op| ["send", "launch", "stop-worker"].contains(&op.as_str()))
+        && !args.first().is_some_and(|op| {
+            ["send", "launch", "stop-instance", "shell-exec"].contains(&op.as_str())
+        })
     {
-        bail!("--control is only supported by send, launch and stop-worker");
+        bail!("--control is only supported by send, launch, shell-exec and stop-instance");
     }
     let mut request = match args.as_slice() {
         [op] if op == "serve" => return service::serve(&state, None),
+        [op] if op == "start" => {
+            println!("{}", service::start(&state)?);
+            return Ok(());
+        }
         [op, socket] if op == "serve" => {
             return service::serve(&state, Some(&PathBuf::from(socket)));
         }
@@ -53,16 +57,27 @@ fn main() -> Result<()> {
         [op, parent, id, cwd, prompt] if op == "launch" => {
             json!({"op":op,"parent_id":parent,"request_id":id,"cwd":cwd,"prompt":prompt})
         }
-        [op, id, name, cwd] if op == "create" => {
-            json!({"op":op,"request_id":id,"name":name,"cwd":cwd})
+        [op, kind, id, name, cwd] if op == "create" => {
+            json!({"op":op,"kind":kind,"request_id":id,"name":name,"cwd":cwd})
+        }
+        [op, session, id, command] if op == "shell-exec" => {
+            json!({"op":op,"session_id":session,"request_id":id,"command":command})
+        }
+        [op, session] if op == "shell-read" => json!({"op":op,"session_id":session,"after":0}),
+        [op, session, after] if op == "shell-read" => {
+            json!({"op":op,"session_id":session,"after":after.parse::<u64>()?})
+        }
+        [op, session] if op == "shell-attach" => {
+            let info = service::client(&state, json!({"op":"attach-info","session_id":session}))?;
+            let socket = info["socket"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("not a shell"))?;
+            return voyager_shell::shell_transport::attach(std::path::Path::new(socket));
         }
         [op, session, terminal] if op == "open" => {
             json!({"op":op,"session_id":session,"terminal":terminal})
         }
-        [op, cwd, terminal] if op == "open-shell" => {
-            json!({"op":op,"cwd":cwd,"terminal":terminal})
-        }
-        [op, session] if op == "stop-worker" || op == "attach-info" => {
+        [op, session] if op == "stop-instance" || op == "attach-info" => {
             json!({"op":op,"session_id":session})
         }
         [op, session] if op == "attach" => {
@@ -91,11 +106,12 @@ fn main() -> Result<()> {
         [op, cursor] if op == "watch" => return watch(&state, cursor.parse::<i64>()?, false),
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
-            serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
-            create REQUEST_ID NAME CWD | open SESSION_ID ghostty | open-shell CWD ghostty\n\
+            start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
+            create codex|shell REQUEST_ID NAME CWD | open SESSION_ID ghostty\n\
+            shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
-            launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-worker SESSION_ID\n\
-            undock GENERATION (--control is supported by send, launch and stop-worker)"
+            launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID\n\
+            undock GENERATION (--control is supported by send, launch, shell-exec and stop-instance)"
         ),
     };
     if let Some(generation) = control {

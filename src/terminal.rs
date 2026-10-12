@@ -21,7 +21,7 @@ fn ghostty(cwd: &Path, title: &str) -> Command {
     command
 }
 
-pub fn open_agent(info: &Value, session: &Value) -> Result<Child> {
+pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
     let cwd = session["cwd"]
         .as_str()
         .context("missing instance directory")?;
@@ -41,12 +41,4 @@ pub fn open_agent(info: &Value, session: &Value) -> Result<Child> {
         .args(args)
         .spawn()
         .context("open native Ghostty client")
-}
-
-pub fn open_shell(cwd: &Path) -> Result<Child> {
-    // Ghostty starts the person's normal shell; no injected command, registration
-    // or capture. This opening check does not claim managed-shell persistence.
-    ghostty(cwd, "Voyager shell experiment")
-        .spawn()
-        .context("open bare Ghostty terminal")
 }

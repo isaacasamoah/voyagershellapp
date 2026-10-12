@@ -40,7 +40,7 @@ impl Codex {
         });
         socket
             .get_mut()
-            .set_read_timeout(Some(Duration::from_millis(50)))?;
+            .set_read_timeout(Some(Duration::from_millis(2)))?;
         let mut this = Self {
             peer_pid: u32::try_from(peer.pid()).context("invalid native server PID")?,
             socket,

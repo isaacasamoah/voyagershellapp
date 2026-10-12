@@ -53,7 +53,12 @@ async function identifyTerminal(pid, endpoint) {
     } catch {
       continue;
     }
-    const nativeId = resumeThread(frontend.argv, endpoint.server);
+    const nativeId =
+      endpoint.kind === 'shell'
+        ? JSON.stringify(frontend.argv.slice(1)) === JSON.stringify(endpoint.args)
+          ? endpoint.nativeId
+          : null
+        : resumeThread(frontend.argv, endpoint.server);
     if (frontend.executable === endpoint.executable && nativeId) {
       matches.push({
         ...terminal,

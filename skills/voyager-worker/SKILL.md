@@ -36,7 +36,7 @@ parent. Pass the values as separate arguments:
   launch "$PARENT_SESSION" "$REQUEST_ID" "$WORKER_CWD" "$TASK"
 ```
 
-The current service supports one live worker and requests YOLO at worker
+The service supports several managed instances and requests YOLO at worker
 creation. It includes the initial task so the native conversation can be resumed.
 Do not stop an existing worker to free capacity without the user's instruction.
 
@@ -64,11 +64,10 @@ For the currently supported desktop binding, use a dedicated Ghostty XWayland
 window from an available graphical environment:
 
 ```sh
-GDK_BACKEND=x11 ghostty --gtk-single-instance=false --title="Voyager worker" \
-  -e "$VOYAGER_BIN" --state "$VOYAGER_STATE" attach "$WORKER_SESSION"
+"$VOYAGER_BIN" --state "$VOYAGER_STATE" open "$WORKER_SESSION" ghostty
 ```
 
-Launch the window independently of the tool call. If a graphical environment is
+The service owns the launch through the same backend operation as the panel. If a graphical environment is
 unavailable, report that the worker exists and provide the attach command for
 the user to run. Do not open a duplicate window on retry. Verify the visible
 window or ask the user to confirm it; a process launch is not visual proof.
@@ -76,5 +75,5 @@ Leave docking and control transfer to the user.
 
 Report the worker, submission/outcome, and terminal state separately. Undocking
 or closing the terminal leaves the service-owned worker running. Stopping it is
-a separate explicit `stop-worker WORKER_SESSION` action. This does not promise
+a separate explicit `stop-instance WORKER_SESSION` action. This does not promise
 survival of a service crash or reboot.

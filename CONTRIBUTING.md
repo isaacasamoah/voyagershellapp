@@ -16,7 +16,7 @@ Areas we want to learn about:
 
 We learn from other projects and credit the specific ideas. Do not upload third-party proprietary code, private traces or material you cannot share. Contributions are under the repository's MIT license.
 
-For Rust changes, run `cargo fmt --check`, `cargo test --locked`, and `cargo clippy --locked --all-targets -- -D warnings`. The current test suite is Linux-only and needs Python 3 for disposable process fixtures. Explain the limit of a fixture result; it does not replace trying the real native harness.
+For Rust changes, run `cargo fmt --check`, `cargo test --locked`, and `cargo clippy --locked --all-targets -- -D warnings`. The current test suite is Linux-only and needs Python 3.11+ for disposable process fixtures. Explain the limit of a fixture result; it does not replace trying the real native harness.
 
 ## Small, readable Rust
 

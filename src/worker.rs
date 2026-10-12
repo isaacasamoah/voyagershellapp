@@ -68,6 +68,9 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
+        // Codex may use core-only tool environments. Pass these two connection
+        // values through its explicit tool policy; server inheritance is not enough.
+        let binary = std::env::current_exe()?;
         let child = Command::new(executable)
             .args([
                 "app-server",
@@ -78,6 +81,16 @@ impl Worker {
                 "--listen",
                 &format!("unix://{}", socket.display()),
             ])
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_STATE={}",
+                json!(state)
+            ))
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_BIN={}",
+                json!(binary)
+            ))
             .current_dir(cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -100,7 +113,7 @@ impl Worker {
         // their existing permissions. Authentication and model remain native.
         let reply = connection.rpc(
             "thread/start",
-            json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy"}),
+            json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}),
         )?;
         let metadata = &reply["thread"];
         let native = metadata["id"]

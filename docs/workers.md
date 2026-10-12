@@ -1,6 +1,6 @@
-# One worker, its own native terminal
+# Workers and their native terminals
 
-This increment adds one service-owned Codex app server. Your existing registered lead can call Voyager's CLI to launch it, submit a task and read its events. A separate terminal runs Codex's own interface as a client of that server. Closing the terminal leaves Voyager and the worker server running.
+Each worker has its own service-owned Codex app server. Your existing registered lead can call Voyager's CLI to launch it, submit a task and read its events. A separate terminal runs Codex's own interface as a client of that server. Closing the terminal leaves Voyager and the worker server running.
 
 This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/docs/cli/reference) over a private Unix socket. It does not implement a terminal emulator, adopt an existing CLI process, relay PTY output or depend on Herdr/tmux. Other harnesses need their own integration and proof.
 
@@ -63,14 +63,14 @@ target/debug/voyager --state "$VOYAGER_STATE" watch --pretty
 target/debug/voyager --state "$VOYAGER_STATE" send WORKER_SESSION task-002 "Your next task"
 ```
 
-Repeated launch IDs with identical inputs return the stored launch; changed inputs conflict. A second live worker is refused in this increment. Closing a viewer never issues stop. To end the worker explicitly:
+Repeated launch IDs with identical inputs return the stored launch; changed inputs conflict. Several managed workers and shells may run together. Closing a viewer never issues stop. To end the worker explicitly:
 
 ```sh
-target/debug/voyager --state "$VOYAGER_STATE" stop-worker WORKER_SESSION
+target/debug/voyager --state "$VOYAGER_STATE" stop-instance WORKER_SESSION
 target/debug/voyager --state "$VOYAGER_STATE" stop
 ```
 
-`stop-worker` terminates the process group Voyager created for that worker server. It is not a task-cancellation acknowledgement: unfinished task outcomes remain uncertain without native evidence. Cleanup of commands that independently escape that process group is not proved. Ordinary `stop` refuses while the owned server is alive, even if it is idle. External sessions are never valid `stop-worker` targets.
+`stop-instance` terminates the process group Voyager created for that worker server. It is not a task-cancellation acknowledgement: unfinished task outcomes remain uncertain without native evidence. Cleanup of commands that independently escape that process group is not proved. Ordinary `stop` refuses while the owned server is alive, even if it is idle. External sessions are never valid `stop-instance` targets.
 
 ## Worker skill
 
@@ -119,7 +119,7 @@ attachment response alone proves the policy of the next terminal-entered turn.
 
 Voyager retains the child process, observer connection and native thread identity while terminal clients come and go. Parent/session/request/turn IDs link the resulting records. The initial capture policy remains unchanged: text and lifecycle metadata, not tool arguments/results or terminal bytes. The native UI can display its own richer history independently of Voyager's capture policy.
 
-A normal service error runs owned-child cleanup; abrupt termination can leave a worker unobserved. On service restart, previous starting/running launches become `unknown`; the service does not trust saved PIDs, kill possible replacements, replay prompts or silently restore ownership. Unknown launches block further launches until explicitly investigated. Automatic recovery, retention pruning, concurrent worker fleets and a complete task result/cancellation API remain later increments. Socket directories and private records persist until explicitly removed after shutdown. There is no OS service installer yet.
+A normal service error runs owned-child cleanup; abrupt termination can leave a worker unobserved. On service restart, previous starting/running launches become `unknown`; the service does not trust saved PIDs, kill possible replacements, replay prompts or silently restore ownership. Unknown launches block further launches until explicitly investigated. Automatic recovery, retention pruning, scheduling and a complete task result/cancellation API remain later increments. Socket directories and private records persist until explicitly removed after shutdown. There is no OS service installer yet.
 
 ## Measured on 9 October 2026
 
@@ -133,7 +133,7 @@ On Fedora 43 and Codex 0.162.0:
 
 The native shell printed an existing startup warning about a read-only shell-environment directory; inspection of its expanded transcript showed the delayed command's marker and successful completion. No shell profile or permission setting was changed to suppress that warning.
 
-The disposable worker test provides the known-different arm: explicit stop during a second task ends the server without manufacturing a successful turn. It also proves duplicate-launch reuse, rejection of another concurrent worker, parent linking and continued access to the unrelated external server. This is one local integration, not a claim of arbitrary CLI adoption or crash/reboot survival.
+The disposable worker test provides the known-different arm: explicit stop during a second task ends the server without manufacturing a successful turn. It also proves duplicate-launch reuse, independent ownership of concurrent workers, parent linking and continued access to the unrelated external server. This is one local integration, not a claim of arbitrary CLI adoption or crash/reboot survival.
 
 ## YOLO default verified on 11 October 2026
 

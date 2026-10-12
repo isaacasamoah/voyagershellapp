@@ -60,6 +60,24 @@ impl Store {
                 COMMIT;",
             )?;
         }
+        let has_kind: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('sessions') WHERE name='kind')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_kind {
+            db.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'codex';",
+            )?;
+        }
+        let has_worker_kind: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('workers') WHERE name='kind')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_worker_kind {
+            db.execute_batch("ALTER TABLE workers ADD COLUMN kind TEXT NOT NULL DEFAULT 'codex';")?;
+        }
         Ok(Self(db))
     }
 
@@ -80,7 +98,7 @@ impl Store {
         }
         let id = Uuid::new_v4().to_string();
         self.0.execute(
-            "INSERT INTO sessions VALUES (?1,?2,?3,?4,?5,?6)",
+            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms) VALUES (?1,?2,?3,?4,?5,?6)",
             params![
                 id,
                 server,
@@ -99,11 +117,11 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,w.name FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,w.name,s.kind FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
-            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?}))
+            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?,"kind":r.get::<_,String>(10)?}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -115,7 +133,7 @@ impl Store {
     }
 
     pub fn launch(&self, id: &str) -> Result<Option<Value>> {
-        Ok(self.0.query_row("SELECT parent_id,cwd,prompt,state,session_id,pid,name FROM workers WHERE launch_id=?1",[id],|r|Ok(json!({"launch_id":id,"parent_id":r.get::<_,Option<String>>(0)?,"cwd":r.get::<_,String>(1)?,"prompt":r.get::<_,Option<String>>(2)?,"state":r.get::<_,String>(3)?,"session_id":r.get::<_,Option<String>>(4)?,"pid":r.get::<_,Option<u32>>(5)?,"name":r.get::<_,Option<String>>(6)?}))).optional()?)
+        Ok(self.0.query_row("SELECT parent_id,cwd,prompt,state,session_id,pid,name,kind FROM workers WHERE launch_id=?1",[id],|r|Ok(json!({"launch_id":id,"parent_id":r.get::<_,Option<String>>(0)?,"cwd":r.get::<_,String>(1)?,"prompt":r.get::<_,Option<String>>(2)?,"state":r.get::<_,String>(3)?,"session_id":r.get::<_,Option<String>>(4)?,"pid":r.get::<_,Option<u32>>(5)?,"name":r.get::<_,Option<String>>(6)?,"kind":r.get::<_,String>(7)?}))).optional()?)
     }
 
     pub fn begin_launch(
@@ -128,16 +146,16 @@ impl Store {
     ) -> Result<()> {
         // Unknown launches may still have processes: do not automatically replace them.
         let active: i64 = self.0.query_row(
-            "SELECT count(*) FROM workers WHERE state IN ('starting','running','unknown')",
+            "SELECT count(*) FROM workers WHERE state='unknown'",
             [],
             |r| r.get(0),
         )?;
         ensure!(
             active == 0,
-            "one worker at a time; stop the current worker or resolve unknown ownership first"
+            "resolve unknown process ownership before creating more instances"
         );
         self.0.execute(
-            "INSERT INTO workers VALUES (?1,?2,?3,?4,'starting',NULL,NULL,?5)",
+            "INSERT INTO workers (launch_id,parent_id,cwd,prompt,state,session_id,pid,name) VALUES (?1,?2,?3,?4,'starting',NULL,NULL,?5)",
             params![id, parent, cwd, prompt, name],
         )?;
         Ok(())
@@ -154,7 +172,7 @@ impl Store {
         let native = metadata["id"].as_str().context("missing worker thread")?;
         let tx = self.0.transaction()?;
         tx.execute(
-            "INSERT INTO sessions VALUES (?1,?2,?3,?4,?5,?6)",
+            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms) VALUES (?1,?2,?3,?4,?5,?6)",
             params![
                 id,
                 server,
@@ -168,11 +186,15 @@ impl Store {
             "UPDATE workers SET session_id=?2,pid=?3,state='running' WHERE launch_id=?1",
             params![launch, id, pid],
         )?;
+        tx.execute(
+            "UPDATE sessions SET kind=?2 WHERE id=?1",
+            params![id, metadata["kind"].as_str().unwrap_or("codex")],
+        )?;
         tx.commit()?;
         self.local(
             &id,
             "session.registered",
-            json!({"ownership":"managed","capture_policy":"conversation-v1"}),
+            json!({"ownership":"managed","capture_policy":if metadata["kind"]=="shell"{"shell-commands-v1"}else{"conversation-v1"}}),
         )?;
         Ok(id)
     }
@@ -226,11 +248,11 @@ impl Store {
 
     pub fn events(&self, after: i64) -> Result<Value> {
         ensure!(after >= 0, "cursor must be nonnegative");
-        let mut query = self.0.prepare("SELECT seq,event_id,session_id,kind,native_turn_id,source_key,occurred_ms,recorded_ms,payload FROM events WHERE seq>?1 ORDER BY seq LIMIT 100")?;
+        let mut query = self.0.prepare("SELECT seq,event_id,session_id,e.kind,native_turn_id,source_key,occurred_ms,recorded_ms,payload,s.kind FROM events e JOIN sessions s ON s.id=e.session_id WHERE seq>?1 ORDER BY seq LIMIT 100")?;
         let rows = query.query_map([after], |r| {
             let raw: String = r.get(8)?;
             let payload: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
-            Ok(json!({"sequence":r.get::<_,i64>(0)?,"event_id":r.get::<_,String>(1)?,"session_id":r.get::<_,String>(2)?,"type":r.get::<_,String>(3)?,"native_turn_id":r.get::<_,Option<String>>(4)?,"source_key":r.get::<_,Option<String>>(5)?,"occurred_ms":r.get::<_,Option<i64>>(6)?,"recorded_ms":r.get::<_,i64>(7)?,"payload":payload,"schema_version":1,"capture_policy":"conversation-v1"}))
+            Ok(json!({"sequence":r.get::<_,i64>(0)?,"event_id":r.get::<_,String>(1)?,"session_id":r.get::<_,String>(2)?,"type":r.get::<_,String>(3)?,"native_turn_id":r.get::<_,Option<String>>(4)?,"source_key":r.get::<_,Option<String>>(5)?,"occurred_ms":r.get::<_,Option<i64>>(6)?,"recorded_ms":r.get::<_,i64>(7)?,"payload":payload,"schema_version":1,"capture_policy":if r.get::<_,String>(9)?=="shell"{"shell-commands-v1"}else{"conversation-v1"}}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?;
         let cursor = rows
             .last()

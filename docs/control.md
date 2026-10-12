@@ -65,7 +65,7 @@ voyager --state "$VOYAGER_STATE" --control "$GENERATION" \
   launch CURRENT_SESSION unique-launch-id /path/to/work "A bounded task"
 ```
 
-`--control` works with `send`, `launch` and `stop-worker`. Stale generations are
+`--control` works with `send`, `launch`, `shell-exec` and `stop-instance`. Stale generations are
 refused before submitting work. A control-conditioned launch must name the
 current session as parent. `undock GENERATION` releases only that attachment and
 is safe to repeat. `list` and `status` stay read-only.

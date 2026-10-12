@@ -1,4 +1,6 @@
-use crate::{codex::Codex, control::Control, events, store::Store, terminal, worker::Worker};
+use crate::{
+    codex::Codex, control::Control, events, shell::Shell, store::Store, terminal, worker::Worker,
+};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
@@ -13,12 +15,14 @@ use std::{
     collections::HashMap,
     fs::{self, DirBuilder, OpenOptions},
     io::{self, BufRead, BufReader, Read, Write},
+    os::unix::process::CommandExt,
     os::unix::{
         fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt},
         net::{UnixListener, UnixStream},
     },
     path::{Path, PathBuf},
     process::Child,
+    process::{Command, Stdio},
     time::Duration,
 };
 
@@ -130,7 +134,8 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         server: server.map(|p| p.to_string_lossy().into_owned()),
         registered: HashMap::new(),
         instance: uuid::Uuid::new_v4().to_string(),
-        worker: None,
+        workers: HashMap::new(),
+        shells: HashMap::new(),
         terminals: Vec::new(),
         state: fs::canonicalize(state)?,
         executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
@@ -151,9 +156,9 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                         "different-user peer"
                     );
                     let request = frame(&mut stream)?;
-                    runtime.observe_control()?;
+                    runtime.observe()?;
                     if request["op"] == "dock" {
-                        runtime.connection(string(&request, "session_id")?)?;
+                        runtime.ensure_connected(string(&request, "session_id")?)?;
                         let peer =
                             u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
                         return Ok((
@@ -200,8 +205,9 @@ struct Runtime {
     server: Option<String>,
     registered: HashMap<String, String>, // native thread -> Voyager registration
     instance: String,
-    worker: Option<Worker>,
-    terminals: Vec<Child>,
+    workers: HashMap<String, Worker>,
+    shells: HashMap<String, Shell>,
+    terminals: Vec<(String, Child)>,
     state: PathBuf,
     executable: String,
 }
@@ -226,7 +232,8 @@ impl Runtime {
         // not isolation between programs running as the same Unix user.
         if let Some(generation) = request.get("control_generation") {
             ensure!(
-                ["send", "launch", "stop-worker"].contains(&string(&request, "op")?),
+                ["send", "launch", "stop-instance", "shell-exec"]
+                    .contains(&string(&request, "op")?),
                 "control precondition is only for agent commands"
             );
             let source = self
@@ -241,7 +248,7 @@ impl Runtime {
         }
         let value = match string(&request, "op")? {
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+usize::from(self.worker.as_ref().is_some_and(|w|w.connection.is_some())),"owns_agents":self.worker.as_ref().is_some_and(|w|w.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+self.workers.values().filter(|w|w.connection.is_some()).count()+self.shells.values().filter(|s|s.connected()).count(),"owns_agents":self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -272,9 +279,13 @@ impl Runtime {
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
                     let captured = self
-                        .worker
-                        .as_ref()
-                        .is_some_and(|w| session["id"] == w.session && w.connection.is_some())
+                        .workers
+                        .values()
+                        .any(|w| session["id"] == w.session && w.connection.is_some())
+                        || self
+                            .shells
+                            .values()
+                            .any(|s| session["id"] == s.session && s.connected())
                         || self
                             .registered
                             .get(session["native_thread_id"].as_str().unwrap())
@@ -331,6 +342,11 @@ impl Runtime {
             "create" => {
                 let id = string(&request, "request_id")?;
                 let name = string(&request, "name")?;
+                let kind = string(&request, "kind")?;
+                ensure!(
+                    ["codex", "shell"].contains(&kind),
+                    "unsupported instance kind"
+                );
                 ensure!(
                     id.len() <= 100
                         && name.len() <= 100
@@ -338,31 +354,50 @@ impl Runtime {
                         && !name.chars().any(char::is_control),
                     "invalid request ID or name"
                 );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)?;
-                ensure!(cwd.is_dir(), "instance cwd must be a directory");
+                let cwd = fs::canonicalize(string(&request, "cwd")?)
+                    .context("Choose an existing folder.")?;
+                ensure!(cwd.is_dir(), "Choose a folder, not a file.");
                 let cwd = cwd.to_str().context("instance cwd must be UTF-8")?;
                 if let Some(previous) = self.store.launch(id)? {
                     ensure!(
                         previous["parent_id"].is_null()
                             && previous["prompt"].is_null()
                             && previous["cwd"] == cwd
-                            && previous["name"] == name,
+                            && previous["name"] == name
+                            && previous["kind"] == kind,
                         "launch ID conflicts with previous inputs"
                     );
                 } else {
                     self.store.begin_launch(id, None, cwd, None, Some(name))?;
-                    match Worker::start(
-                        &mut self.store,
-                        &self.state,
-                        &self.executable,
-                        id,
-                        cwd,
-                        Some(name),
-                    ) {
-                        Ok(worker) => self.worker = Some(worker),
-                        Err(error) => {
-                            self.store.worker_state(id, "failed")?;
-                            return Err(error);
+                    self.store
+                        .0
+                        .execute("UPDATE workers SET kind=?2 WHERE launch_id=?1", [id, kind])?;
+                    if kind == "shell" {
+                        match Shell::start(&mut self.store, &self.state, id, cwd) {
+                            Ok(shell) => {
+                                self.shells.insert(shell.session.clone(), shell);
+                            }
+                            Err(error) => {
+                                self.store.worker_state(id, "failed")?;
+                                return Err(error);
+                            }
+                        }
+                    } else {
+                        match Worker::start(
+                            &mut self.store,
+                            &self.state,
+                            &self.executable,
+                            id,
+                            cwd,
+                            Some(name),
+                        ) {
+                            Ok(worker) => {
+                                self.workers.insert(worker.session.clone(), worker);
+                            }
+                            Err(error) => {
+                                self.store.worker_state(id, "failed")?;
+                                return Err(error);
+                            }
                         }
                     }
                 }
@@ -374,11 +409,19 @@ impl Runtime {
                     "terminal not supported yet"
                 );
                 let session = string(&request, "session_id")?;
+                for (id, child) in &mut self.terminals {
+                    if id == session && child.try_wait()?.is_none() {
+                        return Ok((
+                            json!({"session_id":session,"pid":child.id(),"state":"already_open"}),
+                            false,
+                        ));
+                    }
+                }
                 let info = self.attachment(session)?;
                 let record = self.store.session(session)?;
-                let child = terminal::open_agent(&info, &record)?;
+                let child = terminal::open_instance(&info, &record)?;
                 let pid = child.id();
-                self.terminals.push(child);
+                self.terminals.push((session.to_owned(), child));
                 self.store.local(
                     session,
                     "interface.open_requested",
@@ -386,18 +429,20 @@ impl Runtime {
                 )?;
                 json!({"session_id":session,"terminal":"ghostty","pid":pid,"state":"opening","docked":false})
             }
-            "open-shell" => {
-                ensure!(
-                    string(&request, "terminal")? == "ghostty",
-                    "terminal not supported yet"
-                );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)?;
-                ensure!(cwd.is_dir(), "shell cwd must be a directory");
-                let child = terminal::open_shell(&cwd)?;
-                let pid = child.id();
-                self.terminals.push(child);
-                json!({"terminal":"ghostty","pid":pid,"state":"opening","registered":false,"capturing":false,"ownership":"terminal"})
-            }
+            "shell-exec" => self
+                .shells
+                .get_mut(string(&request, "session_id")?)
+                .context("not a managed shell")?
+                .submit(
+                    &self.store,
+                    string(&request, "request_id")?,
+                    string(&request, "command")?,
+                )?,
+            "shell-read" => self
+                .shells
+                .get(string(&request, "session_id")?)
+                .context("not a managed shell")?
+                .output(request["after"].as_u64().unwrap_or(0)),
             "launch" => {
                 let id = string(&request, "request_id")?;
                 let parent = string(&request, "parent_id")?;
@@ -406,7 +451,8 @@ impl Runtime {
                     id.len() <= 100 && prompt.len() <= events::TEXT_LIMIT,
                     "launch ID or prompt too long"
                 );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)?;
+                let cwd = fs::canonicalize(string(&request, "cwd")?)
+                    .context("Choose an existing folder.")?;
                 ensure!(cwd.is_dir(), "worker cwd must be a directory");
                 let cwd = cwd.to_str().context("worker cwd must be UTF-8")?;
                 if let Some(previous) = self.store.launch(id)? {
@@ -417,7 +463,7 @@ impl Runtime {
                         "launch ID conflicts with previous inputs"
                     );
                 } else {
-                    self.connection(parent)?; // Parent must be connected at acceptance.
+                    self.ensure_connected(parent)?; // Parent must be connected at acceptance.
                     self.store
                         .begin_launch(id, Some(parent), cwd, Some(prompt), None)?;
                     match Worker::start(
@@ -428,13 +474,19 @@ impl Runtime {
                         cwd,
                         None,
                     ) {
-                        Ok(worker) => self.worker = Some(worker),
+                        Ok(worker) => {
+                            self.workers.insert(worker.session.clone(), worker);
+                        }
                         Err(error) => {
                             self.store.worker_state(id, "failed")?;
                             return Err(error);
                         }
                     }
-                    let session = self.worker.as_ref().unwrap().session.clone();
+                    let session =
+                        self.store.launch(id)?.context("launch receipt missing")?["session_id"]
+                            .as_str()
+                            .context("missing session")?
+                            .to_owned();
                     self.store.local(
                         parent,
                         "worker.launched",
@@ -450,19 +502,23 @@ impl Runtime {
                 receipt
             }
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
-            "stop-worker" => {
+            "stop-instance" => {
                 let id = string(&request, "session_id")?;
-                self.worker
-                    .as_mut()
-                    .filter(|w| w.session == id)
-                    .context("not a live managed worker; external sessions cannot be stopped")?
-                    .stop(&self.store)?
+                if let Some(shell) = self.shells.get_mut(id) {
+                    shell.stop(&self.store)?
+                } else {
+                    self.workers
+                        .get_mut(id)
+                        .context("not a managed instance; external sessions cannot be stopped")?
+                        .stop(&self.store)?
+                }
             }
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
             "stop" => {
                 ensure!(
-                    !self.worker.as_ref().is_some_and(|w| w.alive),
-                    "stop the managed worker explicitly before stopping Voyager"
+                    !self.workers.values().any(|w| w.alive)
+                        && !self.shells.values().any(|s| s.alive),
+                    "stop managed instances explicitly before stopping Voyager"
                 );
                 return Ok((json!({"stopping":true,"native_agents_stopped":false}), true));
             }
@@ -471,9 +527,18 @@ impl Runtime {
         Ok((value, false))
     }
 
+    fn ensure_connected(&mut self, session: &str) -> Result<()> {
+        if let Some(shell) = self.shells.get(session) {
+            ensure!(shell.connected(), "shell is disconnected");
+            return Ok(());
+        }
+        self.connection(session)?;
+        Ok(())
+    }
+
     fn connection(&mut self, session: &str) -> Result<&mut Codex> {
-        if self.worker.as_ref().is_some_and(|w| w.session == session) {
-            return self.worker.as_mut().unwrap().client();
+        if let Some(worker) = self.workers.get_mut(session) {
+            return worker.client();
         }
         let native = self.store.native(
             session,
@@ -485,14 +550,16 @@ impl Runtime {
             self.registered.get(&native).map(String::as_str) == Some(session),
             "session is not currently registered for capture"
         );
-        self.codex()
+        self.codex.as_mut().context("Codex disconnected")
     }
 
     fn attachment(&self, id: &str) -> Result<Value> {
+        if let Some(shell) = self.shells.get(id) {
+            return shell.attach(&self.state);
+        }
         let worker = self
-            .worker
-            .as_ref()
-            .filter(|w| w.session == id)
+            .workers
+            .get(id)
             .context("not a live managed instance")?;
         let launch = self
             .store
@@ -550,11 +617,14 @@ impl Runtime {
     fn observe(&mut self) -> Result<()> {
         // Reap only clients we launched. Closing them never stops a managed agent.
         for index in (0..self.terminals.len()).rev() {
-            if self.terminals[index].try_wait()?.is_some() {
-                self.terminals.swap_remove(index).wait()?;
+            if self.terminals[index].1.try_wait()?.is_some() {
+                self.terminals.swap_remove(index).1.wait()?;
             }
         }
-        if let Some(worker) = self.worker.as_mut() {
+        for shell in self.shells.values_mut() {
+            shell.observe(&self.store)?;
+        }
+        for worker in self.workers.values_mut() {
             worker.observe(&self.store)?;
         }
         let pending: Vec<_> = self
@@ -585,7 +655,7 @@ impl Runtime {
     fn observe_control(&mut self) -> Result<()> {
         self.control.observe(&self.store)?;
         if let Some(session) = self.control.session().map(str::to_owned) {
-            if self.connection(&session).is_err() {
+            if self.ensure_connected(&session).is_err() {
                 self.control
                     .release(&self.store, None, "capture_disconnected")?;
             }
@@ -602,5 +672,59 @@ impl Runtime {
             )?;
         }
         Ok(())
+    }
+}
+
+/// Start independently of the app. The service's existing exclusive lock owns
+/// singleton arbitration; the readiness reply is checked rather than inferred
+/// from a successful spawn. No running session is restored or resubmitted.
+pub fn start(state: &Path) -> Result<Value> {
+    private_dir(state)?;
+    if let Ok(status) = client(state, json!({"op":"status"})) {
+        return Ok(status);
+    }
+    let log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .custom_flags(nix::libc::O_NOFOLLOW)
+        .open(state.join("service.log"))?;
+    let meta = log.metadata()?;
+    ensure!(
+        meta.is_file() && meta.uid() == Uid::effective().as_raw() && meta.mode() & 0o077 == 0,
+        "service log must be private"
+    );
+    let mut command = Command::new(std::env::current_exe()?);
+    command
+        .args(["--state"])
+        .arg(state)
+        .arg("serve")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log.try_clone()?))
+        .stderr(Stdio::from(log));
+    // SAFETY: setsid is async-signal-safe; no allocations or locks in pre_exec.
+    unsafe {
+        command.pre_exec(|| {
+            if nix::libc::setsid() < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().context("start Voyager service")?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Ok(status) = client(state, json!({"op":"status"})) {
+            return Ok(status);
+        }
+        ensure!(
+            child.try_wait()?.is_none(),
+            "Voyager failed to start; inspect service.log"
+        );
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "service startup not confirmed; inspect service.log before retrying"
+        );
+        std::thread::sleep(Duration::from_millis(50));
     }
 }

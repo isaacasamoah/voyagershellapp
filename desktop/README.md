@@ -19,14 +19,15 @@ npm test
 ```
 
 Build the Rust binaries from the repository root with `cargo build --locked
---bins`, then start the [service](../docs/service.md) with the native endpoint already in use. From this
+--bins`, then open Electron; it connects to or starts the [service](../docs/service.md). From this
 directory, in a graphical-session terminal:
 
 ```sh
 VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start
 ```
 
-Use your existing private service directory. `npm start -- --expanded` opens the
+The directory is created privately if absent. Use the panel’s **+** to create a
+Codex instance or managed Bash and **↗** to reopen its native interface. `npm start -- --expanded` opens the
 panel immediately. Quit and restart Electron to pick up changes to the main
 process or preload. The service and its workers keep running independently.
 If Electron's binary download was skipped during installation, run
@@ -34,16 +35,17 @@ If Electron's binary download was skipped during installation, run
 
 ## Source map
 
-| File                                     | Owns                                                              |
-| ---------------------------------------- | ----------------------------------------------------------------- |
-| `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls     |
-| `src/binding.cjs`                        | Process identity and exact terminal-to-session matching           |
-| `src/control.cjs`                        | Persistent attachment socket, acknowledgement and connection loss |
-| `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                         |
-| `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                    |
-| `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                      |
-| `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                  |
-| `assets/`                                | Astronaut artwork and its attribution                             |
+| File                                     | Owns                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls                 |
+| `src/binding.cjs`                        | Process identity and exact terminal-to-session matching                       |
+| `src/instances.cjs`                      | Creation validation, pending request identity and retry after opening failure |
+| `src/control.cjs`                        | Persistent attachment socket, acknowledgement and connection loss             |
+| `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                                     |
+| `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                                |
+| `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                                  |
+| `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                              |
+| `assets/`                                | Astronaut artwork and its attribution                                         |
 
 There is no frontend framework or bundler. Main owns the state; the renderer
 receives a display snapshot and sends explicit user actions. Keep filesystem,

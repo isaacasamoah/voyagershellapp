@@ -1,6 +1,6 @@
 # Working on Voyager Shell
 
-Voyager is an experimental Rust service around existing native agent interfaces. Electron is a later client. Preserve that product boundary: do not add a terminal UI, run tmux or Herdr as a backend, or pretend registration transfers process ownership.
+Voyager is an experimental Rust service around existing native agent interfaces. Electron is its desktop client. Preserve that product boundary: do not add a terminal UI, run tmux or Herdr as a backend, or pretend registration transfers process ownership.
 
 - Work in small increments with one user-visible experiment and a known-different test.
 - Inspect the repository and dirty state before editing. Preserve unrelated work.

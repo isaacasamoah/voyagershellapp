@@ -50,13 +50,22 @@ leaving restores transparency, without changing its colour palette.
 The panel shows Online/Offline and project names with connection dots. Green
 means connected; gray means disconnected, stopped or unknown. Tooltips and
 accessible labels retain the full status. No event feed, internal IDs,
-terminal-launch button or instructional footer is shown. The close × quits only
+instructional footer is shown. A **+** opens the instance form, and **↗** reopens
+a managed instance’s native window. The close × quits only
 Electron. Connection is observation status, not proof of task completion.
 
-## Supported setup
+## Create from the panel
+
+The [instance journey](instances.md) is the current starting point. Open the app,
+choose **+**, then Codex or Terminal · Bash, name and folder. Creation establishes
+registration/capture and opens Ghostty. Docking selects control; it does not
+create a second registration. The bare Bash has command capture and agent access
+through `shell-exec` / `shell-read`, with no conversational interface.
+
+## Register an existing supported client
 
 This setup proves part of the mechanism. It does **not** fulfil the product
-brief of docking onto a normally opened terminal. The next acceptance test must
+brief of docking onto a normally opened terminal. The separate ordinary-discovery acceptance test must
 start with a user-opened terminal and an ordinary Codex launch, without a special
 launcher, injected identity or pre-registration. A simpler implementation must
 still perform that requested workflow. Keep window placement, agent identity,
@@ -88,11 +97,10 @@ GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
   resume "$THREAD_ID" --no-alt-screen
 ```
 
-The latest manual run recorded read-only native terminal turns after a full-access
+The 11 October external-lead run recorded read-only native terminal turns after a full-access
 setup turn. Do not assume the remote terminal preserves the setup permissions.
-The tested Codex 0.162.1 remote resume rejected permission CLI flags. Effective
-native-client policy still needs investigation and a real service-status call
-before another worker launch. Voyager requests YOLO when creating a worker;
+The tested Codex 0.162.1 remote resume rejected permission CLI flags. That external-client policy drift remains unresolved. New managed creation has
+separate native YOLO evidence in the [panel journey](panel-journey.md). Voyager requests YOLO when creating a worker;
 docking does not intentionally grant permissions.
 No transparency setting is required or changed. The Ghostty flag gives this
 prototype an unambiguous window-to-process mapping; it is not a visual requirement.
@@ -137,7 +145,7 @@ YOLO is the explicit creation policy for Voyager-launched sessions; changing
 launch policy is separate from docking. An earlier corrected demo lead launched
 a worker, which successfully called Voyager's status API. Both sessions were verified as YOLO after their
 native terminal clients opened; see the [historical worker evidence](workers.md#yolo-default-verified-on-11-october-2026).
-The [latest manual run](workers.md#latest-manual-run-permission-failure) failed
+The [earlier external-lead run](workers.md#earlier-manual-run-external-lead-permission-failure) failed
 again on native-turn permissions and launched no worker. That failure remains open.
 
 The selected session is the person's **current bridge**, not automatically a new

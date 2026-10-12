@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
@@ -15,7 +15,8 @@ const {
 } = require('./binding.cjs');
 const exec = promisify(execFile);
 const root = path.resolve(__dirname, '../..');
-const stateDir = process.env.VOYAGER_STATE;
+const stateDir =
+  process.env.VOYAGER_STATE || path.join(require('node:os').homedir(), '.local/share/voyagershell');
 if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
 const binary = path.join(root, 'target/debug/voyager');
@@ -47,6 +48,8 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
+let creating = false;
+const createInstance = require('./instances.cjs').instanceCreator(rpc);
 let dockGeneration = 0;
 let controlConnection = null;
 let layer = '';
@@ -56,11 +59,16 @@ let dockHovered = false,
   lastHoverProbe = 0;
 
 async function rpc(...args) {
-  const result = await exec(binary, ['--state', stateDir, ...args], {
-    timeout: 23000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  return JSON.parse(result.stdout);
+  try {
+    const result = await exec(binary, ['--state', stateDir, ...args], {
+      timeout: 23000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    // Do not expose execFile's full command line and internal IDs in the panel.
+    throw Error(error.stderr?.trim().replace(/^Error: /, '') || 'Voyager did not respond.');
+  }
 }
 async function inventory() {
   return (await desktopSnapshot()).windows;
@@ -98,6 +106,9 @@ async function discoverTerminals() {
       server: session.server,
       executable: await fs.realpath(info.executable),
       external: false,
+      kind: session.kind,
+      nativeId: session.native_thread_id,
+      args: info.args,
     });
   }
   const found = [];
@@ -170,8 +181,10 @@ function sendState() {
     panelHovered,
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
-    sessions: sessions.map(({ id, cwd, ownership, capture, worker_state }) => ({
+    sessions: sessions.map(({ id, name, kind, cwd, ownership, capture, worker_state }) => ({
       id,
+      name,
+      kind,
       cwd,
       ownership,
       capture,
@@ -182,6 +195,7 @@ function sendState() {
     platformError,
     dockError,
     selected,
+    defaultDirectory: require('node:os').homedir(),
   };
   for (const client of [avatarWin, panelWin]) {
     if (client && !client.isDestroyed()) client.webContents.send('state', state);
@@ -199,7 +213,10 @@ function placePanel() {
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
-  const height = Math.min(area.height, 252 + Math.max(1, sessions.length) * 44);
+  const height = Math.min(
+    area.height,
+    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
+  );
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
   setBoundsIfChanged(panelWin, { x, y, width, height });
@@ -569,8 +586,10 @@ app.whenReady().then(async () => {
       try {
         return await fn(...args);
       } catch (error) {
-        dockError = 'Couldn’t connect to this terminal.';
-        sendState();
+        if (['begin-drag', 'end-drag', 'cancel-drag'].includes(name)) {
+          dockError = 'Couldn’t connect to this terminal.';
+          sendState();
+        }
         return { error: error.message };
       }
     });
@@ -582,6 +601,32 @@ app.whenReady().then(async () => {
     sendState();
   });
   handle('quit-ui', [panelWin], () => app.quit());
+  handle('create-form', [panelWin], (open) => {
+    creating = open === true;
+    if (seated) placePanel();
+    else
+      panelWin.setSize(
+        320,
+        Math.min(
+          screen.getDisplayMatching(panelWin.getBounds()).workArea.height,
+          288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
+        ),
+      );
+  });
+  handle('choose-directory', [panelWin], async () => {
+    const result = await dialog.showOpenDialog(panelWin, { properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  handle('create-instance', [panelWin], async (input) => {
+    const result = await createInstance(input);
+    await refresh();
+    return result;
+  });
+  handle('open-instance', [panelWin], async (id) => {
+    if (!sessions.some((s) => s.id === id && s.ownership === 'managed'))
+      throw Error('Unknown managed instance');
+    return rpc('open', id, 'ghostty');
+  });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
@@ -662,6 +707,11 @@ app.whenReady().then(async () => {
   ]);
   park();
   avatarWin.showInactive();
+  try {
+    await rpc('start');
+  } catch (error) {
+    console.error(error.message);
+  }
   await refresh();
   if (process.argv.includes('--expanded')) await setExpanded(true);
   // Keyboard alternative to hovering and pulling the terminal marker.

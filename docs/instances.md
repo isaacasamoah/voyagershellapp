@@ -1,149 +1,154 @@
-# Create an instance, then open its native terminal
+# Create an instance from the panel
 
-The first backend increment creates one named Codex conversation without an
-existing lead or initial prompt. Voyager owns its app server, records the native
-identity and captures future events before opening a Ghostty window. Creating
-or opening does not select human control; docking remains a separate operation.
+Open Voyager, click **+** above Instances, choose **Codex** or **Terminal · Bash**,
+enter a name and folder, then choose **Create and open**. A real Ghostty window
+opens; the new instance is already registered and capturing. No preparation
+prompt, manually copied conversation ID or dock step is required for creation.
 
-The panel's plus button, terminal picker and remembered preference are not
-implemented yet. This increment supports Codex 0.162.1 in a dedicated Ghostty
-XWayland window on Linux. Claude, Ptyxis, native Wayland and macOS need their
-own implementation and proof.
+Dock the astronaut onto that window to select the human command surface.
+Undock to release that selection. Neither operation starts or stops the instance.
+Click **↗** beside a running instance to reopen its native interface after closing
+it. If its launched window is still alive, Voyager reports that it is already open.
 
-## Try it
+This increment supports Codex 0.162.1 and a managed Bash in separate Ghostty
+XWayland windows on Linux. There is one native viewer per shell. Claude, Ptyxis,
+other shell profiles, tabs, native Wayland and macOS need their own implementation
+and proof. Discovery of independently opened terminals remains separate.
 
-Build from the repository root. Start Voyager from your graphical login so open
-requests can reach the display. Native `codex` and `ghostty` must be on its PATH;
-`VOYAGER_CODEX_BIN` may select an absolute native Codex executable. Authentication
-and model selection stay with Codex.
+## Start the app
+
+Use Rust, Node 24, Ghostty and native Codex from a graphical login. Authentication
+and model selection stay with Codex. `VOYAGER_CODEX_BIN` can select its absolute
+executable when starting Voyager.
 
 ```sh
 cargo build --locked --bins
-VOYAGER_STATE="$HOME/.local/share/voyager-instances"
-target/debug/voyager --state "$VOYAGER_STATE" serve
+cd desktop
+npm ci
+npm start -- --expanded
 ```
 
-No external socket is needed: the service starts with zero agents. Keep it
-running in its own terminal, or run it independently with your process manager.
-This repository does not yet install an OS background service.
+Electron calls the Rust `start` operation. It connects to an existing service or
+starts one with its own process session and private log. Closing Electron leaves
+the service and instances running. The default state is
+`$HOME/.local/share/voyagershell`; set `VOYAGER_STATE` to use a different private
+directory. This is not an OS service installer or crash/reboot supervisor.
 
-In another terminal, with the same state directory:
+## The same operations from an agent or script
+
+From the repository root:
 
 ```sh
-VOYAGER_STATE="$HOME/.local/share/voyager-instances"
-target/debug/voyager --state "$VOYAGER_STATE" create create-001 "My project" "$PWD"
+VOYAGER_STATE="$HOME/.local/share/voyagershell"
+target/debug/voyager --state "$VOYAGER_STATE" start
+target/debug/voyager --state "$VOYAGER_STATE" create codex create-001 "Navigator" "$PWD"
+target/debug/voyager --state "$VOYAGER_STATE" create shell create-002 "Workbench" "$PWD"
+target/debug/voyager --state "$VOYAGER_STATE" list
 ```
 
-Use the returned `session_id` below:
+Use each returned `session_id`, not its name, for commands:
 
 ```sh
 target/debug/voyager --state "$VOYAGER_STATE" open SESSION_ID ghostty
-target/debug/voyager --state "$VOYAGER_STATE" list
+target/debug/voyager --state "$VOYAGER_STATE" shell-exec SHELL_SESSION shell-task-001 'pwd'
+target/debug/voyager --state "$VOYAGER_STATE" shell-read SHELL_SESSION
 target/debug/voyager --state "$VOYAGER_STATE" watch --pretty
 ```
 
-`create` saves the name, canonical folder, launch state and managed identity.
-Repeated delivery of the same request ID and inputs returns the saved receipt;
-changed inputs conflict. A failed or stopped request is not automatically
-restarted. No parent or model prompt is required.
+`create` stores kind, name, canonical folder and native identity. Repeating the
+same request ID with identical inputs returns its saved receipt; conflicting
+inputs fail. Unknown delivery is never silently retried with a new ID. The form
+also keeps its creation ID when opening fails, so retry opens the existing
+instance. An invalid folder fails without registration.
 
-`open` returns `state: opening` and records `interface.open_requested`. These
-mean a native client process started, not that a usable window was seen. Check
-the desktop. Calling it again opens another client, not another agent or an
-automatic focus of the first window. Window readiness/failure reporting remains
-pending. A failed opening leaves the registered instance available.
+`open` reports `opening` after spawning a native client, not after proving a
+usable window. Opening failure does not delete the instance. Native window
+readiness remains a desktop observation; the prototype has no complete
+compositor launch-failure protocol.
 
-Type or speak in the native agent interface. Capture records completed user and
-assistant text, tool lifecycle metadata and turn outcomes. It omits tool
-arguments/results and terminal pixels. Close that client and repeat `open` to
-rejoin the same conversation. Explicit stop remains separate:
+Owned Codex tool environments explicitly receive `VOYAGER_BIN`, `VOYAGER_STATE`
+through the [native environment policy](https://learn.chatgpt.com/docs/config-file/config-advanced#shell-environment-policy), plus the small
+[orchestration instructions](../src/orchestration.md). They can call the same
+CLI operations as the panel. No captain/crew role system is introduced.
+[Docking control](control.md) is a current human selection, not an isolation
+boundary between mutually untrusted agents running under the same OS user.
+
+## What a bare terminal means
+
+The service starts one interactive Bash and owns its pseudo-terminal (PTY).
+Ghostty runs a small attach client that forwards keyboard bytes, output and
+resize messages. Ghostty still renders the terminal; Voyager has no screen
+emulator. Agent `shell-exec` commands enter this same Bash, rather than a new
+subprocess with a different working directory or environment.
+
+The first profile is deliberately **Bash without user startup files**. It installs
+only a prompt and command-boundary hooks. It does not edit `.bashrc`, `.profile`
+or the person's terminal preferences. Another shell or user-customized profile
+requires a separately tested capture adapter.
+
+Bash's `PS0` identifies a submitted command and `PROMPT_COMMAND` records its return
+to the prompt. These are documented [interactive Bash boundaries](https://www.gnu.org/software/bash/manual/html_node/Interactive-Shell-Behavior.html).
+The `shell-commands-v1` events contain:
+
+- `shell.command`: text, working directory, command ID and human/agent attribution;
+  agent submissions also carry their request ID.
+- `shell.completed`: matching command ID, final command-line exit code and folder.
+- Shell start, exit and explicit stop; capture failure records an explicit gap.
+
+The exit status describes Bash's command line, not every process or pipeline
+stage. Shell history is in memory, not written to a separate history file. Command
+text persists in the private Voyager database and can itself contain sensitive
+values. Raw keystrokes and password input are not stored. Terminal output is a
+bounded **64 KiB in-memory buffer**, available to `shell-read` with a byte cursor
+and gap marker; it is not a durable transcript. Command text has the shared
+16 KiB truncation limit.
+
+An agent may submit one command line only at an untouched, ready prompt.
+Busy shells and unfinished human input reject it. This also protects partial
+input typed while an earlier command is running. A submitted request is only an
+acknowledgement; inspect `shell.completed` for the observed outcome. Interactive
+programs, nested shells and modified hooks are not promised agent-input targets.
+Humans may use the native terminal normally; Voyager will not invent completion
+for a command that exits or replaces Bash before another prompt appears.
+
+## Persistence and stop
+
+Closing the terminal disconnects its viewer. Bash, its current state and active
+work remain owned by the service. Reopening reconnects to the same process and
+replays the bounded output buffer. Full-screen applications have no reconstructed
+screen state beyond that buffer. Codex reopen uses its own native history.
 
 ```sh
-target/debug/voyager --state "$VOYAGER_STATE" stop-worker SESSION_ID
+target/debug/voyager --state "$VOYAGER_STATE" stop-instance SESSION_ID
 target/debug/voyager --state "$VOYAGER_STATE" stop
 ```
 
-The existing `stop-worker` operation applies to this managed instance too.
-`stop` refuses while its runtime is alive. Crash/reboot survival is outside this
-increment; see [worker lifetime](workers.md#persistence-boundary).
+`stop-instance` explicitly ends an owned runtime. For Bash it sends SIGHUP to
+Bash, which forwards it to its jobs, with a bounded process-group kill fallback.
+Disowned or independently escaped processes are outside that contract. An
+external registration cannot be stopped this way. `stop` refuses while any owned
+instance is alive. Service restart marks old launches unknown; it never adopts
+stored PIDs or resubmits work. Investigate unknown launches before creating more.
 
-## Native decisions
+## Proof and source
 
-In installed Codex 0.162.1, `thread/start` alone left the empty conversation
-unavailable to the native terminal: resume reported no rollout. Setting the
-person's chosen name through `thread/name/set` materialized its native history.
-The terminal could then resume the same thread with **zero turns**. No hidden
-setup prompt or fabricated conversation is needed.
+See [the panel journey report](panel-journey.md) for this increment's actual
+observations and remaining human checks. Earlier Codex creation established that
+`thread/name/set` materializes an empty native conversation with zero turns;
+`historyMode: legacy` was needed by this installed version. Native remote resume
+uses the owned server's `never` / `danger-full-access` policy, without unsupported
+permission flags on the resume CLI. These are version-specific adapter decisions;
+see the [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server).
 
-The adapter explicitly requests `historyMode: legacy` because the installed
-default rejected full-history reading in the compatibility probe. These are
-version-specific findings, not guarantees about other Codex builds. The methods
-are described in the [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server).
+- `src/service.rs`: shared operations and runtime ownership.
+- `src/worker.rs`: native Codex server and empty conversation creation.
+- `src/shell.rs`, `shell.bash`: interactive shell ownership and capture.
+- `src/shell_transport.rs`: byte transport and terminal-mode restoration.
+- `src/terminal.rs`: native window opening.
+- `src/store.rs`: registration, request receipts and event persistence.
+- `desktop/src/instances.cjs`: form validation and creation/open retry identity.
 
-The owned server process receives `approval_policy="never"` and
-`sandbox_mode="danger-full-access"`; thread creation requests the same policy.
-This is the selected YOLO default. Global configuration and externally registered
-conversations are untouched. Native resume gets no unsupported permission flag.
-
-## Native evidence — 12 October 2026
-
-Actor: a developer using the backend CLI and the actual Codex interface in
-Ghostty on Fedora. Acceptance input went through the desktop window, not
-Voyager's `send` operation.
-
-| Action | Observation |
-| --- | --- |
-| Start without an external server | Zero registered and zero capturing sessions. |
-| Create with an invalid folder | Error; no registration. |
-| Create a named instance; repeat the request | Same saved receipt; one registered/capturing instance, no parent, prompt, model turn or control claim. |
-| Open through the backend | Real Ghostty window displayed the empty native interface and YOLO label. |
-| Enter a harmless Voyager `status` request | Tool succeeded; user/assistant messages, tool lifecycle and completion were captured. The actual native turn recorded `never` and `danger-full-access`. |
-| Quit the client; open again | Client exited while capture stayed connected. Reopen retained the server and conversation; the new window displayed the previous exchanges. No second registration or automatic control. |
-| Open a bare shell separately | Ordinary terminal appeared; the registry still contained only the Codex instance. |
-
-The first test instruction accidentally included a trailing `.` argument. The
-command failed with a usage error and Voyager captured that failure. The
-corrected instruction succeeded. A completed model turn was not treated as
-command success. Both outcomes remain in the private evidence.
-
-This proves create/open, native turn permissions and idle close/reopen. It does
-not resolve the earlier external lead's permission drift, establish YOLO for
-every launch path, or repeat the active-task detach proof from the
-[earlier worker experiment](workers.md#measured-on-9-october-2026). The new path's
-physical panel create/dock/undock journey is still pending.
-
-## Bare shells and current limits
-
-```sh
-target/debug/voyager --state "$VOYAGER_STATE" open-shell "$PWD" ghostty
-```
-
-This opens the person's ordinary shell. The receipt explicitly says
-`registered: false`, `capturing: false`, `ownership: terminal`. Closing it has
-normal shell lifetime behavior. Managed-shell commands, output capture,
-persistence and docking need a separate capability and input-ownership design.
-
-Only one managed runtime is allowed, whether created here or launched as a
-worker. An external lead can launch one worker; a managed lead cannot yet launch
-a second managed runtime. Roles, groups and concurrent agent fleets are later
-increments.
-
-The service owns create/open/status/capture. Native opening uses separate argv
-arguments, not a caller-supplied shell command. Same-user socket access does not
-isolate mutually untrusted YOLO agents. Known creation identity does not prove
-discovery of an independently opened terminal or a later in-client conversation
-switch; see [terminal discovery](terminal-discovery.md).
-
-## Source and checks
-
-- `src/service.rs`: create/open operations and lifecycle.
-- `src/worker.rs`: native process ownership and named empty-thread creation.
-- `src/terminal.rs`: the small Ghostty launcher, with no terminal emulator.
-- `src/store.rs`: persisted name, optional parent/prompt and schema migration.
-- `tests/service.rs`: service-boundary regression cases for creation, duplicate
-  and conflicting requests, invalid folders, missing native executables and
-  migration preserving attribution/events.
-
-Run the checks in [CONTRIBUTING.md](../CONTRIBUTING.md). Fixtures do not establish
-native desktop behavior. Private transcripts, screenshots and local IDs remain
-outside this public repository.
+Service tests exercise real PTYs and disposable protocol fixtures: multiple
+owned runtimes, shared shell state, busy/input refusal, viewer close/reopen,
+explicit stop, idempotency, missing executables and migration. Fixtures do not
+establish native desktop behavior. Run [the standard checks](../CONTRIBUTING.md).

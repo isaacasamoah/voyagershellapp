@@ -241,3 +241,74 @@ body[data-dock-error='true'] #indicator {
   box-shadow: none;
   backdrop-filter: none;
 }
+
+.instances-heading,
+.instance-row,
+.folder-field,
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.instances-heading {
+  justify-content: space-between;
+}
+.instances-heading button,
+.open-instance,
+.folder-field button {
+  border: 0;
+  border-radius: 6px;
+  background: #ffffff70;
+  padding: 4px 8px;
+}
+.instances-heading button {
+  font-size: 19px;
+  line-height: 20px;
+}
+.instance-row .session {
+  flex: 1;
+  min-width: 0;
+}
+#create-form {
+  display: grid;
+  gap: 9px;
+  -webkit-app-region: no-drag;
+}
+#create-form label {
+  display: grid;
+  gap: 4px;
+}
+input,
+select {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #ffffffc0;
+  border-radius: 5px;
+  background: #ffffffa0;
+  color: inherit;
+  -webkit-app-region: no-drag;
+}
+.form-actions {
+  justify-content: flex-end;
+}
+.form-actions button {
+  border: 1px solid #ffffffc0;
+  border-radius: 5px;
+  padding: 7px;
+  background: #ffffffa0;
+}
+.form-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+  color: #42566a;
+}
+#instance-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #823621;
+  -webkit-app-region: no-drag;
+}

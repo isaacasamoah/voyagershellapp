@@ -10,15 +10,16 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 
 - The Rust service registers a supported existing Codex app-server thread and
   records future conversation and lifecycle events in private SQLite storage.
-- It launches one local Codex worker with a service-owned app server. The native
-  terminal client can disconnect and reconnect while that worker keeps running.
-  Launched sessions default to YOLO: no command sandbox or approval prompts.
-  Voyager does not intentionally change an external session's permissions.
-- It can start with zero agents, create one named Codex instance with no setup
-  prompt, and open its native interface in Ghostty. Registration and capture
-  precede the first conversation. The new native turn's YOLO policy and harmless
-  service call were verified, along with closing and reopening the same chat.
-  The panel creation form and other launch paths still need their own proof.
+- The panel's **+** creates a named Codex instance or a persistent Bash terminal
+  and opens it in Ghostty. The Rust service starts independently when the app
+  opens, registers the instance and begins capture before native interaction.
+- Several instances can run together. Codex owns its native interface; a bare
+  shell is a real interactive Bash behind a service-owned PTY. Human and agent
+  commands use that same shell, including its current folder and variables.
+  The native terminal can close and reopen while work continues.
+- Voyager-launched Codex sessions default to YOLO: no command sandbox or approval
+  prompts. Existing external sessions retain their own permissions. See the
+  [instance guide](docs/instances.md) for measured behavior and limitations.
 - The Electron prototype shows a glass astronaut and a small panel of project
   names and connection dots. Click to toggle the panel, drag its background to
   move it, or pull the astronaut away and return it with paired sound cues.
@@ -66,7 +67,7 @@ This is not a new terminal UI or a tmux integration. We are learning from the pr
 
 ## Try the checks
 
-On Linux with Rust, a C linker and Python 3 installed:
+On Linux with Rust, a C linker and Python 3.11+ installed:
 
 ```sh
 git clone https://github.com/isaacasamoah/voyagershellapp.git
@@ -111,26 +112,15 @@ used for those fixtures, not the Rust service runtime.
 
 ## Next experiment
 
-Wire the proved Codex create/open backend into the panel's plus action. Create
-registers and captures; dock selects human control; undock releases control.
-Prove the physical journey in Ghostty before expanding terminal coverage.
-The first backend increment still permits only one managed runtime at a time.
+Use the panel to create a Codex instance and a Bash terminal. Dock to choose the
+command surface, ask Codex to use that shell, undock, then reopen the same shell.
+The [instance guide](docs/instances.md) separates automated checks, native
+observations and the remaining human gesture check.
 
-Separately, open a terminal normally, start Codex normally, and dock without a
-Voyager launcher or pre-supplied conversation identity. Establish the actual
-native identity; ambiguous targets must be explained rather than guessed.
-Window placement and agent identification are separate problems. A bare-shell
-opening check now exists, but a shell is not yet a managed or captured instance.
-
-The [ordinary-terminal investigation](docs/terminal-discovery.md) records the
-current evidence, unresolved identity handshake, and native acceptance journey.
-Creating an instance from Voyager and discovering one opened independently are
-separate checks. Both should use the same backend tool boundary.
-
-The new managed creation path passed a native tool call with full access.
-The earlier external lead's read-only turn remains a separate unresolved case;
-this result does not establish YOLO on every start or resume path.
-Native voice handoff, supervisor priority, multiple simultaneous workers and
-knowledge extraction remain later increments.
+Opening a terminal independently and typing `codex` remains a separate discovery
+problem; [the investigation](docs/terminal-discovery.md) records that boundary.
+Claude, other terminal launchers, roles, grouping, native voice handoff and
+knowledge extraction remain later increments. The shared backend operations
+leave room for those additions without making the current prototype depend on them.
 
 Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.

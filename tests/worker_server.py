@@ -8,8 +8,17 @@ import struct
 import sys
 import threading
 import time
+import tomllib
+from pathlib import Path
 
 path = sys.argv[sys.argv.index('--listen') + 1].removeprefix('unix://')
+# The native tool environment can inherit only core variables. The launch must
+# provide connection values through Codex's policy, not process env alone.
+settings = [sys.argv[n + 1] for n, arg in enumerate(sys.argv[:-1]) if arg == '-c']
+policy = tomllib.loads('\n'.join(settings))['shell_environment_policy']['set']
+assert Path(policy['VOYAGER_BIN']).is_file()
+assert Path(policy['VOYAGER_STATE']) == Path(path).parent.parent
+
 listener = socket.socket(socket.AF_UNIX)
 listener.bind(path)
 listener.listen()
@@ -82,7 +91,7 @@ def handle(stream):
             method = r['method']
             result = {}
             if method == 'thread/start':
-                assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode'}
+                assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode', 'developerInstructions'}
                 assert r['params']['approvalPolicy'] == 'never'
                 assert r['params']['sandbox'] == 'danger-full-access'
                 assert r['params']['historyMode'] == 'legacy'
