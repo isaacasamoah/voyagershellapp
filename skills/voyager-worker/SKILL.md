@@ -1,6 +1,6 @@
 ---
 name: voyager-worker
-description: Launch one real Codex worker through an existing Voyager service, give it a bounded task, and optionally open its native terminal. Use when the user asks the docked lead to start a worker. Does not install Voyager, register arbitrary terminals, or change agent permissions.
+description: Launch one real Codex worker through an existing Voyager service, give it a bounded task, and open its native terminal by default unless the user requests background-only work. Use when the user asks the docked lead to start a worker or session. Does not install Voyager, register arbitrary terminals, or change agent permissions.
 ---
 
 # Start a Voyager worker
@@ -49,7 +49,13 @@ inputs returns its receipt without deliberately starting another worker.
 If current control changed, report the stale-control refusal; do not silently
 acquire a new generation and act for a different controller.
 
-## Open the native interface when requested
+## Open the native interface by default
+
+For a request to start a worker or session, open its native terminal after the
+initial task is accepted. Skip opening the terminal when the user explicitly
+asks for a background process, background-only work, or no terminal. An explicit
+request to show the terminal still applies even when the task runs in the
+background. Do not ask for separate confirmation to open the default interface.
 
 After the initial task is accepted, use `attach-info WORKER_SESSION` to inspect
 the native connection. `attach WORKER_SESSION` replaces its calling process, so
