@@ -115,6 +115,11 @@ Window placement support and agent-session identification are separate problems.
 The product target is docking onto any terminal; a plain shell must not be
 misrepresented as an identified agent.
 
+The [ordinary-terminal investigation](docs/terminal-discovery.md) records the
+current evidence, unresolved identity handshake, and native acceptance journey.
+Creating an instance from Voyager and discovering one opened independently are
+separate checks. Both should use the same backend tool boundary.
+
 Before repeating the worker demonstration, verify a tool call from the native
 lead can reach Voyager and determine why the latest resumed turns ran read-only.
 The worker skill guides the existing CLI; it does not fix that permission issue.
