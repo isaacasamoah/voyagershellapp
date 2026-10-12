@@ -82,9 +82,10 @@ def handle(stream):
             method = r['method']
             result = {}
             if method == 'thread/start':
-                assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox'}
+                assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode'}
                 assert r['params']['approvalPolicy'] == 'never'
                 assert r['params']['sandbox'] == 'danger-full-access'
+                assert r['params']['historyMode'] == 'legacy'
                 result = {'thread': metadata()}
             elif method in ['thread/read', 'thread/resume']:
                 result = {'thread': metadata()}

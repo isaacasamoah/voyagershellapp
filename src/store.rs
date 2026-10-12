@@ -37,9 +37,29 @@ impl Store {
                 native_turn_id TEXT, source_key TEXT, occurred_ms INTEGER, recorded_ms INTEGER NOT NULL,
                 payload TEXT NOT NULL, UNIQUE(session_id,source_key));
             CREATE TABLE IF NOT EXISTS workers (
-                launch_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES sessions(id),
-                cwd TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL,
-                session_id TEXT UNIQUE REFERENCES sessions(id), pid INTEGER);")?;
+                launch_id TEXT PRIMARY KEY, parent_id TEXT REFERENCES sessions(id),
+                cwd TEXT NOT NULL, prompt TEXT, state TEXT NOT NULL,
+                session_id TEXT UNIQUE REFERENCES sessions(id), pid INTEGER, name TEXT);")?;
+        // Existing workers keep their identity/history. Top-level instances need
+        // neither a synthetic parent nor an initial task to become registered.
+        let has_name: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('workers') WHERE name='name')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_name {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                ALTER TABLE workers RENAME TO workers_before_instances;
+                CREATE TABLE workers (
+                    launch_id TEXT PRIMARY KEY, parent_id TEXT REFERENCES sessions(id),
+                    cwd TEXT NOT NULL, prompt TEXT, state TEXT NOT NULL,
+                    session_id TEXT UNIQUE REFERENCES sessions(id), pid INTEGER, name TEXT);
+                INSERT INTO workers SELECT *,NULL FROM workers_before_instances;
+                DROP TABLE workers_before_instances;
+                COMMIT;",
+            )?;
+        }
         Ok(Self(db))
     }
 
@@ -79,10 +99,11 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,w.name FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
-            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if parent.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?}))
+            let managed: Option<String> = r.get(8)?;
+            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -94,10 +115,17 @@ impl Store {
     }
 
     pub fn launch(&self, id: &str) -> Result<Option<Value>> {
-        Ok(self.0.query_row("SELECT parent_id,cwd,prompt,state,session_id,pid FROM workers WHERE launch_id=?1",[id],|r|Ok(json!({"launch_id":id,"parent_id":r.get::<_,String>(0)?,"cwd":r.get::<_,String>(1)?,"prompt":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"session_id":r.get::<_,Option<String>>(4)?,"pid":r.get::<_,Option<u32>>(5)?}))).optional()?)
+        Ok(self.0.query_row("SELECT parent_id,cwd,prompt,state,session_id,pid,name FROM workers WHERE launch_id=?1",[id],|r|Ok(json!({"launch_id":id,"parent_id":r.get::<_,Option<String>>(0)?,"cwd":r.get::<_,String>(1)?,"prompt":r.get::<_,Option<String>>(2)?,"state":r.get::<_,String>(3)?,"session_id":r.get::<_,Option<String>>(4)?,"pid":r.get::<_,Option<u32>>(5)?,"name":r.get::<_,Option<String>>(6)?}))).optional()?)
     }
 
-    pub fn begin_launch(&self, id: &str, parent: &str, cwd: &str, prompt: &str) -> Result<()> {
+    pub fn begin_launch(
+        &self,
+        id: &str,
+        parent: Option<&str>,
+        cwd: &str,
+        prompt: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<()> {
         // Unknown launches may still have processes: do not automatically replace them.
         let active: i64 = self.0.query_row(
             "SELECT count(*) FROM workers WHERE state IN ('starting','running','unknown')",
@@ -109,8 +137,8 @@ impl Store {
             "one worker at a time; stop the current worker or resolve unknown ownership first"
         );
         self.0.execute(
-            "INSERT INTO workers VALUES (?1,?2,?3,?4,'starting',NULL,NULL)",
-            params![id, parent, cwd, prompt],
+            "INSERT INTO workers VALUES (?1,?2,?3,?4,'starting',NULL,NULL,?5)",
+            params![id, parent, cwd, prompt, name],
         )?;
         Ok(())
     }

@@ -9,11 +9,12 @@ This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/
 Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. Authentication and model selection stay with the user's native Codex configuration; Voyager never copies credentials.
 
 Every Voyager worker creation requests **YOLO**: `approvalPolicy: never` and
-`sandbox: danger-full-access`. This permits commands without the command sandbox
-or approval prompts. Do not assume a subsequently attached native client retains
-that effective policy; the latest external-lead experiment below exposed a
-read-only turn after full-access setup. The tested Codex 0.162.1 remote resume
-rejects permission CLI flags. This prototype has one launch policy; a
+`sandbox: danger-full-access`. The owned server process now starts with matching
+defaults. This permits commands without the command sandbox or approval prompts.
+The [named-instance experiment](instances.md) verified an actual terminal-entered
+turn and service call with that policy. The earlier external lead's read-only
+turn below remains a separate unresolved case. The tested Codex 0.162.1 remote
+resume rejects permission CLI flags. This prototype has one launch policy; a
 user-selectable alternative belongs to a later app increment. Registration does
 not intentionally change an external session's permissions. The lead must itself
 have permission to call Voyager's local socket.
@@ -27,7 +28,10 @@ target/debug/voyager --state "$VOYAGER_STATE" launch PARENT_SESSION worker-001 "
 
 The returned `session_id` identifies the worker. `state: running` refers to its process; `initial_request.state: accepted` acknowledges task submission. Read the recorded turn outcome to establish completion. The parent ID is an attribution supplied by a local caller, not cryptographic proof of which agent made the request.
 
-The launch includes its initial task because, in the tested Codex version, a new empty thread could not yet be resumed by the native terminal client. The first accepted turn supplies that native session history.
+`launch` includes the worker's assigned task. Its accepted turn supplies native
+history before attachment. To create an empty conversation without a parent or
+setup task, use [the named-instance flow](instances.md); it materializes native
+history by setting the chosen name instead.
 
 In a separate terminal:
 
@@ -42,7 +46,12 @@ ghostty --gtk-single-instance=false --title="Voyager worker" \
   -e "$PWD/target/debug/voyager" --state "$VOYAGER_STATE" attach WORKER_SESSION
 ```
 
-Window creation belongs to the desktop client/caller. `launch` starts the worker, and `attach` uses the terminal where it is called. A headless agent can launch work without needing a display. The Ghostty command requires the caller's normal graphical-session environment; an acknowledged process launch alone is not proof that a window is visible.
+`launch` starts the worker; `attach` uses the terminal where it is called. A
+headless agent can launch work without a display. `open WORKER_SESSION ghostty`
+now requests a native window through the same service boundary. The explicit
+Ghostty command above is also possible. Either opening path needs the caller's
+normal graphical-session environment; process launch alone does not prove a
+visible window.
 
 The native interface displays history and handles its own input. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. Voyager requests YOLO at worker creation; `attach` only executes the native resume command and does not select permissions. Voyager does not answer native approval requests on an agent's behalf.
 
@@ -93,7 +102,7 @@ The initial skill passed format validation and was discovered as enabled by the
 running native Codex server's `skills/list` with `forceReload`. Its first live
 worker launch is still pending the permission check below.
 
-## Latest manual run: permission failure
+## Earlier manual run: external lead permission failure
 
 The 11 October fresh lead's setup turn recorded `never` approvals and
 `danger-full-access`. Subsequent turns entered through its native terminal

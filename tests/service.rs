@@ -326,6 +326,143 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
 }
 
 #[test]
+fn named_instance_starts_without_parent_prompt_or_external_server() {
+    let mut f = Fixture::new();
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env(
+                "VOYAGER_CODEX_BIN",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),
+            )
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    assert_eq!(f.call(json!({"op":"status"}))["capturing"], 0);
+    assert_eq!(f.call(json!({"op":"list"})), json!([]));
+    let create = json!({"op":"create","request_id":"named-1","name":"My agent","cwd":f.dir});
+    let mut invalid = create.clone();
+    invalid["cwd"] = json!(f.dir.join("not-a-directory"));
+    assert!(client(&f.dir, invalid).is_err());
+    assert!(f.call(json!({"op":"list"})).as_array().unwrap().is_empty());
+    let receipt = f.call(create.clone());
+    let session = &receipt["session_id"];
+    assert!(receipt["parent_id"].is_null());
+    assert!(receipt["prompt"].is_null());
+    assert_eq!(receipt["name"], "My agent");
+    assert_eq!(f.call(create.clone()), receipt);
+    let mut conflicting = create.clone();
+    conflicting["name"] = json!("Different agent");
+    assert!(client(&f.dir, conflicting).is_err());
+    let listed = f.call(json!({"op":"list"}));
+    assert_eq!(listed[0]["ownership"], "managed");
+    assert_eq!(listed[0]["name"], "My agent");
+    assert_eq!(listed[0]["capture"], "connected");
+    assert!(f.call(json!({"op":"status"}))["control"].is_null());
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["session_id"],
+        *session
+    );
+    assert!(
+        !f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "message" || e["type"] == "turn.started")
+    );
+    assert!(
+        client(
+            &f.dir,
+            json!({"op":"open","session_id":session,"terminal":"unimplemented"})
+        )
+        .is_err()
+    );
+    f.call(json!({"op":"send","session_id":session,"request_id":"real-first-task","message":"first actual request"}));
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "turn.completed")
+    });
+    assert!(client(&f.dir, json!({"op":"stop"})).is_err());
+    f.call(json!({"op":"stop-worker","session_id":session}));
+    assert_eq!(f.call(create)["state"], "stopped");
+    f.halt();
+}
+
+#[test]
+fn missing_native_executable_leaves_failed_creation_without_registration() {
+    let mut f = Fixture::new();
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env("VOYAGER_CODEX_BIN", f.dir.join("missing-codex"))
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    let create = json!({"op":"create","request_id":"unavailable","name":"My agent","cwd":f.dir});
+    assert!(client(&f.dir, create.clone()).is_err());
+    let failed = f.call(create);
+    assert_eq!(failed["state"], "failed");
+    assert!(failed["session_id"].is_null());
+    assert!(failed["pid"].is_null());
+    assert_eq!(f.call(json!({"op":"list"})), json!([]));
+    assert_eq!(f.call(json!({"op":"status"}))["capturing"], 0);
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+    assert!(f.events()["events"].as_array().unwrap().is_empty());
+    f.halt();
+}
+
+#[test]
+fn worker_schema_upgrade_preserves_attribution_and_events() {
+    let f = Fixture::new();
+    let path = f.dir.join("events.sqlite");
+    let store = Store::open(&path).unwrap();
+    let parent = store.register("fixture", &metadata("parent")).unwrap();
+    store
+        .0
+        .execute_batch(
+            "DROP TABLE workers;
+        CREATE TABLE workers (
+            launch_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES sessions(id),
+            cwd TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL,
+            session_id TEXT UNIQUE REFERENCES sessions(id), pid INTEGER);",
+        )
+        .unwrap();
+    store
+        .0
+        .execute(
+            "INSERT INTO workers VALUES ('old',?1,'/synthetic','original task','failed',NULL,NULL)",
+            [&parent],
+        )
+        .unwrap();
+    let before = store.events(0).unwrap();
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    let old = store.launch("old").unwrap().unwrap();
+    assert_eq!(old["parent_id"], parent);
+    assert_eq!(old["prompt"], "original task");
+    assert!(old["name"].is_null());
+    assert_eq!(store.events(0).unwrap(), before);
+    store
+        .begin_launch("new", None, "/synthetic", None, Some("Named instance"))
+        .unwrap();
+    drop(store);
+    let reopened = Store::open(&path).unwrap();
+    assert_eq!(
+        reopened.launch("new").unwrap().unwrap()["name"],
+        "Named instance"
+    );
+}
+
+#[test]
 fn interrupted_launch_is_unknown_and_never_automatically_replaced() {
     let mut f = Fixture::new();
     let db = f.dir.join("events.sqlite");
@@ -338,9 +475,10 @@ fn interrupted_launch_is_unknown_and_never_automatically_replaced() {
     store
         .begin_launch(
             "interrupted",
-            &parent,
+            Some(&parent),
             f.dir.to_str().unwrap(),
-            "original task",
+            Some("original task"),
+            None,
         )
         .unwrap();
     drop(store);

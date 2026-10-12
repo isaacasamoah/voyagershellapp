@@ -42,6 +42,10 @@ The message goes to the existing agent. No model, instructions, credentials or p
 
 ## Commands
 
+To start without an existing native server, use `serve` with no socket argument.
+Then [create a named instance](instances.md). `serve CODEX_SOCKET` connects to an
+independently owned native server as before.
+
 | Command | Result |
 | --- | --- |
 | `status` | Service instance, connection/capture count, worker ownership, current control attachment and voice capability |
@@ -49,6 +53,9 @@ The message goes to the existing agent. No model, instructions, credentials or p
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
 | `list` | Saved registrations, ownership and whether capture is currently connected |
+| `create REQUEST_ID NAME CWD` | Create/register one managed Codex instance without a parent or initial prompt |
+| `open SESSION_ID ghostty` | Request a native Ghostty window for a managed instance; no new agent or control claim |
+| `open-shell CWD ghostty` | Open an ordinary shell; explicitly not registered, captured or managed |
 | `send SESSION_ID REQUEST_ID MESSAGE` | Record the request and send text; acceptance is separate from observed completion |
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
@@ -97,7 +104,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Eight earlier black-box process fixtures remain. Eight Rust tests exercise the service against local WebSocket protocol fixtures and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
+Eight earlier black-box process fixtures remain. Eleven Rust tests exercise the service against local WebSocket protocol fixtures, test source deduplication/text bounds, and cover parentless named creation, failed native startup and schema migration. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
 
 ## Real Codex check — 9 October 2026
 

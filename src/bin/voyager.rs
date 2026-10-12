@@ -36,7 +36,10 @@ fn main() -> Result<()> {
         bail!("--control is only supported by send, launch and stop-worker");
     }
     let mut request = match args.as_slice() {
-        [op, socket] if op == "serve" => return service::serve(&state, &PathBuf::from(socket)),
+        [op] if op == "serve" => return service::serve(&state, None),
+        [op, socket] if op == "serve" => {
+            return service::serve(&state, Some(&PathBuf::from(socket)));
+        }
         [op] if ["status", "discover", "connection-info", "list", "stop"]
             .contains(&op.as_str()) =>
         {
@@ -49,6 +52,15 @@ fn main() -> Result<()> {
         }
         [op, parent, id, cwd, prompt] if op == "launch" => {
             json!({"op":op,"parent_id":parent,"request_id":id,"cwd":cwd,"prompt":prompt})
+        }
+        [op, id, name, cwd] if op == "create" => {
+            json!({"op":op,"request_id":id,"name":name,"cwd":cwd})
+        }
+        [op, session, terminal] if op == "open" => {
+            json!({"op":op,"session_id":session,"terminal":terminal})
+        }
+        [op, cwd, terminal] if op == "open-shell" => {
+            json!({"op":op,"cwd":cwd,"terminal":terminal})
         }
         [op, session] if op == "stop-worker" || op == "attach-info" => {
             json!({"op":op,"session_id":session})
@@ -79,7 +91,8 @@ fn main() -> Result<()> {
         [op, cursor] if op == "watch" => return watch(&state, cursor.parse::<i64>()?, false),
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
-            serve CODEX_SOCKET | status | discover | connection-info | register THREAD_ID | list\n\
+            serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
+            create REQUEST_ID NAME CWD | open SESSION_ID ghostty | open-shell CWD ghostty\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-worker SESSION_ID\n\
             undock GENERATION (--control is supported by send, launch and stop-worker)"

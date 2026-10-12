@@ -56,6 +56,11 @@ a live test before it becomes an implementation assumption.
 
 ## Proposed implementation order
 
+Update, 12 October: the selected first step is now
+[creation through Voyager](instances.md). Its backend create/open journey has
+native evidence. The ordinary-terminal sequence below remains a separate
+unimplemented requirement; creation does not satisfy it.
+
 1. Establish desktop window/process discovery on the actual Fedora compositor.
    Read-only discovery must distinguish an ordinary shell, an agent frontend,
    and an ambiguous multi-pane process. Do not present any of these as a

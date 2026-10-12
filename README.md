@@ -14,8 +14,11 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   terminal client can disconnect and reconnect while that worker keeps running.
   Launched sessions default to YOLO: no command sandbox or approval prompts.
   Voyager does not intentionally change an external session's permissions.
-  The latest manual run exposed read-only turns after a YOLO setup; effective
-  permissions across native attachment still need investigation.
+- It can start with zero agents, create one named Codex instance with no setup
+  prompt, and open its native interface in Ghostty. Registration and capture
+  precede the first conversation. The new native turn's YOLO policy and harmless
+  service call were verified, along with closing and reopening the same chat.
+  The panel creation form and other launch paths still need their own proof.
 - The Electron prototype shows a glass astronaut and a small panel of project
   names and connection dots. Click to toggle the panel, drag its background to
   move it, or pull the astronaut away and return it with paired sound cues.
@@ -30,7 +33,8 @@ We are building in small increments: try a real workflow, use it ourselves, docu
   control while capture and agents continue. The [control guide](docs/control.md)
   explains the behavior, command preconditions and voice setting's limits.
 
-Start with [running the service](docs/service.md), then [the worker
+Start with [creating a native instance](docs/instances.md) or
+[registering an existing session](docs/service.md), then [the worker
 experiment](docs/workers.md) and [the desktop guide](docs/desktop.md).
 The reusable [worker skill](skills/voyager-worker/SKILL.md) gives an agent the
 existing CLI workflow; [installation and its current proof](docs/workers.md#worker-skill)
@@ -91,7 +95,7 @@ confuse its programmatic checks with a human testing the gestures.
 
 | Directory         | Responsibility                                                   |
 | ----------------- | ---------------------------------------------------------------- |
-| `src/`            | Rust service, capture, persistence, worker ownership and CLI     |
+| `src/`            | Rust service, capture, persistence, worker ownership, native window opening and CLI     |
 | `src/bin/`        | Service CLI entry point and X11 inventory and placement of the calling avatar       |
 | `tests/`          | Disposable service tests and independent Python process fixtures |
 | `desktop/src/`    | Electron main process, window binding and narrow preload API     |
@@ -107,22 +111,25 @@ used for those fixtures, not the Rust service runtime.
 
 ## Next experiment
 
-Open a terminal normally, start Codex normally, and dock without a Voyager
-launcher or pre-supplied conversation identity. Establish the actual native
-session identity and register it; ambiguous targets must be explained rather
-than guessed. Start with that ordinary flow, then expand terminal coverage.
-Window placement support and agent-session identification are separate problems.
-The product target is docking onto any terminal; a plain shell must not be
-misrepresented as an identified agent.
+Wire the proved Codex create/open backend into the panel's plus action. Create
+registers and captures; dock selects human control; undock releases control.
+Prove the physical journey in Ghostty before expanding terminal coverage.
+The first backend increment still permits only one managed runtime at a time.
+
+Separately, open a terminal normally, start Codex normally, and dock without a
+Voyager launcher or pre-supplied conversation identity. Establish the actual
+native identity; ambiguous targets must be explained rather than guessed.
+Window placement and agent identification are separate problems. A bare-shell
+opening check now exists, but a shell is not yet a managed or captured instance.
 
 The [ordinary-terminal investigation](docs/terminal-discovery.md) records the
 current evidence, unresolved identity handshake, and native acceptance journey.
 Creating an instance from Voyager and discovering one opened independently are
 separate checks. Both should use the same backend tool boundary.
 
-Before repeating the worker demonstration, verify a tool call from the native
-lead can reach Voyager and determine why the latest resumed turns ran read-only.
-The worker skill guides the existing CLI; it does not fix that permission issue.
+The new managed creation path passed a native tool call with full access.
+The earlier external lead's read-only turn remains a separate unresolved case;
+this result does not establish YOLO on every start or resume path.
 Native voice handoff, supervisor priority, multiple simultaneous workers and
 knowledge extraction remain later increments.
 

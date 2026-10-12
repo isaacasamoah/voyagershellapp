@@ -58,6 +58,7 @@ impl Worker {
         executable: &str,
         launch: &str,
         cwd: &str,
+        name: Option<&str>,
     ) -> Result<Self> {
         // Each launch has a new private socket; a stale endpoint is never reused.
         let dir = state.join(format!("w-{}", uuid::Uuid::new_v4().simple()));
@@ -70,6 +71,10 @@ impl Worker {
         let child = Command::new(executable)
             .args([
                 "app-server",
+                "-c",
+                "sandbox_mode=\"danger-full-access\"",
+                "-c",
+                "approval_policy=\"never\"",
                 "--listen",
                 &format!("unix://{}", socket.display()),
             ])
@@ -95,13 +100,18 @@ impl Worker {
         // their existing permissions. Authentication and model remain native.
         let reply = connection.rpc(
             "thread/start",
-            json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access"}),
+            json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy"}),
         )?;
         let metadata = &reply["thread"];
         let native = metadata["id"]
             .as_str()
             .context("worker has no native identity")?
             .to_owned();
+        if let Some(name) = name {
+            // Codex 0.162.1 materializes a named empty thread through this API.
+            // Its native TUI can then resume it without a fabricated setup turn.
+            connection.rpc("thread/name/set", json!({"threadId":native,"name":name}))?;
+        }
         let server = socket.to_string_lossy().into_owned();
         let session = store.register_worker(launch, &server, metadata, process.0.id())?;
         store.local(
