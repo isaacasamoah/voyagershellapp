@@ -6,6 +6,19 @@ its own interface; Voyager manages the work it starts and records what happens.
 
 We build small, real experiments, try them ourselves, and share the results here.
 
+## Vision
+
+Let’s go together. We’re building voyagershell to make room for agent-to-agent,
+agent-to-human and human-to-human collaboration alongside a strong solo dev flow.
+
+The direction is shared, dynamic knowledge graphs that connect what a team learns,
+decides and builds, with native messaging to keep people and agents in conversation.
+As that knowledge evolves, collaborators should be able to find relevant context,
+follow its evidence and stay aware of changes that affect their work.
+
+This is the vision we’re exploring through small experiments. The prototype below
+is our starting point, and we’d love to build toward it with other developers.
+
 ## Current prototype
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
