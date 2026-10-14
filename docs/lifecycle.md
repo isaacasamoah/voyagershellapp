@@ -98,7 +98,8 @@ owner therefore handles runtime cleanup explicitly. See the
 
 Every observation carries its source's capture generation. The store accepts it
 only when the instance is registered and its generation still matches. Removal
-sets a durable cutoff. Late native observations and queued shell boundaries
+commits the cutoff and its removal event in one transaction. A failed event
+write rolls that change back. Late native observations and queued shell boundaries
 cannot restore capture. Administrative lifecycle records may still describe
 removal or stopping; no later conversation/command content is captured.
 

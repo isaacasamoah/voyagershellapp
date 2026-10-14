@@ -289,11 +289,14 @@ impl Store {
     }
 
     pub fn remove(&self, session: &str) -> Result<()> {
+        let transaction = self.0.unchecked_transaction()?;
         self.0.execute(
             "UPDATE sessions SET removed_ms=COALESCE(removed_ms,?2) WHERE id=?1",
             params![session, now()],
         )?;
-        self.local(session, "session.removed", json!({"history_retained":true}))
+        self.local(session, "session.removed", json!({"history_retained":true}))?;
+        transaction.commit()?;
+        Ok(())
     }
 
     pub fn reactivate(&self, session: &str) -> Result<i64> {

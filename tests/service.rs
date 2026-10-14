@@ -992,6 +992,11 @@ fn capture_generation_cutoff_drops_removed_and_old_subscription_payloads() {
         events::normalize(&note("item/completed",json!({"threadId":"live-thread","turnId":"t","item":{"id":marker,"type":"agentMessage","text":marker}}))).unwrap()
     };
     store.record(&session, 1, observation("BEFORE")).unwrap();
+    store.0.execute_batch("CREATE TRIGGER reject_remove BEFORE INSERT ON events WHEN NEW.kind='session.removed' BEGIN SELECT RAISE(ABORT,'test write failure'); END;").unwrap();
+    assert!(store.remove(&session).is_err());
+    assert_eq!(store.generation(&session).unwrap(), Some(1));
+    assert!(store.session(&session).unwrap()["removed_ms"].is_null());
+    store.0.execute_batch("DROP TRIGGER reject_remove").unwrap();
     store.remove(&session).unwrap();
     store.record(&session, 1, observation("AFTER")).unwrap();
     let generation = store.reactivate(&session).unwrap();
