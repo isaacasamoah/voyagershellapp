@@ -30,14 +30,15 @@ guidance, not a reason to build a framework. In this project:
   persistence boundaries; do not turn every internal operation into a string command.
 - Return `Result` for expected filesystem, socket and process failures. Add
   context at a useful boundary. Reserve panic/unwrap for established invariants,
-  and explain an invariant when it is not obvious.
+  and describe non-obvious invariants in the owning context document.
 - Prefer safe Rust and borrowed inputs. Use `unsafe`, `Arc`, locks and background
   tasks only when the primitive requires them, with its contract made clear.
 - Let rustfmt handle layout and Clippy flag common mistakes. Test observable
   behavior and a failure case; do not add tests that merely restate the code.
 - Keep dependencies tied to an immediate need. Commit lockfiles for this app.
-- Explain why a non-obvious choice exists. Update the runnable example and
-  measured limitations in the same change as the implementation.
+- Keep changed source comment-free. Explain non-obvious choices, unsafe
+  contracts and boundary invariants in the owning context document. Update the
+  runnable example and measured limitations with the implementation.
 
 The book's chapters on [errors](https://doc.rust-lang.org/book/ch09-00-error-handling.html)
 and [tests](https://doc.rust-lang.org/book/ch11-00-testing.html) are good starting

@@ -40,8 +40,9 @@ The service supports several managed instances and requests YOLO at worker
 creation. It includes the initial task so the native conversation can be resumed.
 Do not stop an existing worker to free capacity without the user's instruction.
 
-Read the receipt. `session_id` identifies the new worker; `state: running` refers
-to its process, and `initial_request.state: accepted` acknowledges task submission.
+Read the saved operation result. `session_id` identifies the new worker;
+`runtime: running` describes its process, `state: completed` describes the launch
+action, and `initial_request.state: accepted` acknowledges task submission.
 Read `events` for the resulting turn and any errors before claiming completion.
 If the reply is lost or uncertain, inspect `list` and `events`; do not invent a
 new launch ID or resubmit the task. Repeating the same launch ID and identical
@@ -49,31 +50,24 @@ inputs returns its receipt without deliberately starting another worker.
 If current control changed, report the stale-control refusal; do not silently
 acquire a new generation and act for a different controller.
 
-## Open the native interface by default
+## Native interface and lifecycle
 
-For a request to start a worker or session, open its native terminal after the
-initial task is accepted. Skip opening the terminal when the user explicitly
-asks for a background process, background-only work, or no terminal. An explicit
-request to show the terminal still applies even when the task runs in the
-background. Do not ask for separate confirmation to open the default interface.
+`launch` opens the worker's native Ghostty interface after task acceptance.
+Do not call `open` again as part of the normal launch. When the user explicitly
+asks for background-only work or no terminal, append `--background` to `launch`.
+An explicit request to show the interface still means the normal default launch.
 
-After the initial task is accepted, use `attach-info WORKER_SESSION` to inspect
-the native connection. `attach WORKER_SESSION` replaces its calling process, so
-run it in a new terminal client, never in the lead's tool-execution terminal.
-For the currently supported desktop binding, use a dedicated Ghostty XWayland
-window from an available graphical environment:
+If opening fails, the operation result may retain a real running instance.
+Inspect `operation REQUEST_ID` and `list`; do not make a replacement launch ID.
+A deliberate repair uses `open WORKER_SESSION ghostty --request-id OPEN_ID` to
+reopen the same instance. A lost acknowledgement reuses the same ID and inputs.
+Opening requests focus when that owned window is already open. Leave docking
+and control transfer to the person.
 
-```sh
-"$VOYAGER_BIN" --state "$VOYAGER_STATE" open "$WORKER_SESSION" ghostty
-```
-
-The service owns the launch through the same backend operation as the panel. If a graphical environment is
-unavailable, report that the worker exists and provide the attach command for
-the user to run. Do not open a duplicate window on retry. Verify the visible
-window or ask the user to confirm it; a process launch is not visual proof.
-Leave docking and control transfer to the user.
-
-Report the worker, submission/outcome, and terminal state separately. Undocking
-or closing the terminal leaves the service-owned worker running. Stopping it is
-a separate explicit `stop-instance WORKER_SESSION` action. This does not promise
-survival of a service crash or reboot.
+Report launch outcome, task outcome and terminal state separately. Undocking or
+closing the terminal leaves work and capture running. `background WORKER_SESSION`
+closes the viewer while work continues. `stop-instance WORKER_SESSION` stops the
+owned runtime and closes its viewer; `--runtime-only` explicitly requests only
+runtime shutdown. `remove WORKER_SESSION` deregisters future capture and
+instructions, preserving history; `--stop` stops and closes first. These actions
+never promise survival of a daemon crash or reboot.

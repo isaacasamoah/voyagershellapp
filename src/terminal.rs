@@ -1,5 +1,3 @@
-//! Native window opening, separate from agent ownership and event capture.
-//! First target: a dedicated Ghostty XWayland window on Linux.
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use std::{
@@ -11,7 +9,11 @@ use std::{
 fn ghostty(cwd: &Path, title: &str) -> Command {
     let mut command = Command::new("ghostty");
     command
-        .args(["--gtk-single-instance=false", &format!("--title={title}")])
+        .args([
+            "--gtk-single-instance=false",
+            "--confirm-close-surface=false",
+            &format!("--title={title}"),
+        ])
         .env("GDK_BACKEND", "x11")
         .current_dir(cwd)
         .stdin(Stdio::null())
@@ -42,14 +44,10 @@ pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
         .spawn()
         .context("open native Ghostty client")
 }
-
-/// Ask the window manager to activate the one window owned by a live terminal
-/// Child. The caller rechecks Child::try_wait first; titles never select a target.
-/// This changes presentation only, without changing the control attachment.
-pub fn focus(pid: u32) -> Result<u32> {
+pub fn window(pid: u32) -> Result<Option<u32>> {
     use x11rb::{
         connection::Connection,
-        protocol::xproto::{AtomEnum, ClientMessageEvent, ConnectionExt, EventMask},
+        protocol::xproto::{AtomEnum, ConnectionExt},
     };
     let (conn, screen) = x11rb::connect(None).context("connect to desktop")?;
     let root = conn.setup().roots[screen].root;
@@ -67,7 +65,6 @@ pub fn focus(pid: u32) -> Result<u32> {
     let pid_atom = atom(b"_NET_WM_PID")?;
     let mut matches = Vec::new();
     for window in clients.value32().into_iter().flatten() {
-        // Other windows may close during inventory; they are not candidates.
         if let Ok(reply) = conn
             .get_property(false, window, pid_atom, AtomEnum::CARDINAL, 0, 1)?
             .reply()
@@ -78,10 +75,21 @@ pub fn focus(pid: u32) -> Result<u32> {
         }
     }
     ensure!(
-        matches.len() == 1,
-        "Cannot identify a single terminal window to bring forward."
+        matches.len() <= 1,
+        "outcome_unknown: more than one window belongs to this terminal"
     );
-    let window = matches[0];
+    Ok(matches.first().copied())
+}
+
+fn request(pid: u32, name: &[u8]) -> Result<u32> {
+    use x11rb::{
+        connection::Connection,
+        protocol::xproto::{ClientMessageEvent, ConnectionExt, EventMask},
+    };
+    let window = window(pid)?.context("outcome_unknown: terminal window is not identified")?;
+    let (conn, screen) = x11rb::connect(None)?;
+    let root = conn.setup().roots[screen].root;
+    let atom = conn.intern_atom(false, name)?.reply()?.atom;
     conn.send_event(
         false,
         root,
@@ -89,11 +97,29 @@ pub fn focus(pid: u32) -> Result<u32> {
         ClientMessageEvent::new(
             32,
             window,
-            atom(b"_NET_ACTIVE_WINDOW")?,
-            [2, x11rb::CURRENT_TIME, 0, 0, 0],
+            atom,
+            if name == b"_NET_CLOSE_WINDOW" {
+                [x11rb::CURRENT_TIME, 2, 0, 0, 0]
+            } else {
+                [2, x11rb::CURRENT_TIME, 0, 0, 0]
+            },
         ),
     )?
     .check()?;
     conn.flush()?;
     Ok(window)
+}
+
+pub fn focus(pid: u32) -> Result<u32> {
+    request(pid, b"_NET_ACTIVE_WINDOW")
+}
+
+pub fn close(pid: u32) -> Result<u32> {
+    request(pid, b"_NET_CLOSE_WINDOW")
+}
+
+pub fn exists(window: u32) -> Result<bool> {
+    use x11rb::protocol::xproto::ConnectionExt;
+    let (conn, _) = x11rb::connect(None)?;
+    Ok(conn.get_window_attributes(window)?.reply().is_ok())
 }

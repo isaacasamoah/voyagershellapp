@@ -52,9 +52,9 @@ independently owned native server as before.
 | `connection-info` | Connected native server identity and configured native executable; no subscription |
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
-| `list` | Saved registrations, ownership and whether capture is currently connected |
+| `list [--include-removed]` | Active registrations; optionally include retained deregistered records |
 | `start` | Connect to the existing service or start it independently of the calling app |
-| `create codex\|shell REQUEST_ID NAME CWD` | Create/register a named Codex instance or managed Bash shell |
+| `create codex\|shell REQUEST_ID NAME CWD [--background]` | Start/register/capture and open a native window by default |
 | `open SESSION_ID ghostty` | Request a native Ghostty window for a managed instance; no new agent or control claim |
 | `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
 | `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |
@@ -63,10 +63,14 @@ independently owned native server as before.
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
 | `watch --pretty [CURSOR]` | Readable You/Agent messages and lifecycle lines, with terminal control characters escaped |
-| `launch PARENT_SESSION REQUEST_ID CWD PROMPT` | Start one service-owned worker and submit its first task; see [worker commands](workers.md) |
+| `launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background]` | Start/register/capture, submit one initial task and open by default; task acceptance is not completion |
 | `attach SESSION_ID` | Replace this terminal client with the managed instance's native attachment |
 | `attach-info SESSION_ID` | Inspect the worker's native connection command and process identity |
-| `stop-instance SESSION_ID` | Explicitly stop the owned Codex server or Bash; never stop an external session |
+| `background SESSION_ID` | Close the owned viewer while runtime and capture continue |
+| `stop-instance SESSION_ID [--runtime-only]` | Stop owned runtime and close its viewer by default |
+| `remove SESSION_ID [--stop]` | Deregister and retain history; optionally stop and close first |
+| `register-instance SESSION_ID` | Explicitly resume future capture of a removed instance, without importing history |
+| `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
 | `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
 | `undock GENERATION` | Release only that current control attachment, leaving registration and work alone |
 
@@ -74,6 +78,8 @@ See [docking and control](control.md) for the persistent desktop connection,
 `interface.docked`/`interface.undocked` events and optional `--control GENERATION`
 precondition on agent commands. The interface events are recorded alongside
 conversation events; they are not model-generated observations.
+
+Lifecycle actions use saved operation results: see [their inputs, outcomes and failure contract](lifecycle.md). The CLI generates an action ID unless supplied with `--request-id`; retain that ID to inspect an uncertain result.
 
 Reusing a request ID with the same inputs returns the prior submission record. Changing its inputs is rejected. Delivery whose acknowledgement was lost remains uncertain and is never retried automatically. The request record stays about submission; the event stream carries the observed turn outcome.
 
@@ -91,7 +97,7 @@ Reasoning, raw terminal output, message deltas, old conversation history, attach
 
 Events retain native turn/item identifiers and a deduplication key, plus recorded time and source time where supplied. A registration maps the event's session ID to its native thread/server. The store does not treat a completed turn as proof its answer is correct. Unsupported notifications are outside this policy and are not represented as captured knowledge.
 
-The private database lives in the selected state directory, never in the Git checkout. Records persist until you explicitly remove that dedicated directory after stopping Voyager. Text fields are capped at 16 KiB with a truncation marker. SQLite is capped at 8192 pages (32 MiB with the new database's default 4096-byte pages); temporary journal space is additional. A storage failure stops capture and is reported on stderr; a durable gap cannot be promised when storage itself is unavailable.
+The private database lives in the selected state directory, never in the Git checkout. Removing an instance deregisters it; historical events remain. Records persist until you explicitly remove that dedicated directory after stopping Voyager. Text fields are capped at 16 KiB with a truncation marker. SQLite is capped at 8192 pages (32 MiB with the new database's default 4096-byte pages); temporary journal space is additional. A storage failure stops capture and is reported on stderr; a durable gap cannot be promised when storage itself is unavailable.
 
 ## Disconnect and restart
 

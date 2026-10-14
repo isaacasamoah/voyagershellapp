@@ -4,6 +4,10 @@ Each worker has its own service-owned Codex app server. Your existing registered
 
 This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/docs/cli/reference) over a private Unix socket. It does not implement a terminal emulator, adopt an existing CLI process, relay PTY output or depend on Herdr/tmux. Other harnesses need their own integration and proof.
 
+Create/launch now open a native viewer by default. Use `--background` for an
+explicit background-only launch. See [the lifecycle contract](lifecycle.md) for
+combined stop/window closure, removal and saved operation outcomes.
+
 ## Try it
 
 Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. Authentication and model selection stay with the user's native Codex configuration; Voyager never copies credentials.
@@ -26,7 +30,7 @@ target/debug/voyager --state "$VOYAGER_STATE" launch PARENT_SESSION worker-001 "
   "Please use no tools and change no files. Reply with: Worker connected."
 ```
 
-The returned `session_id` identifies the worker. `state: running` refers to its process; `initial_request.state: accepted` acknowledges task submission. Read the recorded turn outcome to establish completion. The parent ID is an attribution supplied by a local caller, not cryptographic proof of which agent made the request.
+The returned `session_id` identifies the worker. `runtime: running` refers to its process; `state: completed` describes the launch action; `initial_request.state: accepted` acknowledges task submission. Read the recorded turn outcome to establish completion. The parent ID is an attribution supplied by a local caller, not cryptographic proof of which agent made the request.
 
 `launch` includes the worker's assigned task. Its accepted turn supplies native
 history before attachment. To create an empty conversation without a parent or
@@ -47,7 +51,7 @@ ghostty --gtk-single-instance=false --title="Voyager worker" \
 ```
 
 `launch` starts the worker; `attach` uses the terminal where it is called. A
-headless agent can launch work without a display. `open WORKER_SESSION ghostty`
+headless agent can explicitly `launch --background` without a display. `open WORKER_SESSION ghostty`
 now requests a native window through the same service boundary. The explicit
 Ghostty command above is also possible. Either opening path needs the caller's
 normal graphical-session environment; process launch alone does not prove a
@@ -63,14 +67,14 @@ target/debug/voyager --state "$VOYAGER_STATE" watch --pretty
 target/debug/voyager --state "$VOYAGER_STATE" send WORKER_SESSION task-002 "Your next task"
 ```
 
-Repeated launch IDs with identical inputs return the stored launch; changed inputs conflict. Several managed workers and shells may run together. Closing a viewer never issues stop. To end the worker explicitly:
+Repeated launch IDs with identical inputs return the saved operation result; changed inputs conflict. Several managed workers and shells may run together. Closing a viewer never issues stop. To end the worker explicitly:
 
 ```sh
 target/debug/voyager --state "$VOYAGER_STATE" stop-instance WORKER_SESSION
 target/debug/voyager --state "$VOYAGER_STATE" stop
 ```
 
-`stop-instance` terminates the process group Voyager created for that worker server. It is not a task-cancellation acknowledgement: unfinished task outcomes remain uncertain without native evidence. Cleanup of commands that independently escape that process group is not proved. Ordinary `stop` refuses while the owned server is alive, even if it is idle. External sessions are never valid `stop-instance` targets.
+`stop-instance` terminates the process group Voyager created for that worker server and then closes its owned viewer. Use `--runtime-only` to request only runtime shutdown. It is not a task-cancellation acknowledgement: unfinished task outcomes remain uncertain without native evidence. Cleanup of commands that independently escape that process group is not proved. Ordinary `stop` refuses while the owned server is alive, even if it is idle. External sessions are never valid `stop-instance` targets.
 
 ## Worker skill
 

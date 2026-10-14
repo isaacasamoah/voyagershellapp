@@ -35,21 +35,16 @@ the service and instances running. The default state is
 `$HOME/.local/share/voyagershell`; set `VOYAGER_STATE` to use a different private
 directory. This is not an OS service installer or crash/reboot supervisor.
 
-## Current command boundaries
+## Lifecycle controls
 
-| Operation | Runtime/task effect | Window/control effect |
-| --- | --- | --- |
-| `create` | Creates and registers Codex or Bash, with capture; no initial agent task | No window or dock by itself; the panel then calls `open` |
-| `launch` | Creates a Codex worker with a parent and submits its initial task | Runs in the background; no automatic terminal window |
-| `open` | Keeps the existing runtime and conversation | Opens its native client, or brings the existing client forward; does not dock |
-| `send` | Submits a turn to an existing idle Codex instance | Does not open or dock |
-| `dock` / `undock` | Keeps runtime and capture alive | Acquires/releases the current human control attachment |
-| `stop-instance` | Explicitly stops an owned runtime | This is different from closing its terminal window |
+Use **⋯** beside an instance for **Run in background**, **Stop**, **Remove** or
+**Stop and remove**. Removed but running owned instances appear under
+**Unregistered**, with **Register again**, **↗** and **Stop** available.
 
-The panel and agents call these same service operations. `launch` acceptance is
-not task completion. To launch work **and** show it, call `launch`, inspect the
-receipt, then `open` using the returned session ID. A fuller CLI design review is
-queued; these are the implemented boundaries, not a proposed rename.
+The [lifecycle contract](lifecycle.md) defines each action's effects, defaults,
+retry behavior and ownership limits. The [CLI reference](service.md#commands)
+lists the same operations available to an agent or script. Docking remains
+independent of registration and runtime lifetime.
 
 ## The same operations from an agent or script
 
@@ -78,11 +73,10 @@ inputs fail. Unknown delivery is never silently retried with a new ID. The form
 also keeps its creation ID when opening fails, so retry opens the existing
 instance. An invalid folder fails without registration.
 
-`open` reports `opening` after spawning a native client, or `focus_requested`
-after asking the window manager to activate its existing window. Acknowledgement
-is not proof of a usable or focused window. Opening failure does not delete the instance. Native window
-readiness remains a desktop observation; the prototype has no complete
-compositor launch-failure protocol.
+`open` waits for the exact launched window to map, or asks the desktop to focus
+its existing window. Mapping is not proof of keyboard focus or native UI
+usability. Failed opening retains the instance and saved result; inspect it
+before using a new-ID `open` to repair the same instance.
 
 Owned Codex tool environments explicitly receive `VOYAGER_BIN`, `VOYAGER_STATE`
 through the [native environment policy](https://learn.chatgpt.com/docs/config-file/config-advanced#shell-environment-policy), plus the small
@@ -141,7 +135,7 @@ target/debug/voyager --state "$VOYAGER_STATE" stop-instance SESSION_ID
 target/debug/voyager --state "$VOYAGER_STATE" stop
 ```
 
-`stop-instance` explicitly ends an owned runtime. For Bash it sends SIGHUP to
+`stop-instance` explicitly ends an owned runtime and closes its owned native window by default. `--runtime-only` leaves window closure out of the request. For Bash it sends SIGHUP to
 Bash, which forwards it to its jobs, with a bounded process-group kill fallback.
 Disowned or independently escaped processes are outside that contract. An
 external registration cannot be stopped this way. `stop` refuses while any owned
@@ -158,7 +152,10 @@ uses the owned server's `never` / `danger-full-access` policy, without unsupport
 permission flags on the resume CLI. These are version-specific adapter decisions;
 see the [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server).
 
-- `src/service.rs`: shared operations and runtime ownership.
+- `src/service.rs`: service loop and sole runtime/store ownership.
+- `src/service/lifecycle.rs`: creation and nonblocking lifecycle transitions.
+- `src/service/native.rs`: native discovery, registration and turn submission.
+- `src/actions.rs`: typed lifecycle actions, phases and operation identity.
 - `src/worker.rs`: native Codex server and empty conversation creation.
 - `src/shell.rs`, `shell.bash`: interactive shell ownership and capture.
 - `src/shell_transport.rs`: byte transport and terminal-mode restoration.

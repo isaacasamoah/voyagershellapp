@@ -1,6 +1,3 @@
-//! A real interactive Bash behind a service-owned PTY. The attach client only
-//! transports bytes; Ghostty remains the terminal emulator. Capture comes from
-//! Bash's command boundaries, never from guessing at rendered terminal text.
 use crate::{shell_transport::Viewer, store::Store};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
@@ -48,7 +45,6 @@ fn resize(fd: i32, rows: u16, cols: u16) -> Result<()> {
         ws_xpixel: 0,
         ws_ypixel: 0,
     };
-    // SAFETY: fd is a live PTY and size points to a valid winsize for this call.
     ensure!(
         unsafe { nix::libc::ioctl(fd, nix::libc::TIOCSWINSZ, &size) } == 0,
         "resize PTY failed"
@@ -74,6 +70,8 @@ pub struct Shell {
     ready: bool,
     untouched: bool,
     capture: bool,
+    pub generation: i64,
+    registered: bool,
 }
 
 impl Shell {
@@ -113,8 +111,6 @@ impl Shell {
             .stdin(Stdio::from(pty.slave.try_clone()?))
             .stdout(Stdio::from(pty.slave.try_clone()?))
             .stderr(Stdio::from(pty.slave));
-        // SAFETY: only async-signal-safe syscalls between fork and exec. Standard
-        // descriptors are already the slave PTY; fd 9 is deliberately inherited.
         unsafe {
             command.pre_exec(move || {
                 if nix::libc::setsid() < 0
@@ -149,6 +145,8 @@ impl Shell {
             ready: false,
             untouched: true,
             capture: true,
+            generation: 1,
+            registered: true,
         };
         shell.session = store.register_worker(
             launch,
@@ -164,13 +162,10 @@ impl Shell {
         Ok(shell)
     }
     pub fn connected(&self) -> bool {
-        self.alive && self.capture
+        self.alive && self.capture && self.registered
     }
     pub fn attach(&self, state: &Path) -> Result<Value> {
-        ensure!(
-            self.connected(),
-            "shell ended or command capture unavailable"
-        );
+        ensure!(self.alive, "shell ended or command capture unavailable");
         Ok(
             json!({"executable":std::env::current_exe()?,"args":["--state",state,"shell-attach",self.session],
             "pid":self.process.id(),"session_id":self.session,"socket":self.socket,"kind":"shell"}),
@@ -206,8 +201,6 @@ impl Shell {
         self.pending = Some(id.into());
         self.ready = false;
         self.untouched = false;
-        // A partial write is uncertain and is never replayed. This also closes the
-        // gate to competing agent submissions before any command bytes are sent.
         self.master.write_all(text.as_bytes())?;
         self.master.write_all(b"\n")?;
         self.untouched = true;
@@ -218,13 +211,10 @@ impl Shell {
         match kind {
             "begin" => {
                 self.ready = false;
-                // `history 1` prefixes the entered line with its decimal index.
                 let line = value
                     .trim_start()
                     .trim_start_matches(|c: char| c.is_ascii_digit())
                     .trim_start();
-                // A queued human command may reach Bash before our submitted
-                // line. Never attribute that earlier command to the agent.
                 let matched = self
                     .pending
                     .as_deref()
@@ -237,8 +227,9 @@ impl Shell {
                     .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 let (text, truncated) = crate::events::text(&json!(line));
-                store.local(
+                store.capture_local(
                     &self.session,
+                    self.generation,
                     "shell.command",
                     json!({"command_id":id,"request_id":request,
                     "actor":if request.is_some(){"agent"}else{"human"},"text":text,"truncated":truncated,"cwd":cwd}),
@@ -247,8 +238,9 @@ impl Shell {
             }
             "end" => {
                 if let Some(id) = self.command.take() {
-                    store.local(
+                    store.capture_local(
                         &self.session,
+                        self.generation,
                         "shell.completed",
                         json!({"command_id":id,"exit_code":value.parse::<i32>()?,"cwd":cwd}),
                     )?;
@@ -329,8 +321,6 @@ impl Shell {
                     let bytes: Vec<u8> = serde_json::from_value(raw.clone())?;
                     ensure!(bytes.len() <= 4096, "input chunk too large");
                     if let Some(last) = bytes.last() {
-                        // Do not clear typeahead at command completion. Only a
-                        // submitted/cancelled line makes the input boundary clean.
                         self.untouched = matches!(*last, b'\n' | b'\r' | 3);
                         if self.untouched {
                             self.ready = false;
@@ -369,8 +359,6 @@ impl Shell {
                 json!({"reason":"shell_hook_failed","replay_available":false}),
             )?;
         }
-        // Apply shell boundaries before newly arrived keystrokes. A prompt event
-        // must never erase our knowledge that a person has begun editing a line.
         if let Err(error) = self.observe_viewer() {
             eprintln!("shell client disconnected: {error}");
             self.viewer = None;
@@ -380,7 +368,11 @@ impl Shell {
             match self.master.read(&mut bytes) {
                 Ok(0) => break,
                 Ok(n) => {
-                    self.output.extend_from_slice(&bytes[..n]);
+                    if self.registered {
+                        self.output.extend_from_slice(&bytes[..n]);
+                    } else {
+                        self.output_start += n as u64;
+                    }
                     if self.output.len() > BUFFER_LIMIT {
                         let removed = self.output.len() - BUFFER_LIMIT;
                         self.output.drain(..removed);
@@ -412,8 +404,6 @@ impl Shell {
         if self.process.try_wait()?.is_some() {
             return Ok(());
         }
-        // Interactive Bash forwards HUP to its jobs. A disowned process is outside
-        // this ownership contract. Do not kill processes recovered from stored PIDs.
         let _ = kill(Pid::from_raw(self.process.id() as i32), Signal::SIGHUP);
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline {
@@ -426,13 +416,45 @@ impl Shell {
         self.process.wait()?;
         Ok(())
     }
-    pub fn stop(&mut self, store: &Store) -> Result<Value> {
-        self.halt()?;
-        self.alive = false;
-        self.viewer = None;
+    pub fn deregister(&mut self) {
+        self.registered = false;
+        self.output_start += self.output.len() as u64;
+        self.output.clear();
+    }
+
+    pub fn require_registration_boundary(&self) -> Result<()> {
+        ensure!(
+            self.alive
+                && self.capture
+                && self.ready
+                && self.untouched
+                && self.pending.is_none()
+                && self.command.is_none()
+                && self.hook_bytes.is_empty(),
+            "busy: finish the current shell command or input before registering"
+        );
+        Ok(())
+    }
+
+    pub fn reactivate(&mut self, generation: i64) {
+        self.generation = generation;
+        self.registered = true;
+    }
+
+    pub fn request_stop(&mut self, force: bool) -> Result<()> {
+        if self.process.try_wait()?.is_none() {
+            if force {
+                killpg(Pid::from_raw(self.process.id() as i32), Signal::SIGKILL)?;
+            } else {
+                kill(Pid::from_raw(self.process.id() as i32), Signal::SIGHUP)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn stopped(&self, store: &Store) -> Result<()> {
         store.worker_state(&self.launch, "stopped")?;
-        store.local(&self.session, "shell.stopped", json!({}))?;
-        Ok(json!({"session_id":self.session,"state":"stopped"}))
+        store.local(&self.session, "shell.stopped", json!({}))
     }
 }
 impl Drop for Shell {

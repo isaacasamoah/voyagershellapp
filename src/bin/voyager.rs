@@ -35,6 +35,36 @@ fn main() -> Result<()> {
     {
         bail!("--control is only supported by send, launch, shell-exec and stop-instance");
     }
+    let mut take_flag = |flag: &str| {
+        if let Some(index) = args.iter().position(|v| v == flag) {
+            args.remove(index);
+            true
+        } else {
+            false
+        }
+    };
+    let background = take_flag("--background");
+    let runtime_only = take_flag("--runtime-only");
+    let stop_removed = take_flag("--stop");
+    let include_removed = take_flag("--include-removed");
+    let request_id = if let Some(index) = args.iter().position(|v| v == "--request-id") {
+        if index + 1 >= args.len() {
+            bail!("provide an ID after --request-id");
+        }
+        let id = args.remove(index + 1);
+        args.remove(index);
+        Some(id)
+    } else {
+        None
+    };
+    let op = args.first().map(String::as_str).unwrap_or("");
+    if (background && !["create", "launch"].contains(&op))
+        || (runtime_only && op != "stop-instance")
+        || (stop_removed && op != "remove")
+        || (include_removed && op != "list")
+    {
+        bail!("flag is not valid for this command");
+    }
     let mut request = match args.as_slice() {
         [op] if op == "serve" => return service::serve(&state, None),
         [op] if op == "start" => {
@@ -47,7 +77,7 @@ fn main() -> Result<()> {
         [op] if ["status", "discover", "connection-info", "list", "stop"]
             .contains(&op.as_str()) =>
         {
-            json!({"op":op})
+            json!({"op":op,"include_removed":include_removed})
         }
         [op, thread] if op == "register" => json!({"op":op,"thread_id":thread}),
         [op, generation] if op == "undock" => json!({"op":op,"generation":generation}),
@@ -55,10 +85,10 @@ fn main() -> Result<()> {
             json!({"op":op,"session_id":session,"request_id":id,"message":message})
         }
         [op, parent, id, cwd, prompt] if op == "launch" => {
-            json!({"op":op,"parent_id":parent,"request_id":id,"cwd":cwd,"prompt":prompt})
+            json!({"op":op,"parent_id":parent,"request_id":id,"cwd":cwd,"prompt":prompt,"open":!background})
         }
         [op, kind, id, name, cwd] if op == "create" => {
-            json!({"op":op,"kind":kind,"request_id":id,"name":name,"cwd":cwd})
+            json!({"op":op,"kind":kind,"request_id":id,"name":name,"cwd":cwd,"open":!background})
         }
         [op, session, id, command] if op == "shell-exec" => {
             json!({"op":op,"session_id":session,"request_id":id,"command":command})
@@ -77,9 +107,14 @@ fn main() -> Result<()> {
         [op, session, terminal] if op == "open" => {
             json!({"op":op,"session_id":session,"terminal":terminal})
         }
-        [op, session] if op == "stop-instance" || op == "attach-info" => {
-            json!({"op":op,"session_id":session})
+        [op, session]
+            if ["background", "stop-instance", "remove", "register-instance"]
+                .contains(&op.as_str()) =>
+        {
+            json!({"op":op,"session_id":session,"close_window":!runtime_only,"stop":stop_removed})
         }
+        [op, session] if op == "attach-info" => json!({"op":op,"session_id":session}),
+        [op, id] if op == "operation" => json!({"op":op,"request_id":id}),
         [op, session] if op == "attach" => {
             let info = service::client(&state, json!({"op":"attach-info","session_id":session}))?;
             let executable = info["executable"]
@@ -107,20 +142,53 @@ fn main() -> Result<()> {
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
-            create codex|shell REQUEST_ID NAME CWD | open SESSION_ID ghostty\n\
+            create codex|shell REQUEST_ID NAME CWD [--background] | open SESSION_ID ghostty [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
-            launch PARENT_SESSION REQUEST_ID CWD PROMPT | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID\n\
+            launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
+            background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             undock GENERATION (--control is supported by send, launch, shell-exec and stop-instance)"
         ),
     };
+    if [
+        "open",
+        "background",
+        "stop-instance",
+        "remove",
+        "register-instance",
+    ]
+    .contains(&request["op"].as_str().unwrap_or(""))
+    {
+        request["request_id"] =
+            json!(request_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()));
+    } else if request_id.is_some() {
+        bail!("--request-id is only for lifecycle actions; create/launch/send use a positional ID");
+    }
     if let Some(generation) = control {
         request["control_generation"] = json!(generation);
     }
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&service::client(&state, request)?)?
-    );
+    let mut receipt = service::client(&state, request)?;
+    while receipt["state"] == "pending" {
+        let id = receipt["request_id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("pending receipt has no request ID"))?
+            .to_owned();
+        std::thread::sleep(Duration::from_millis(250));
+        receipt = service::client(&state, json!({"op":"operation","request_id":id}))?;
+    }
+    println!("{}", serde_json::to_string_pretty(&receipt)?);
+    if ["partial", "uncertain", "cancelled"]
+        .iter()
+        .any(|s| receipt["state"] == *s)
+    {
+        bail!(
+            "{} (operation {})",
+            receipt["error"]
+                .as_str()
+                .unwrap_or("action incomplete; inspect the saved receipt"),
+            receipt["request_id"].as_str().unwrap_or("unknown")
+        );
+    }
     Ok(())
 }
 
@@ -139,7 +207,6 @@ fn watch(state: &std::path::Path, mut cursor: i64, pretty: bool) -> Result<()> {
                 } else {
                     format!("{} {}", event["type"].as_str().unwrap_or("event"), p)
                 };
-                // Never interpret terminal controls embedded in model/user text.
                 let safe: String = body
                     .chars()
                     .flat_map(|c| {

@@ -60,7 +60,8 @@ is draggable. The astronaut and buttons are excluded from native drag regions so
 their clicks reach the renderer.
 
 Terminal docking now also holds a service control connection. Its lifetime is
-independent of panel visibility. Clicking the docked astronaut reveals the panel
+independent of panel visibility. Lifecycle menus use named preload methods and
+the same CLI/service operations as an agent. Main never kills an agent directly. Clicking the docked astronaut reveals the panel
 at its saved position; it never moves the astronaut or releases control.
 See [the control contract](../docs/control.md) for events, exact-generation release,
 restart behavior and the unimplemented voice handoff. `test/control.test.cjs`
@@ -106,3 +107,19 @@ cached while the window ignores mouse input. Do not use that cached point to
 decide whether to poll the desktop. The sample-based regression alone missed
 this boundary; physical opaque-terminal hover and pulling exposed and verified
 the fix.
+
+## Lifecycle experiment
+
+Each instance's **⋯** menu uses the [lifecycle contract](../docs/lifecycle.md).
+`test/lifecycle-proof.cjs` drives the actual renderer handlers, preload, IPC,
+Rust service and newly created Ghostty windows with real Bash tasks. Run only
+with a fresh private state directory:
+
+```sh
+VOYAGER_STATE="$HOME/.local/share/voyager-lifecycle-proof" npm start -- --expanded --proof-lifecycle
+```
+
+It writes `lifecycle-proof.json` and `panel-lifecycle.png` privately. It is a
+programmatic native check; Isaac still tests pointer delivery and visual quality.
+It makes no model requests. The separate ignored Rust native test in the
+[lifecycle guide](../docs/lifecycle.md#native-checks) uses the actual Codex account.

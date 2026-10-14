@@ -77,15 +77,12 @@ impl Fixture {
                                     }
                                     "turn/start" => {
                                         assert_eq!(p["threadId"],"live-thread");
-                                        // No model or permission override is allowed in this adapter.
                                         assert_eq!(p.as_object().unwrap().len(),3);
                                         let count={ let mut c=count.lock().unwrap(); *c+=1; *c };
                                         let message=p["input"][0]["text"].as_str().unwrap();
                                         if message=="disconnect" { break; }
                                         if message=="malformed" {
                                             let _=ws.send(Message::Text("not JSON".into()));
-                                            // Leave the transport open: a lost observation must
-                                            // still invalidate capture, not wait for EOF.
                                             continue;
                                         }
                                         if message=="overflow" {
@@ -156,8 +153,34 @@ impl Fixture {
         );
         wait(|| client(&self.dir, json!({"op":"status"})).is_ok());
     }
-    fn call(&self, v: Value) -> Value {
-        client(&self.dir, v).unwrap()
+    fn call(&self, mut v: Value) -> Value {
+        if [
+            "open",
+            "background",
+            "stop-instance",
+            "remove",
+            "register-instance",
+        ]
+        .contains(&v["op"].as_str().unwrap_or(""))
+            && v["request_id"].is_null()
+        {
+            v["request_id"] = json!(uuid::Uuid::new_v4().to_string());
+        }
+        let mut receipt = client(&self.dir, v).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while receipt["state"] == "pending" {
+            assert!(
+                Instant::now() < deadline,
+                "pending operation timed out: {receipt}"
+            );
+            thread::sleep(Duration::from_millis(20));
+            receipt = client(
+                &self.dir,
+                json!({"op":"operation","request_id":receipt["request_id"]}),
+            )
+            .unwrap();
+        }
+        receipt
     }
     fn events(&self) -> Value {
         self.call(json!({"op":"events","after":0}))
@@ -273,7 +296,6 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
         2
     );
     assert_eq!(*f.sends.lock().unwrap(), 1);
-    // Client disconnect before a response must not terminate capture.
     let mut caller = UnixStream::connect(f.dir.join("service.sock")).unwrap();
     writeln!(
         caller,
@@ -309,7 +331,6 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
         f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"],
         *session
     );
-    // Lost ACK must remain uncertain and must never submit again on retry.
     let uncertain =
         json!({"op":"send","session_id":session,"request_id":"uncertain","message":"disconnect"});
     assert!(client(&f.dir, uncertain.clone()).is_err());
@@ -343,8 +364,7 @@ fn named_instance_starts_without_parent_prompt_or_external_server() {
     wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
     assert_eq!(f.call(json!({"op":"status"}))["capturing"], 0);
     assert_eq!(f.call(json!({"op":"list"})), json!([]));
-    let create =
-        json!({"op":"create","kind":"codex","request_id":"named-1","name":"My agent","cwd":f.dir});
+    let create = json!({"op":"create","open":false,"kind":"codex","request_id":"named-1","name":"My agent","cwd":f.dir});
     let mut invalid = create.clone();
     invalid["cwd"] = json!(f.dir.join("not-a-directory"));
     assert!(client(&f.dir, invalid).is_err());
@@ -391,7 +411,8 @@ fn named_instance_starts_without_parent_prompt_or_external_server() {
     });
     assert!(client(&f.dir, json!({"op":"stop"})).is_err());
     f.call(json!({"op":"stop-instance","session_id":session}));
-    assert_eq!(f.call(create)["state"], "stopped");
+    assert_eq!(f.call(create)["state"], "completed");
+    assert_eq!(f.call(json!({"op":"list"}))[0]["worker_state"], "stopped");
     f.halt();
 }
 
@@ -408,10 +429,10 @@ fn missing_native_executable_leaves_failed_creation_without_registration() {
             .unwrap(),
     );
     wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
-    let create = json!({"op":"create","kind":"codex","request_id":"unavailable","name":"My agent","cwd":f.dir});
-    assert!(client(&f.dir, create.clone()).is_err());
+    let create = json!({"op":"create","open":false,"kind":"codex","request_id":"unavailable","name":"My agent","cwd":f.dir});
+    assert_eq!(client(&f.dir, create.clone()).unwrap()["state"], "partial");
     let failed = f.call(create);
-    assert_eq!(failed["state"], "failed");
+    assert_eq!(failed["state"], "partial");
     assert!(failed["session_id"].is_null());
     assert!(failed["pid"].is_null());
     assert_eq!(f.call(json!({"op":"list"})), json!([]));
@@ -472,7 +493,6 @@ fn interrupted_launch_is_unknown_and_never_automatically_replaced() {
     let parent = store
         .register(f.socket.to_str().unwrap(), &metadata("live-thread"))
         .unwrap();
-    // Reachable crash point: intent committed, worker launch not yet acknowledged.
     store
         .begin_launch(
             "interrupted",
@@ -485,10 +505,8 @@ fn interrupted_launch_is_unknown_and_never_automatically_replaced() {
     drop(store);
     f.start();
     f.call(json!({"op":"register","thread_id":"live-thread"}));
-    let old=f.call(json!({"op":"launch","parent_id":parent,"request_id":"interrupted","cwd":f.dir,"prompt":"original task"}));
-    assert_eq!(old["state"], "unknown");
-    assert!(old["session_id"].is_null());
-    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"replacement","cwd":f.dir,"prompt":"another task"})).is_err());
+    assert!(client(&f.dir,json!({"op":"launch","open":false,"parent_id":parent,"request_id":"interrupted","cwd":f.dir,"prompt":"original task"})).is_err());
+    assert!(client(&f.dir,json!({"op":"launch","open":false,"parent_id":parent,"request_id":"replacement","cwd":f.dir,"prompt":"another task"})).is_err());
     assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
     f.halt();
 }
@@ -498,16 +516,17 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     let mut f = Fixture::new();
     f.start();
     let parent = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
-    let launch = json!({"op":"launch","parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"read the fixture"});
+    let launch = json!({"op":"launch","open":false,"parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"read the fixture"});
     let receipt = f.call(launch.clone());
-    assert_eq!(receipt["state"], "running");
+    assert_eq!(receipt["state"], "completed");
+    assert_eq!(receipt["runtime"], "running");
     assert_eq!(receipt["initial_request"]["state"], "accepted");
     let session = receipt["session_id"].clone();
-    assert_eq!(f.call(launch)["pid"], receipt["pid"]);
-    assert!(client(&f.dir,json!({"op":"launch","parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"changed"})).is_err());
-    let second = f.call(json!({"op":"launch","parent_id":parent,"request_id":"worker-2","cwd":f.dir,"prompt":"second"}));
+    assert_eq!(f.call(launch)["runtime_pid"], receipt["runtime_pid"]);
+    assert!(client(&f.dir,json!({"op":"launch","open":false,"parent_id":parent,"request_id":"worker-1","cwd":f.dir,"prompt":"changed"})).is_err());
+    let second = f.call(json!({"op":"launch","open":false,"parent_id":parent,"request_id":"worker-2","cwd":f.dir,"prompt":"second"}));
     assert_ne!(second["session_id"], session);
-    assert_ne!(second["pid"], receipt["pid"]);
+    assert_ne!(second["runtime_pid"], receipt["runtime_pid"]);
     f.call(json!({"op":"stop-instance","session_id":second["session_id"]}));
     assert!(
         f.call(json!({"op":"status"}))["owns_agents"]
@@ -517,9 +536,7 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     assert!(client(&f.dir, json!({"op":"stop"})).is_err());
     assert!(client(&f.dir, json!({"op":"stop-instance","session_id":parent})).is_err());
     let info = f.call(json!({"op":"attach-info","session_id":session}));
-    assert_eq!(info["pid"], receipt["pid"]);
-    // Remote Codex resume rejects permission overrides. The client inherits
-    // the worker thread's YOLO policy instead of reconfiguring it.
+    assert_eq!(info["pid"], receipt["runtime_pid"]);
     assert_eq!(
         info["args"],
         json!([
@@ -555,7 +572,7 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
     );
     assert_eq!(
         f.call(json!({"op":"attach-info","session_id":session}))["pid"],
-        receipt["pid"]
+        receipt["runtime_pid"]
     );
     let rows = f.call(json!({"op":"list"}));
     let worker = rows
@@ -566,10 +583,9 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
         .unwrap();
     assert_eq!(worker["ownership"], "managed");
     assert_eq!(worker["parent_id"], parent);
-    // Known-different arm: explicit stop during a second turn ends the owned server.
     f.call(json!({"op":"send","session_id":session,"request_id":"second-turn","message":"still working"}));
     assert_eq!(
-        f.call(json!({"op":"stop-instance","session_id":session}))["state"],
+        f.call(json!({"op":"stop-instance","session_id":session}))["runtime"],
         "stopped"
     );
     assert!(reconnected.metadata("worker-thread").is_err());
@@ -589,29 +605,31 @@ fn owned_worker_survives_clients_and_requires_explicit_stop() {
             .iter()
             .any(|e| e["type"] == "worker.stopped")
     );
-    // The external parent server still responds; stopping the worker did not touch it.
     assert_eq!(f.call(json!({"op":"discover"}))[0]["id"], "live-thread");
     f.halt();
 }
 
 #[test]
-fn lost_observation_during_rpc_marks_a_gap_even_with_an_open_transport() {
+fn invalid_frames_mark_a_gap_and_filtered_bursts_keep_capture_responsive() {
     for message in ["malformed", "overflow"] {
         let mut f = Fixture::new();
         f.start();
         let registration = f.call(json!({"op":"register","thread_id":"live-thread"}));
         let request = json!({"op":"send","session_id":registration["session_id"],"request_id":"lost","message":message});
         assert!(client(&f.dir, request.clone()).is_err());
-        wait(|| f.call(json!({"op":"status"}))["codex_connected"] == false);
+        if message == "malformed" {
+            wait(|| f.call(json!({"op":"status"}))["codex_connected"] == false);
+        } else {
+            assert_eq!(f.call(json!({"op":"status"}))["codex_connected"], true);
+        }
         assert_eq!(f.call(request)["state"], "uncertain");
         assert_eq!(*f.sends.lock().unwrap(), 1);
-        assert!(
-            f.events()["events"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["type"] == "capture.gap")
-        );
+        let gap = f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "capture.gap");
+        assert_eq!(gap, message == "malformed");
     }
 }
 
@@ -625,7 +643,7 @@ fn source_ids_deduplicate_and_unicode_truncation_is_explicit() {
     );
     for _ in 0..2 {
         store
-            .record(&session, events::normalize(&event).unwrap())
+            .record(&session, 1, events::normalize(&event).unwrap())
             .unwrap();
     }
     let values = store.events(0).unwrap();
@@ -818,8 +836,7 @@ fn closing_terminal_releases_control_without_stopping_external_server() {
 fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     let mut f = Fixture::new();
     f.start();
-    let create =
-        json!({"op":"create","kind":"shell","request_id":"shell-1","name":"Workbench","cwd":f.dir});
+    let create = json!({"op":"create","open":false,"kind":"shell","request_id":"shell-1","name":"Workbench","cwd":f.dir});
     let receipt = f.call(create.clone());
     let session = &receipt["session_id"];
     assert_eq!(f.call(create), receipt);
@@ -827,7 +844,6 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     let mut terminal = UnixStream::connect(info["socket"].as_str().unwrap()).unwrap();
     let ready = || f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true;
     wait(ready);
-    // Human input goes to the PTY. It isn't interpreted by a second shell.
     let command = b"export SHARED_PROOF=from_human; mkdir child; cd child\n";
     writeln!(terminal, "{}", json!({"input":command.to_vec()})).unwrap();
     wait(|| {
@@ -846,7 +862,6 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
             .unwrap()
             .contains(&format!("from_human {}/child", f.dir.display()))
     );
-    // A person has started a line: tool submission must not append to it.
     writeln!(terminal, "{}", json!({"input":b"echo unfinished".to_vec()})).unwrap();
     wait(|| !ready());
     assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"must-refuse","command":"touch should-not-exist"})).is_err());
@@ -866,7 +881,7 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     assert!(!f.dir.join("child/should-not-exist").exists());
     assert_eq!(
         f.call(json!({"op":"attach-info","session_id":session}))["pid"],
-        receipt["pid"]
+        receipt["runtime_pid"]
     );
     let mut again = UnixStream::connect(info["socket"].as_str().unwrap()).unwrap();
     again
@@ -894,7 +909,6 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
                 && e["payload"]["command_id"] == "verify"
                 && e["payload"]["exit_code"] == 0)
     );
-    // Typeahead while busy stays protected after the running command completes.
     f.call(json!({"op":"shell-exec","session_id":session,"request_id":"typeahead","command":"sleep 0.2"}));
     writeln!(again, "{}", json!({"input":b"echo still editing".to_vec()})).unwrap();
     wait(|| {
@@ -907,7 +921,6 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"typeahead-refused","command":"echo wrong"})).is_err());
     writeln!(again, "{}", json!({"input":vec![3u8]})).unwrap();
     wait(ready);
-    // Explicit stop cancels a live foreground job, unlike closing its client.
     f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"sleep 0.3; touch should-not-complete"}));
     wait(|| {
         f.events()["events"]
@@ -921,4 +934,158 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     assert!(!f.dir.join("child/should-not-complete").exists());
     assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})).is_err());
     f.halt();
+}
+
+#[test]
+fn capture_generation_cutoff_drops_removed_and_old_subscription_payloads() {
+    let store = Store::open(Path::new(":memory:")).unwrap();
+    let session = store.register("fixture", &metadata("live-thread")).unwrap();
+    let observation = |marker: &str| {
+        events::normalize(&note("item/completed",json!({"threadId":"live-thread","turnId":"t","item":{"id":marker,"type":"agentMessage","text":marker}}))).unwrap()
+    };
+    store.record(&session, 1, observation("BEFORE")).unwrap();
+    store.remove(&session).unwrap();
+    store.record(&session, 1, observation("AFTER")).unwrap();
+    let generation = store.reactivate(&session).unwrap();
+    store
+        .record(&session, 1, observation("OLD_QUEUED_FRAME"))
+        .unwrap();
+    store
+        .record(&session, generation, observation("NEW"))
+        .unwrap();
+    let events = store.events(0).unwrap();
+    let text = events["events"].to_string();
+    assert!(text.contains("BEFORE") && text.contains("NEW"));
+    assert!(!text.contains("AFTER") && !text.contains("OLD_QUEUED_FRAME"));
+}
+
+#[test]
+fn lifecycle_remove_and_register_preserves_a_real_bash_and_history() {
+    let mut f = Fixture::new();
+    f.start();
+    let created=f.call(json!({"op":"create","kind":"shell","open":false,"request_id":"shell-remove","name":"Workbench","cwd":f.dir}));
+    let session = created["session_id"].as_str().unwrap();
+    let info = f.call(json!({"op":"attach-info","session_id":session}));
+    let mut viewer = UnixStream::connect(info["socket"].as_str().unwrap()).unwrap();
+    wait(|| f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true);
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"before","command":"printf BEFORE"}));
+    wait(|| f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true);
+    let remove = json!({"op":"remove","session_id":session,"request_id":"remove-shell"});
+    let receipt = f.call(remove.clone());
+    assert_eq!(receipt["registration"], "removed");
+    assert_eq!(receipt["runtime"], "running");
+    assert_eq!(f.call(remove), receipt);
+    assert!(
+        !f.call(json!({"op":"list"}))
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == session)
+    );
+    assert!(client(&f.dir, json!({"op":"shell-read","session_id":session})).is_err());
+    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"forbidden","command":"echo FORBIDDEN"})).is_err());
+    writeln!(
+        viewer,
+        "{}",
+        json!({"input":b"printf AFTER > removed-work.txt\n".to_vec()})
+    )
+    .unwrap();
+    wait(|| f.dir.join("removed-work.txt").exists());
+    thread::sleep(Duration::from_millis(100));
+    let restored = f
+        .call(json!({"op":"register-instance","session_id":session,"request_id":"register-shell"}));
+    assert_eq!(restored["state"], "completed");
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        info["pid"]
+    );
+    f.call(
+        json!({"op":"shell-exec","session_id":session,"request_id":"new","command":"printf NEW"}),
+    );
+    wait(|| f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true);
+    let events = f.events()["events"].to_string();
+    assert!(events.contains("BEFORE") && events.contains("NEW"));
+    assert!(!events.contains("AFTER"));
+    let stop = f.call(
+        json!({"op":"remove","session_id":session,"stop":true,"request_id":"stop-remove-shell"}),
+    );
+    assert_eq!(stop["runtime"], "stopped");
+    assert_eq!(stop["registration"], "removed");
+    f.halt();
+}
+
+#[test]
+fn lifecycle_stop_wait_keeps_other_capture_and_status_responsive() {
+    let mut f = Fixture::new();
+    f.start();
+    let make = |id: &str| {
+        f.call(json!({"op":"create","kind":"shell","open":false,"request_id":id,"name":id,"cwd":f.dir}))
+    };
+    let a = make("a");
+    let b = make("b");
+    for s in [&a, &b] {
+        wait(|| f.call(json!({"op":"shell-read","session_id":s["session_id"]}))["ready"] == true);
+    }
+    f.call(json!({"op":"shell-exec","session_id":a["session_id"],"request_id":"hold","command":"trap '' HUP"}));
+    wait(|| f.call(json!({"op":"shell-read","session_id":a["session_id"]}))["ready"] == true);
+    let stop = json!({"op":"stop-instance","session_id":a["session_id"],"request_id":"stop-a"});
+    assert_eq!(client(&f.dir, stop.clone()).unwrap()["state"], "pending");
+    let started = Instant::now();
+    f.call(json!({"op":"status"}));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    f.call(json!({"op":"shell-exec","session_id":b["session_id"],"request_id":"live-b","command":"printf STILL_CAPTURING"}));
+    wait(|| f.events()["events"].to_string().contains("STILL_CAPTURING"));
+    assert_eq!(
+        f.call(json!({"op":"operation","request_id":"stop-a"}))["runtime"],
+        "stopped"
+    );
+    assert_eq!(f.call(stop)["state"], "completed");
+    f.call(json!({"op":"stop-instance","session_id":b["session_id"]}));
+    f.halt();
+}
+
+#[test]
+fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_schema() {
+    let dir = std::env::temp_dir().join(format!("voyager-migration-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&dir).unwrap();
+    let path = dir.join("store.sqlite");
+    let store = Store::open(&path).unwrap();
+    let session = store.register("fixture", &metadata("live-thread")).unwrap();
+    store
+        .local(&session, "before", json!({"marker":"PRESERVED"}))
+        .unwrap();
+    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
+    drop(store);
+    assert!(Store::open(&path).is_err());
+    let db = rusqlite::Connection::open(&path).unwrap();
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM pragma_table_info('sessions') WHERE name='removed_ms'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert!(
+        db.query_row("SELECT payload FROM events WHERE kind='before'", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap()
+        .contains("PRESERVED")
+    );
+    db.execute_batch("PRAGMA user_version=999;").unwrap();
+    assert!(Store::open(&path).is_err());
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        999
+    );
+    drop(db);
+    fs::remove_dir_all(dir).unwrap();
 }

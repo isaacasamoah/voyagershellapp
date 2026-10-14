@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld(
     chooseDirectory: () => ipcRenderer.invoke('choose-directory'),
     createInstance: (input) => ipcRenderer.invoke('create-instance', input),
     openInstance: (id) => ipcRenderer.invoke('open-instance', id),
+    backgroundInstance: (id, request) => ipcRenderer.invoke('background-instance', id, request),
+    stopInstance: (id, request) => ipcRenderer.invoke('stop-instance', id, request),
+    removeInstance: (id, request, stop) => ipcRenderer.invoke('remove-instance', id, request, stop),
+    registerInstance: (id, request) => ipcRenderer.invoke('register-instance', id, request),
     quit: () => ipcRenderer.invoke('quit-ui'),
     onDockSound: (callback) => {
       ipcRenderer.on('dock-sound', (_event, action) => callback(action));

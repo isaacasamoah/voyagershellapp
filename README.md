@@ -13,6 +13,9 @@ We are building in small increments: try a real workflow, use it ourselves, docu
 - The panel's **+** creates a named Codex instance or a persistent Bash terminal
   and opens it in Ghostty. The Rust service starts independently when the app
   opens, registers the instance and begins capture before native interaction.
+- Lifecycle actions in each row’s **⋯** menu can close the viewer while work
+  continues, stop the runtime and viewer together, or deregister capture while
+  retaining history. See [the lifecycle contract](docs/lifecycle.md).
 - Several instances can run together. Codex owns its native interface; a bare
   shell is a real interactive Bash behind a service-owned PTY. Human and agent
   commands use that same shell, including its current folder and variables.
@@ -89,7 +92,8 @@ npm test
 These desktop checks do not open windows or call a model. The separate
 [live desktop proof](docs/desktop.md#checks-and-evidence) uses a running service and
 an existing supported terminal. The registration proof makes a small, explicit
-model request; the UI regression proof does not. Both open windows; do not
+model request; the UI regression proof does not. The lifecycle checks described in the [lifecycle guide](docs/lifecycle.md#native-checks)
+are opt-in and separately use real Ghostty and native Codex. These open windows; do not
 confuse its programmatic checks with a human testing the gestures.
 
 ## Find your way around

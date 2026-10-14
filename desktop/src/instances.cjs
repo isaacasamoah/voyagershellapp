@@ -1,5 +1,5 @@
-// Retry a failed native open against the same registration, never a duplicate.
 const { randomUUID } = require('node:crypto');
+const path = require('node:path');
 function instanceCreator(rpc) {
   let pending = null,
     busy = false;
@@ -9,28 +9,41 @@ function instanceCreator(rpc) {
     const { kind, name, cwd } = input;
     if (typeof name !== 'string' || !name.trim() || Buffer.byteLength(name) > 100)
       throw Error('Enter a short name.');
-    if (typeof cwd !== 'string' || !require('node:path').isAbsolute(cwd))
+    if (typeof cwd !== 'string' || !path.isAbsolute(cwd))
       throw Error('Choose an absolute folder path.');
     const key = JSON.stringify([kind, name, cwd]);
     if (!pending || pending.key !== key) pending = { key, id: randomUUID(), session: null };
     busy = true;
     try {
-      const receipt = await rpc('create', kind, pending.id, name, cwd);
-      if (receipt.state !== 'running' || !receipt.session_id) {
-        pending = null;
-        throw Error('This instance did not start. Check the service log, then try again.');
+      if (pending.session) {
+        await rpc(
+          'open',
+          pending.session,
+          'ghostty',
+          '--request-id',
+          (pending.openId ||= randomUUID()),
+        );
+      } else {
+        try {
+          const receipt = await rpc('create', kind, pending.id, name, cwd);
+          if (receipt.state !== 'completed' || !receipt.session_id)
+            throw Error('This instance did not start. Check the service log.');
+          pending.session = receipt.session_id;
+        } catch (error) {
+          const receipt = await rpc('operation', pending.id).catch(() => null);
+          if (receipt?.session_id) {
+            pending.session = receipt.session_id;
+            throw Error(
+              'Created, but the terminal could not open. Try again to reopen the same instance.',
+            );
+          }
+          if (receipt && receipt.state !== 'pending') pending = null;
+          throw error;
+        }
       }
-      pending.session = receipt.session_id;
-      await rpc('open', pending.session, 'ghostty');
       const session = pending.session;
       pending = null;
       return { session };
-    } catch (error) {
-      if (pending?.session)
-        throw Error(
-          'Created, but the terminal could not open. Try again to reopen the same instance.',
-        );
-      throw error;
     } finally {
       busy = false;
     }

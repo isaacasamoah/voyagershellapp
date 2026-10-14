@@ -1,3 +1,4 @@
+mod actions;
 pub mod codex;
 pub mod control;
 pub mod events;

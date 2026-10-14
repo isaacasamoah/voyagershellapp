@@ -21,3 +21,9 @@ Read the small Rust conventions in `CONTRIBUTING.md`. Keep source readable for
 people learning with us, and preserve the same checks and docs in every increment.
 Use a working branch and PR; never use the admin bypass without Isaac explicitly
 authorizing that particular merge or protected-branch update.
+
+Lifecycle operations are owned by `src/service/lifecycle.rs`; native requests by
+`src/service/native.rs`; both use the one service-owned store and process maps.
+Read [the lifecycle contract](docs/lifecycle.md) before changing either boundary.
+Keep changed code comment-free, including doc comments and explanatory docstrings.
+Put mechanisms, invariants and design reasons in the owning context document.

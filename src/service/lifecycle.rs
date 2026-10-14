@@ -1,0 +1,672 @@
+use super::{Runtime, string};
+use crate::{
+    actions::{self, Action, PendingOperation, Phase},
+    codex::Codex,
+    events,
+    shell::Shell,
+    terminal,
+    worker::Worker,
+};
+use anyhow::{Context, Result, ensure};
+use serde_json::{Value, json};
+use std::{
+    fs,
+    path::Path,
+    time::{Duration, Instant},
+};
+
+impl Runtime {
+    pub(super) fn create_operation(&mut self, request: &Value) -> Result<Value> {
+        let id = actions::request_id(request)?;
+        ensure!(
+            id.len() <= 100,
+            "invalid_input: creation ID must be at most 100 bytes"
+        );
+        let open = request.get("open").map_or(Ok(true), |v| {
+            v.as_bool().context("invalid_input: open must be boolean")
+        })?;
+        ensure!(
+            request.get("terminal").is_none_or(|t| t == "ghostty"),
+            "unsupported: choose ghostty"
+        );
+        let mut inputs = request.clone();
+        inputs["open"] = json!(open);
+        inputs["terminal"] = json!("ghostty");
+        if let Some((previous, receipt)) = self.store.operation(id)? {
+            ensure!(
+                previous == inputs,
+                "request_conflict: creation ID has different inputs"
+            );
+            return Ok(receipt);
+        }
+        ensure!(
+            self.store.launch(id)?.is_none(),
+            "outcome_unknown: this launch predates operation receipts; inspect the existing instance"
+        );
+        let cwd = fs::canonicalize(string(request, "cwd")?)
+            .context("invalid_input: choose an existing folder")?;
+        ensure!(cwd.is_dir(), "invalid_input: choose a folder, not a file");
+        let cwd = cwd.to_str().context("invalid_input: folder is not UTF-8")?;
+        let op = string(request, "op")?;
+        let (kind, name, parent, prompt) = if op == "create" {
+            let kind = string(request, "kind")?;
+            ensure!(
+                ["codex", "shell"].contains(&kind),
+                "unsupported: instance kind"
+            );
+            let name = string(request, "name")?;
+            ensure!(
+                !name.trim().is_empty() && name.len() <= 100 && !name.chars().any(char::is_control),
+                "invalid_input: use a short name"
+            );
+            (kind, Some(name), None, None)
+        } else {
+            let parent = string(request, "parent_id")?;
+            self.ensure_connected(parent)?;
+            let prompt = string(request, "prompt")?;
+            ensure!(
+                prompt.len() <= events::TEXT_LIMIT,
+                "invalid_input: initial task too long"
+            );
+            ("codex", None, Some(parent), Some(prompt))
+        };
+        let receipt = json!({"request_id":id,"action":op,"session_id":null,"state":"pending","runtime":"unknown","window":"closed","registration":null,"effects":[{"phase":"start","state":"requested"}],"event_seq":null});
+        self.store.begin_launch(id, parent, cwd, prompt, name)?;
+        self.store.begin_operation(id, &inputs, &receipt)?;
+        self.store
+            .0
+            .execute("UPDATE workers SET kind=?2 WHERE launch_id=?1", [id, kind])?;
+        if kind == "shell" {
+            match Shell::start(&mut self.store, &self.state, id, cwd) {
+                Ok(shell) => {
+                    let session = shell.session.clone();
+                    self.shells.insert(session.clone(), shell);
+                    self.finish_creation(&inputs, &session)?;
+                }
+                Err(error) => self.fail_creation(id, error.to_string())?,
+            }
+        } else {
+            match Worker::begin(&self.state, &self.executable, id, cwd, name) {
+                Ok(startup) => {
+                    self.creations.insert(id.into(), (inputs, startup));
+                }
+                Err(error) => self.fail_creation(id, error.to_string())?,
+            }
+        }
+        Ok(self
+            .store
+            .operation(id)?
+            .context("creation receipt missing")?
+            .1)
+    }
+
+    fn fail_creation(&self, id: &str, error: String) -> Result<()> {
+        self.store.worker_state(id, "failed")?;
+        let mut receipt = self
+            .store
+            .operation(id)?
+            .context("creation receipt missing")?
+            .1;
+        receipt["state"] = json!("partial");
+        receipt["error"] = json!(error);
+        receipt["effects"][0]["state"] = json!("failed");
+        self.store.save_operation(id, &receipt)
+    }
+
+    fn complete_creation(&mut self, request: &Value, session: &str) -> Result<()> {
+        let id = actions::request_id(request)?;
+        let mut operation = PendingOperation::new(id, session, Action::Open);
+        operation.receipt["action"] = request["op"].clone();
+        let record = self.store.session(session)?;
+        for field in ["name", "cwd", "parent_id", "kind"] {
+            operation.receipt[field] = record[field].clone();
+        }
+        operation.receipt["runtime_pid"] =
+            self.store.launch(id)?.context("launch missing")?["pid"].clone();
+        operation.receipt["native_thread_id"] =
+            self.store.session(session)?["native_thread_id"].clone();
+        operation.effect("start", "confirmed");
+        self.snapshot_operation(&mut operation)?;
+        if request["op"] == "launch" {
+            let native = self.store.session(session)?["native_thread_id"]
+                .as_str()
+                .context("native identity missing")?
+                .to_owned();
+            let native_request = self.connection(session)?.begin_rpc(
+                "thread/read",
+                json!({"threadId":native,"includeTurns":false}),
+            )?;
+            operation.phase = Phase::LaunchIdle {
+                request: native_request,
+            };
+            self.store.local(
+                string(request, "parent_id")?,
+                "worker.launched",
+                json!({"worker_session_id":session,"launch_id":id,"scope":"private"}),
+            )?;
+        } else if request["open"] == false {
+            operation.receipt["state"] = json!("completed");
+        }
+        self.store.save_operation(id, &operation.receipt)?;
+        if operation.receipt["state"] == "pending" {
+            self.operations.insert(id.into(), operation);
+        }
+        Ok(())
+    }
+
+    fn finish_creation(&mut self, request: &Value, session: &str) -> Result<()> {
+        if let Err(error) = self.complete_creation(request, session) {
+            let id = actions::request_id(request)?;
+            let mut receipt = self
+                .store
+                .operation(id)?
+                .context("creation receipt missing")?
+                .1;
+            receipt["session_id"] = json!(session);
+            receipt["state"] = json!("partial");
+            receipt["runtime"] = json!("running");
+            receipt["registration"] = json!("active");
+            receipt["error"] = json!(error.to_string());
+            self.store.save_operation(id, &receipt)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn advance_creations(&mut self) -> Result<()> {
+        let ids: Vec<_> = self.creations.keys().cloned().collect();
+        for id in ids {
+            let (request, mut startup) = self.creations.remove(&id).context("startup missing")?;
+            match startup.poll(&mut self.store) {
+                Ok(Some(worker)) => {
+                    let session = worker.session.clone();
+                    self.workers.insert(session.clone(), worker);
+                    self.finish_creation(&request, &session)?;
+                }
+                Ok(None) => {
+                    self.creations.insert(id, (request, startup));
+                }
+                Err(error) => self.fail_creation(&id, error.to_string())?,
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn begin_action(&mut self, request: &Value, action: Action) -> Result<Value> {
+        let id = actions::request_id(request)?;
+        let session = string(request, "session_id")?;
+        let inputs = action.inputs(session, request.get("control_generation"));
+        if let Some((previous, receipt)) = self.store.operation(id)? {
+            ensure!(
+                previous == inputs,
+                "request_conflict: operation ID has different inputs"
+            );
+            return Ok(receipt);
+        }
+        let record = self.store.session(session)?;
+        ensure!(
+            !self
+                .native_calls
+                .iter()
+                .any(|p| p.targets(session, record["native_thread_id"].as_str().unwrap_or(""))),
+            "busy: a native action on this instance is pending"
+        );
+        ensure!(
+            !self.operations.values().any(|p| p.session == session),
+            "busy: another lifecycle action is pending"
+        );
+        if matches!(
+            action,
+            Action::Stop { .. } | Action::Background | Action::Open | Action::Remove { stop: true }
+        ) {
+            ensure!(
+                record["ownership"] == "managed",
+                "external_owner: Voyager does not own this runtime or window"
+            );
+            ensure!(
+                self.workers.contains_key(session) || self.shells.contains_key(session),
+                "outcome_unknown: runtime ownership was lost; inspect before acting"
+            );
+        }
+        let mut pending = PendingOperation::new(id, session, action);
+        self.snapshot_operation(&mut pending)?;
+        self.store.begin_operation(id, &inputs, &pending.receipt)?;
+        let receipt = pending.receipt.clone();
+        self.operations.insert(id.into(), pending);
+        Ok(receipt)
+    }
+
+    fn snapshot_operation(&mut self, operation: &mut PendingOperation) -> Result<()> {
+        let id = &operation.session;
+        let record = self.store.session(id)?;
+        operation.receipt["registration"] = json!(if record["removed_ms"].is_null() {
+            "active"
+        } else {
+            "removed"
+        });
+        operation.receipt["runtime"] = json!(if record["ownership"] == "external" {
+            "external"
+        } else if self.workers.get(id).is_some_and(|w| w.alive)
+            || self.shells.get(id).is_some_and(|s| s.alive)
+        {
+            "running"
+        } else if self.workers.contains_key(id) || self.shells.contains_key(id) {
+            "stopped"
+        } else {
+            "unknown"
+        });
+        operation.receipt["window"] = json!(if matches!(operation.phase, Phase::WaitOpen) {
+            "unknown"
+        } else if matches!(operation.phase, Phase::WaitClose { .. }) {
+            "close_requested"
+        } else if self
+            .terminals
+            .iter_mut()
+            .any(|(s, c)| s == id && matches!(c.try_wait(), Ok(None)))
+        {
+            "open"
+        } else {
+            "closed"
+        });
+        Ok(())
+    }
+
+    pub(super) fn advance_operations(&mut self) -> Result<()> {
+        let ids: Vec<_> = self.operations.keys().cloned().collect();
+        for id in ids {
+            let mut operation = self
+                .operations
+                .remove(&id)
+                .context("pending operation missing")?;
+            match self.advance_operation(&mut operation) {
+                Ok(done) => {
+                    self.snapshot_operation(&mut operation)?;
+                    if done {
+                        operation.receipt["state"] = json!("completed");
+                    }
+                }
+                Err(error) => {
+                    self.snapshot_operation(&mut operation)?;
+                    operation.receipt["state"] = json!(if operation.receipt["effects"]
+                        .as_array()
+                        .is_some_and(|e| e.iter().any(|e| e["state"] == "requested"))
+                    {
+                        "uncertain"
+                    } else {
+                        "partial"
+                    });
+                    operation.receipt["error"] = json!(error.to_string());
+                }
+            }
+            if operation.receipt["state"] != "pending" {
+                self.store.local(&operation.session, "operation.finished", json!({"request_id":id,"action":operation.action.name(),"state":operation.receipt["state"]}))?;
+                operation.receipt["event_seq"] = json!(self.store.0.query_row(
+                    "SELECT max(seq) FROM events WHERE session_id=?1",
+                    [&operation.session],
+                    |r| r.get::<_, Option<i64>>(0)
+                )?);
+            }
+            self.store.save_operation(&id, &operation.receipt)?;
+            if operation.receipt["state"] == "pending" {
+                self.operations.insert(id, operation);
+            }
+        }
+        Ok(())
+    }
+
+    fn advance_operation(&mut self, operation: &mut PendingOperation) -> Result<bool> {
+        ensure!(
+            Instant::now() < operation.deadline,
+            "outcome_unknown: lifecycle acknowledgement timed out; inspect this operation before trying another action"
+        );
+        let id = operation.session.clone();
+        if let Some(generation) = self
+            .store
+            .operation(&operation.id)?
+            .and_then(|(inputs, _)| inputs["control_generation"].as_str().map(str::to_owned))
+        {
+            if matches!(
+                operation.phase,
+                Phase::Start | Phase::Close | Phase::LaunchIdle { .. }
+            ) {
+                self.control.require(&generation)?;
+            }
+        }
+        match std::mem::replace(&mut operation.phase, Phase::Start) {
+            Phase::Start => match operation.action {
+                Action::Open => {
+                    for (session, child) in &mut self.terminals {
+                        if session == &id && child.try_wait()?.is_none() {
+                            let window = terminal::focus(child.id())?;
+                            operation.receipt["window_id"] = json!(window);
+                            operation.receipt["pid"] = json!(child.id());
+                            operation.effect("open", "confirmed");
+                            self.store.local(
+                                &id,
+                                "interface.focus_requested",
+                                json!({"window_id":window,"request_id":operation.id}),
+                            )?;
+                            return Ok(true);
+                        }
+                    }
+                    let info = self.attachment(&id)?;
+                    let child = terminal::open_instance(&info, &self.store.session(&id)?)?;
+                    let pid = child.id();
+                    self.terminals.push((id.clone(), child));
+                    operation.receipt["pid"] = json!(pid);
+                    operation.effect("open", "requested");
+                    operation.phase = Phase::WaitOpen;
+                    self.store.local(
+                        &id,
+                        "interface.open_requested",
+                        json!({"pid":pid,"request_id":operation.id}),
+                    )?;
+                    Ok(false)
+                }
+                Action::Background => {
+                    operation.phase = Phase::Close;
+                    Ok(false)
+                }
+                Action::Remove { stop: false } => {
+                    operation.phase = Phase::Remove;
+                    Ok(false)
+                }
+                Action::Stop { .. } | Action::Remove { stop: true } => {
+                    if operation.receipt["runtime"] == "stopped" {
+                        operation.effect("stop", "confirmed");
+                        operation.phase = if operation.action == (Action::Stop { close: false }) {
+                            return Ok(true);
+                        } else {
+                            Phase::Close
+                        };
+                        return Ok(false);
+                    }
+                    self.store.local(
+                        &id,
+                        "instance.stop_requested",
+                        json!({"request_id":operation.id}),
+                    )?;
+                    if let Some(worker) = self.workers.get_mut(&id) {
+                        worker.request_stop(false)?;
+                    } else {
+                        self.shells
+                            .get_mut(&id)
+                            .context("outcome_unknown: no owned process")?
+                            .request_stop(false)?;
+                    }
+                    operation.effect("stop", "requested");
+                    operation.phase = Phase::WaitStop {
+                        force_at: Instant::now() + Duration::from_secs(2),
+                        forced: false,
+                    };
+                    Ok(false)
+                }
+                Action::Register => {
+                    ensure!(
+                        self.store.generation(&id)?.is_none(),
+                        "invalid_input: instance is already registered"
+                    );
+                    if let Some(shell) = self.shells.get_mut(&id) {
+                        let next = self.store.session(&id)?["capture_generation"]
+                            .as_i64()
+                            .context("capture generation missing")?
+                            + 1;
+                        shell.require_registration_boundary()?;
+                        self.store.reactivate(&id)?;
+                        shell.reactivate(next);
+                        self.store.local(
+                            &id,
+                            "capture.started",
+                            json!({"history_imported":false,"generation":next}),
+                        )?;
+                        operation.effect("register", "confirmed");
+                        Ok(true)
+                    } else {
+                        let server = self.store.session(&id)?["server"]
+                            .as_str()
+                            .context("native server missing")?
+                            .to_owned();
+                        if let Some(worker) = self.workers.get(&id) {
+                            ensure!(worker.alive, "outcome_unknown: native runtime ended");
+                        }
+                        operation.phase = Phase::RegisterConnect {
+                            connection: std::thread::spawn(move || {
+                                Codex::connect(Path::new(&server))
+                            }),
+                        };
+                        Ok(false)
+                    }
+                }
+            },
+            Phase::WaitStop { force_at, forced } => {
+                let alive = self.workers.get(&id).is_some_and(|w| w.alive)
+                    || self.shells.get(&id).is_some_and(|s| s.alive);
+                if !alive {
+                    if let Some(worker) = self.workers.get(&id) {
+                        worker.stopped(&self.store)?;
+                    }
+                    if let Some(shell) = self.shells.get(&id) {
+                        shell.stopped(&self.store)?;
+                    }
+                    operation.effect("stop", "confirmed");
+                    if operation.action == (Action::Stop { close: false }) {
+                        return Ok(true);
+                    }
+                    operation.phase = Phase::Close;
+                } else {
+                    let escalate = !forced && Instant::now() >= force_at;
+                    if escalate {
+                        if let Some(worker) = self.workers.get_mut(&id) {
+                            worker.request_stop(true)?;
+                        }
+                        if let Some(shell) = self.shells.get_mut(&id) {
+                            shell.request_stop(true)?;
+                        }
+                    }
+                    operation.phase = Phase::WaitStop {
+                        force_at,
+                        forced: forced || escalate,
+                    };
+                }
+                Ok(false)
+            }
+            Phase::Close => {
+                if let Some((_, child)) = self
+                    .terminals
+                    .iter_mut()
+                    .find(|(session, _)| session == &id)
+                {
+                    if child.try_wait()?.is_none() {
+                        let window = terminal::close(child.id())?;
+                        operation.effect("close", "requested");
+                        operation.phase = Phase::WaitClose { window };
+                        return Ok(false);
+                    }
+                }
+                operation.effect("close", "confirmed");
+                if operation.action == (Action::Remove { stop: true }) {
+                    operation.phase = Phase::Remove;
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            Phase::WaitClose { window } => {
+                let alive = self
+                    .terminals
+                    .iter_mut()
+                    .any(|(s, c)| s == &id && matches!(c.try_wait(), Ok(None)));
+                if !alive && !terminal::exists(window)? {
+                    operation.effect("close", "confirmed");
+                    self.store.local(&id,"interface.closed",json!({"request_id":operation.id,"runtime_stopped":operation.action != Action::Background}))?;
+                    if operation.action == (Action::Remove { stop: true }) {
+                        operation.phase = Phase::Remove;
+                        Ok(false)
+                    } else {
+                        Ok(true)
+                    }
+                } else {
+                    operation.phase = Phase::WaitClose { window };
+                    Ok(false)
+                }
+            }
+            Phase::WaitOpen => {
+                let child = self
+                    .terminals
+                    .iter_mut()
+                    .find(|(s, _)| s == &id)
+                    .context("provider_failed: terminal exited before opening")?;
+                ensure!(
+                    child.1.try_wait()?.is_none(),
+                    "provider_failed: terminal exited before opening"
+                );
+                if let Some(window) = terminal::window(child.1.id())? {
+                    operation.receipt["window_id"] = json!(window);
+                    operation.effect("open", "confirmed");
+                    Ok(true)
+                } else {
+                    operation.phase = Phase::WaitOpen;
+                    Ok(false)
+                }
+            }
+            Phase::Remove => {
+                self.store.remove(&id)?;
+                if let Some(shell) = self.shells.get_mut(&id) {
+                    shell.deregister();
+                }
+                let native = self.store.session(&id)?["native_thread_id"]
+                    .as_str()
+                    .context("native identity missing")?
+                    .to_owned();
+                self.registered.remove(&native);
+                self.captures.remove(&id);
+                if self.control.session() == Some(id.as_str()) {
+                    self.control.release(&self.store, None, "removed")?;
+                }
+                operation.effect("remove", "confirmed");
+                Ok(true)
+            }
+            Phase::LaunchIdle { request } => {
+                if let Some(metadata) = self.connection(&id)?.poll_rpc(request)? {
+                    ensure!(
+                        metadata["thread"]["status"]["type"] == "idle",
+                        "busy: new worker is not idle"
+                    );
+                    let inputs = self
+                        .store
+                        .operation(&operation.id)?
+                        .context("launch missing")?
+                        .0;
+                    let task = format!("launch:{}", operation.id);
+                    let prompt = string(&inputs, "prompt")?;
+                    self.store.begin_request(&task, &id, prompt)?;
+                    let native = self.store.session(&id)?["native_thread_id"]
+                        .as_str()
+                        .context("native identity missing")?
+                        .to_owned();
+                    operation.effect("dispatch", "requested");
+                    self.store
+                        .save_operation(&operation.id, &operation.receipt)?;
+                    let request=self.connection(&id)?.begin_rpc("turn/start",json!({"threadId":native,"clientUserMessageId":task,"input":[{"type":"text","text":prompt}]}))?;
+                    operation.phase = Phase::LaunchTurn { request };
+                    Ok(false)
+                } else {
+                    operation.phase = Phase::LaunchIdle { request };
+                    Ok(false)
+                }
+            }
+            Phase::LaunchTurn { request } => {
+                if let Some(reply) = self.connection(&id)?.poll_rpc(request)? {
+                    let task = format!("launch:{}", operation.id);
+                    self.store.accepted(
+                        &task,
+                        reply["turn"]["id"]
+                            .as_str()
+                            .context("outcome_unknown: initial task has no turn identity")?,
+                    )?;
+                    operation.receipt["initial_request"] = json!(self.store.request(&task)?);
+                    operation.receipt["task_state"] = json!("accepted");
+                    operation.effect("dispatch", "confirmed");
+                    let inputs = self
+                        .store
+                        .operation(&operation.id)?
+                        .context("launch missing")?
+                        .0;
+                    if inputs["open"] == false {
+                        Ok(true)
+                    } else {
+                        operation.phase = Phase::Start;
+                        Ok(false)
+                    }
+                } else {
+                    operation.phase = Phase::LaunchTurn { request };
+                    Ok(false)
+                }
+            }
+            Phase::RegisterConnect { connection } => {
+                if !connection.is_finished() {
+                    operation.phase = Phase::RegisterConnect { connection };
+                    return Ok(false);
+                }
+                let mut connection = connection.join().map_err(|_| {
+                    anyhow::anyhow!("provider_failed: native connection thread ended")
+                })??;
+                let native = self.store.session(&id)?["native_thread_id"]
+                    .as_str()
+                    .context("native identity missing")?
+                    .to_owned();
+                let request = connection.begin_rpc(
+                    "thread/resume",
+                    json!({"threadId":native,"excludeTurns":true}),
+                )?;
+                operation.phase = Phase::RegisterResume {
+                    connection: Box::new(connection),
+                    request,
+                };
+                Ok(false)
+            }
+            Phase::RegisterResume {
+                mut connection,
+                request,
+            } => {
+                if let Some(reply) = connection.poll_rpc(request)? {
+                    let native = self.store.session(&id)?["native_thread_id"]
+                        .as_str()
+                        .context("native identity missing")?
+                        .to_owned();
+                    ensure!(
+                        reply["thread"]["id"] == native,
+                        "provider_failed: native subscription identity mismatch"
+                    );
+                    connection.pending.clear();
+                    let generation = self.store.reactivate(&id)?;
+                    if let Some(worker) = self.workers.get_mut(&id) {
+                        worker.connection = Some(*connection);
+                        worker.generation = generation;
+                    } else {
+                        self.captures.insert(id.clone(), (*connection, generation));
+                    }
+                    self.store.local(&id,"capture.started",json!({"generation":generation,"history_imported":false,"source":"new_native_subscription"}))?;
+                    operation.effect("register", "confirmed");
+                    Ok(true)
+                } else {
+                    operation.phase = Phase::RegisterResume {
+                        connection,
+                        request,
+                    };
+                    Ok(false)
+                }
+            }
+        }
+    }
+
+    pub(super) fn capture_count(&self) -> Result<usize> {
+        let mut count = self.registered.len() + self.captures.len();
+        for worker in self.workers.values() {
+            if worker.connection.is_some() && self.store.generation(&worker.session)?.is_some() {
+                count += 1;
+            }
+        }
+        count += self.shells.values().filter(|s| s.connected()).count();
+        Ok(count)
+    }
+}

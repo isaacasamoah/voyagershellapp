@@ -24,7 +24,6 @@ const probe = path.join(root, 'target/debug/voyager-windows');
 const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
-// The first platform adapter is explicitly XWayland; native Wayland needs GNOME.
 app.commandLine.appendSwitch('ozone-platform', 'x11');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
 const primaryInstance = app.requestSingleInstanceLock();
@@ -66,7 +65,6 @@ async function rpc(...args) {
     });
     return JSON.parse(result.stdout);
   } catch (error) {
-    // Do not expose execFile's full command line and internal IDs in the panel.
     throw Error(error.stderr?.trim().replace(/^Error: /, '') || 'Voyager did not respond.');
   }
 }
@@ -82,9 +80,7 @@ async function identities() {
   for (const pid of new Set(records.flatMap((r) => [r.pid, r.frontend.pid]))) {
     try {
       result.set(pid, await processIdentity(pid));
-    } catch {
-      /* exited client */
-    }
+    } catch {}
   }
   return result;
 }
@@ -117,9 +113,7 @@ async function discoverTerminals() {
       try {
         const record = await identifyTerminal(pid, endpoint);
         if (record) found.push(record);
-      } catch {
-        /* Window or native client exited during inventory. */
-      }
+      } catch {}
     }
   }
   records = found;
@@ -130,7 +124,6 @@ function syncLayer() {
   if (next === layer) return;
   const wasTerminal = layer === 'hover' || layer === 'passive';
   layer = next;
-  // Hover enables grabbing, but does not take keyboard focus from the terminal.
   avatarWin.setIgnoreMouseEvents(terminal && !dockHovered);
   if (terminal !== wasTerminal) {
     avatarWin.setFocusable(!terminal);
@@ -148,8 +141,6 @@ async function placeAboveTerminal() {
     return;
   const p = avatarPosition();
   const center = screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 });
-  // Window managers can keep a group together rather than honor exact adjacency.
-  // Hide a covered marker instead of leaving it painted over another app.
   if (windowAt(stack, center, process.pid)?.id !== target) {
     avatarWin.hide();
     setDockHovered(false);
@@ -160,7 +151,6 @@ async function placeAboveTerminal() {
     t = stack.findIndex((w) => w.id === target);
   if (t >= 0 && a > t) return;
   await exec(probe, ['above', String(avatar), String(target)], { timeout: 2000 });
-  // Request accepted is not proof of compositor placement.
   const deadline = performance.now() + 1000;
   while (layer !== 'floating' && binding?.window.id === target) {
     stack = await inventory();
@@ -181,15 +171,18 @@ function sendState() {
     panelHovered,
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
-    sessions: sessions.map(({ id, name, kind, cwd, ownership, capture, worker_state }) => ({
-      id,
-      name,
-      kind,
-      cwd,
-      ownership,
-      capture,
-      worker_state,
-    })),
+    sessions: sessions.map(
+      ({ id, name, kind, cwd, ownership, capture, worker_state, removed_ms }) => ({
+        id,
+        name,
+        kind,
+        cwd,
+        ownership,
+        capture,
+        worker_state,
+        removed_ms,
+      }),
+    ),
     service,
     serviceError,
     platformError,
@@ -220,7 +213,6 @@ function placePanel() {
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
   setBoundsIfChanged(panelWin, { x, y, width, height });
-  // Keep the astronaut in its seat if the panel was clamped at a display edge.
   setBoundsIfChanged(avatarWin, { x: x + 100, y: y + 36 });
 }
 function placeAvatar(x, y) {
@@ -233,15 +225,11 @@ function placeAvatar(x, y) {
 }
 function setSeated(value) {
   seated = value;
-  // Let the window manager keep the seated astronaut above its panel, even
-  // when selecting a row raises the panel. Detaching restores a top-level window.
   if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
 }
 async function setExpanded(value) {
   expanded = value;
   if (value) {
-    // A terminal-docked click reveals the panel where it was left. The astronaut
-    // and its service attachment stay at the terminal until a deliberate pull.
     if (binding) {
       sendState();
       panelWin.showInactive();
@@ -252,13 +240,10 @@ async function setExpanded(value) {
     sendState();
     panelWin.showInactive();
     avatarWin.moveTop();
-    // A show request is not a compositor acknowledgement. Wait for this exact
-    // window in the managed X11 stack before assigning a transient parent.
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
     const deadline = performance.now() + 2000;
     while (expanded && seated) {
       const mapped = (await inventory()).some((window) => window.id === id && window.visible);
-      // A hide or pull can arrive while the native inventory is in flight.
       if (!expanded || !seated) return;
       if (mapped) {
         avatarWin.setParentWindow(panelWin);
@@ -307,9 +292,6 @@ function updateDockHover(snapshot) {
 function updatePointer() {
   advanceDrag(screen.getCursorScreenPoint());
   if (!binding || seated || dragging) setDockHovered(false);
-  // Electron's cursor position can stay cached while our X11 windows ignore
-  // input. Sample the desktop itself; never gate that sample on the cached point.
-  // One bounded probe at a time, at most 10/s while a dock or panel is visible.
   if ((!binding && !expanded) || hoverBusy || performance.now() - lastHoverProbe < 100) return;
   hoverBusy = true;
   lastHoverProbe = performance.now();
@@ -350,7 +332,6 @@ function advanceDrag(p, now = performance.now()) {
   if (dragging.moved) {
     placeAvatar(p.x - dragging.x, p.y - dragging.y);
     const target = windowAt(windows, screen.dipToScreenPoint(p), process.pid);
-    // A preview is only a candidate. Drop performs fresh identity checks and registration.
     if (
       target &&
       records.filter((r) => r.pid === target.pid).length === 1 &&
@@ -389,7 +370,6 @@ async function releaseControl(connection) {
   } catch (error) {
     console.error(`Control release: ${error.message}`);
   } finally {
-    // EOF also releases control if the acknowledgement was lost.
     connection.close();
   }
 }
@@ -398,7 +378,7 @@ async function dock(id) {
   if (binding) undock();
   const generation = ++dockGeneration;
   windows = await inventory();
-  sessions = await rpc('list');
+  sessions = await rpc('list', '--include-removed');
   await discoverTerminals();
   const target = resolveWindow(
     windows.find((w) => w.id === id),
@@ -410,9 +390,8 @@ async function dock(id) {
     undock(target.error);
     return false;
   }
-  // Only this deliberate drop authorizes subscription. Discovery above is metadata-only.
   if (target.record.external) await rpc('register', target.record.nativeId);
-  sessions = await rpc('list');
+  sessions = await rpc('list', '--include-removed');
   windows = await inventory();
   const fresh = resolveWindow(
     windows.find((w) => w.id === id),
@@ -482,7 +461,10 @@ async function refresh() {
   busy = true;
   const refreshGeneration = dockGeneration;
   try {
-    const [nextService, nextSessions] = await Promise.all([rpc('status'), rpc('list')]);
+    const [nextService, nextSessions] = await Promise.all([
+      rpc('status'),
+      rpc('list', '--include-removed'),
+    ]);
     service = nextService;
     sessions = nextSessions;
     serviceError = null;
@@ -503,7 +485,6 @@ async function refresh() {
   if (binding) {
     const current = binding;
     const processes = await identities();
-    // A detach or another drop can arrive while process identities are read.
     if (binding !== current) {
       busy = false;
       return;
@@ -627,6 +608,29 @@ app.whenReady().then(async () => {
       throw Error('Unknown managed instance');
     return rpc('open', id, 'ghostty');
   });
+  async function instanceAction(id, request, op, flags = []) {
+    if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
+    if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
+      throw Error('Invalid action request');
+    try {
+      return await rpc(op, id, '--request-id', request, ...flags);
+    } finally {
+      await refresh();
+    }
+  }
+  handle('background-instance', [panelWin], (id, request) =>
+    instanceAction(id, request, 'background'),
+  );
+  handle('stop-instance', [panelWin], (id, request) =>
+    instanceAction(id, request, 'stop-instance'),
+  );
+  handle('remove-instance', [panelWin], (id, request, stop) => {
+    if (typeof stop !== 'boolean') throw Error('Invalid remove choice');
+    return instanceAction(id, request, 'remove', stop ? ['--stop'] : []);
+  });
+  handle('register-instance', [panelWin], (id, request) =>
+    instanceAction(id, request, 'register-instance'),
+  );
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
@@ -643,7 +647,6 @@ app.whenReady().then(async () => {
       seated,
     };
     sendState();
-    // A deliberate press may focus the astronaut for Escape; hover never does.
     avatarWin.focus();
   });
   handle('cancel-drag', [avatarWin], async () => {
@@ -671,7 +674,6 @@ app.whenReady().then(async () => {
       await setExpanded(!expanded);
       return;
     }
-    // A stationary hold leaves the panel and attachment exactly as they were.
     if (!moved) {
       sendState();
       return;
@@ -714,7 +716,6 @@ app.whenReady().then(async () => {
   }
   await refresh();
   if (process.argv.includes('--expanded')) await setExpanded(true);
-  // Keyboard alternative to hovering and pulling the terminal marker.
   if (
     !globalShortcut.register('Control+Alt+V', () => {
       if (binding) avatarWin.webContents.send('dock-sound', 'undock');
@@ -725,18 +726,20 @@ app.whenReady().then(async () => {
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
-  // The opt-in local proof drives the same main/renderer operations, not a mock service.
   if (
     process.argv.includes('--proof') ||
+    process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-control')
-        ? '../test/control-proof.cjs'
-        : process.argv.includes('--proof-registration')
-          ? '../test/registration-proof.cjs'
-          : '../test/live-proof.cjs',
+      process.argv.includes('--proof-lifecycle')
+        ? '../test/lifecycle-proof.cjs'
+        : process.argv.includes('--proof-control')
+          ? '../test/control-proof.cjs'
+          : process.argv.includes('--proof-registration')
+            ? '../test/registration-proof.cjs'
+            : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -768,11 +771,13 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-control')
-            ? 'control-proof.json'
-            : process.argv.includes('--proof-registration')
-              ? 'registration-proof.json'
-              : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-lifecycle')
+            ? 'lifecycle-proof.json'
+            : process.argv.includes('--proof-control')
+              ? 'control-proof.json'
+              : process.argv.includes('--proof-registration')
+                ? 'registration-proof.json'
+                : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(
@@ -803,7 +808,6 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
-  // The OS closes this connection on crashes too. Agents are independent.
   controlConnection?.close();
   globalShortcut.unregisterAll();
   clearInterval(timer);

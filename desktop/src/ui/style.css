@@ -54,7 +54,7 @@ body[data-view='panel'] #avatar {
   height: 104px;
   padding: 0;
   border-radius: 50%;
-  /* An outer shadow would be cut into a square by the compact floating window. */
+
   box-shadow:
     inset 0 1px 0 #ffffffdf,
     inset 0 -1px 0 #ffffff66;
@@ -84,7 +84,6 @@ body[data-view='panel'] #avatar {
   pointer-events: none;
 }
 body[data-seated='true'] .avatar {
-  /* The panel supplies the glass, so the seated astronaut has no separate rim. */
   background: none;
   border-color: transparent;
   box-shadow: none;
@@ -234,7 +233,6 @@ body[data-dock-error='true'] #indicator {
   }
 }
 
-/* Only the terminal marker recedes; panel and floating avatar stay bright. */
 .avatar[data-state='docked']:not([data-hovered='true']) {
   opacity: 0.3;
   background: transparent;
@@ -311,4 +309,46 @@ select {
   line-height: 1.5;
   color: #823621;
   -webkit-app-region: no-drag;
+}
+
+.instance-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+}
+.instance-menu summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.instance-menu summary:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.instance-actions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  right: 28px;
+  z-index: 4;
+  display: grid;
+  min-width: 150px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(240, 244, 250, 0.98);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+}
+.instance-actions button {
+  text-align: left;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.instance-actions button:hover {
+  background: rgba(100, 120, 150, 0.12);
+}
+#unregistered {
+  margin-top: 14px;
 }

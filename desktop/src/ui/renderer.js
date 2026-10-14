@@ -6,6 +6,7 @@ let pointer = false;
 let audio;
 let lastRows;
 let creating = false;
+const pendingActions = new Map();
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -60,50 +61,92 @@ api.onState((value) => {
   const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
   if (rows === lastRows) return;
   lastRows = rows;
-  $('sessions').replaceChildren(
-    ...value.sessions.map((s) => {
-      const b = element('button', '', 'session');
-      b.dataset.key = s.id;
-      b.setAttribute('aria-pressed', String(s.id === value.selected));
-      const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
-      const status =
-        value.serviceError || s.worker_state === 'unknown'
-          ? 'Unknown'
-          : ['stopped', 'exited'].includes(s.worker_state)
-            ? 'Stopped'
-            : s.capture === 'connected'
-              ? 'Connected'
-              : 'Disconnected';
-      const dot = element('span', '', 'connection-dot');
-      dot.setAttribute('aria-hidden', 'true');
-      b.setAttribute('aria-label', `${name}, ${status}`);
-      b.title = `${name} — ${status}`;
-      b.append(element('span', name, 'session-name'), dot);
-      b.dataset.connected = String(status === 'Connected');
-      b.onclick = () => api.select(s.id);
-      const row = element('div', '', 'instance-row');
-      row.append(b);
-      if (s.ownership === 'managed' && s.worker_state === 'running') {
-        const open = element('button', '↗', 'open-instance');
-        open.setAttribute('aria-label', `Open ${name}`);
-        open.title = `Open ${name}`;
-        open.onclick = async () => {
-          open.disabled = true;
-          try {
-            const result = await api.openInstance(s.id);
-            showError(result?.error);
-          } catch (error) {
-            showError(error.message);
-          } finally {
-            open.disabled = false;
-          }
-        };
-        row.append(open);
-      }
-      return row;
-    }),
+  const active = value.sessions.filter((s) => s.removed_ms == null);
+  const unregistered = value.sessions.filter(
+    (s) => s.removed_ms != null && s.ownership === 'managed' && s.worker_state === 'running',
   );
-  if (!value.sessions.length) $('sessions').append(element('p', 'No instances yet.', 'empty'));
+  function rowFor(s) {
+    const b = element('button', '', 'session');
+    b.dataset.key = s.id;
+    b.setAttribute('aria-pressed', String(s.id === value.selected));
+    const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
+    const status =
+      value.serviceError || s.worker_state === 'unknown'
+        ? 'Unknown'
+        : ['stopped', 'exited'].includes(s.worker_state)
+          ? 'Stopped'
+          : s.capture === 'connected'
+            ? 'Connected'
+            : 'Disconnected';
+    const dot = element('span', '', 'connection-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    b.setAttribute('aria-label', `${name}, ${status}`);
+    b.title = `${name} — ${status}`;
+    b.append(element('span', name, 'session-name'), dot);
+    b.dataset.connected = String(status === 'Connected');
+    b.onclick = () => api.select(s.id);
+    const row = element('div', '', 'instance-row');
+    row.append(b);
+    if (s.ownership === 'managed' && s.worker_state === 'running') {
+      const open = element('button', '↗', 'open-instance');
+      open.setAttribute('aria-label', `Open ${name}`);
+      open.title = `Open ${name}`;
+      open.onclick = async () => {
+        open.disabled = true;
+        try {
+          const result = await api.openInstance(s.id);
+          showError(result?.error);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          open.disabled = false;
+        }
+      };
+      row.append(open);
+    }
+    const menu = element('details', '', 'instance-menu');
+    const summary = element('summary', '⋯');
+    summary.setAttribute('aria-label', `Actions for ${name}`);
+    menu.append(summary);
+    const actions = element('div', '', 'instance-actions');
+    function addAction(label, call) {
+      const button = element('button', label);
+      button.onclick = async () => {
+        const key = JSON.stringify([s.id, label]);
+        if (!pendingActions.has(key)) pendingActions.set(key, crypto.randomUUID());
+        for (const b of actions.querySelectorAll('button')) b.disabled = true;
+        button.textContent = 'Working…';
+        try {
+          await call(pendingActions.get(key));
+          pendingActions.delete(key);
+          menu.open = false;
+          showError('');
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          button.textContent = label;
+          for (const b of actions.querySelectorAll('button')) b.disabled = false;
+        }
+      };
+      actions.append(button);
+    }
+    if (s.ownership === 'managed' && s.worker_state === 'running') {
+      addAction('Run in background', (request) => api.backgroundInstance(s.id, request));
+      addAction('Stop', (request) => api.stopInstance(s.id, request));
+    }
+    if (s.removed_ms == null) {
+      addAction('Remove', (request) => api.removeInstance(s.id, request, false));
+      if (s.ownership === 'managed')
+        addAction('Stop and remove', (request) => api.removeInstance(s.id, request, true));
+    } else addAction('Register again', (request) => api.registerInstance(s.id, request));
+    menu.append(actions);
+    row.append(menu);
+    return row;
+  }
+  $('sessions').replaceChildren(...active.map(rowFor));
+  $('unregistered-sessions').replaceChildren(...unregistered.map(rowFor));
+  $('unregistered').hidden = unregistered.length === 0;
+  if (!active.length) $('sessions').append(element('p', 'No instances yet.', 'empty'));
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });

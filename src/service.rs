@@ -1,5 +1,11 @@
 use crate::{
-    codex::Codex, control::Control, events, shell::Shell, store::Store, terminal, worker::Worker,
+    actions::{Action, PendingOperation},
+    codex::Codex,
+    control::Control,
+    events,
+    shell::Shell,
+    store::Store,
+    worker::{StartingWorker, Worker},
 };
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
@@ -25,6 +31,10 @@ use std::{
     process::{Command, Stdio},
     time::Duration,
 };
+
+mod lifecycle;
+mod native;
+use native::NativeCall;
 
 const REQUEST_LIMIT: u64 = 64 * 1024;
 
@@ -62,7 +72,6 @@ pub fn client(state: &Path, request: Value) -> Result<Value> {
     stream.set_read_timeout(Some(Duration::from_secs(20)))?;
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     writeln!(stream, "{request}")?;
-    // A paged response contains at most 100 bounded event payloads.
     let mut bytes = Vec::new();
     BufReader::new(stream)
         .take(4 * 1024 * 1024)
@@ -104,7 +113,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             meta.file_type().is_socket() && meta.uid() == Uid::effective().as_raw(),
             "refusing to replace non-socket state"
         );
-        fs::remove_file(&socket_path)?; // Exclusive lock proves no current service owns it.
+        fs::remove_file(&socket_path)?;
     }
     let db_path = state.join("events.sqlite");
     if let Ok(meta) = fs::symlink_metadata(&db_path) {
@@ -114,6 +123,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         );
     }
     let store = Store::open(&db_path)?;
+    store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
         [],
@@ -133,10 +143,14 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         codex,
         server: server.map(|p| p.to_string_lossy().into_owned()),
         registered: HashMap::new(),
+        captures: HashMap::new(),
         instance: uuid::Uuid::new_v4().to_string(),
         workers: HashMap::new(),
         shells: HashMap::new(),
         terminals: Vec::new(),
+        operations: HashMap::new(),
+        creations: HashMap::new(),
+        native_calls: Vec::new(),
         state: fs::canonicalize(state)?,
         executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
     };
@@ -149,7 +163,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             Ok((mut stream, _)) => {
                 stream.set_read_timeout(Some(Duration::from_secs(1)))?;
                 stream.set_write_timeout(Some(Duration::from_secs(1)))?;
-                let result = (|| -> Result<(Value, bool)> {
+                let result = (|| -> Result<Option<(Value, bool)>> {
                     ensure!(
                         getsockopt(&stream, sockopt::PeerCredentials)?.uid()
                             == Uid::effective().as_raw(),
@@ -161,7 +175,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                         runtime.ensure_connected(string(&request, "session_id")?)?;
                         let peer =
                             u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
-                        return Ok((
+                        return Ok(Some((
                             runtime.control.dock(
                                 &runtime.store,
                                 &request,
@@ -169,15 +183,45 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                                 stream.try_clone()?,
                             )?,
                             false,
-                        ));
+                        )));
                     }
-                    runtime.dispatch(request)
+                    if ["discover", "register", "send"]
+                        .iter()
+                        .any(|op| request["op"] == *op)
+                    {
+                        return Ok(runtime
+                            .begin_native(request, stream.try_clone()?)?
+                            .map(|v| (v, false)));
+                    }
+                    runtime.dispatch(request).map(Some)
                 })();
                 let (reply, stop) = match result {
-                    Ok((value, stop)) => (json!({"result":value}), stop),
-                    Err(error) => (json!({"error":error.to_string()}), false),
+                    Ok(Some((value, stop))) => (json!({"result":value}), stop),
+                    Ok(None) => continue,
+                    Err(error) => {
+                        let message = error.to_string();
+                        let code = message
+                            .split(':')
+                            .next()
+                            .filter(|c| {
+                                [
+                                    "invalid_input",
+                                    "not_found",
+                                    "forbidden",
+                                    "removed",
+                                    "external_owner",
+                                    "busy",
+                                    "unsupported",
+                                    "request_conflict",
+                                    "outcome_unknown",
+                                ]
+                                .contains(c)
+                            })
+                            .unwrap_or("provider_failed");
+                        (json!({"error":message,"code":code}), false)
+                    }
                 };
-                // A disappeared CLI client is not a reason to stop capture.
+
                 let _ = writeln!(stream, "{reply}");
                 if stop {
                     break;
@@ -203,11 +247,15 @@ struct Runtime {
     store: Store,
     codex: Option<Codex>,
     server: Option<String>,
-    registered: HashMap<String, String>, // native thread -> Voyager registration
+    registered: HashMap<String, (String, i64)>,
+    captures: HashMap<String, (Codex, i64)>,
     instance: String,
     workers: HashMap<String, Worker>,
     shells: HashMap<String, Shell>,
     terminals: Vec<(String, Child)>,
+    operations: HashMap<String, PendingOperation>,
+    creations: HashMap<String, (Value, StartingWorker)>,
+    native_calls: Vec<NativeCall>,
     state: PathBuf,
     executable: String,
 }
@@ -226,14 +274,10 @@ impl Runtime {
             .context("Codex disconnected; restart Voyager and register again")
     }
 
-    fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
-        // Optional current-control precondition for commands sent on the human's
-        // behalf. Direct local CLI access remains available; this is coordination,
-        // not isolation between programs running as the same Unix user.
+    fn check_control(&self, request: &Value) -> Result<()> {
         if let Some(generation) = request.get("control_generation") {
             ensure!(
-                ["send", "launch", "stop-instance", "shell-exec"]
-                    .contains(&string(&request, "op")?),
+                ["send", "launch", "stop-instance", "shell-exec"].contains(&string(request, "op")?),
                 "control precondition is only for agent commands"
             );
             let source = self
@@ -246,23 +290,33 @@ impl Runtime {
                 );
             }
         }
+        Ok(())
+    }
+
+    fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
+        self.check_control(&request)?;
+        if let Some(action) = Action::parse(&request)? {
+            return Ok((self.begin_action(&request, action)?, false));
+        }
+        if ["shell-exec", "shell-read", "send"].contains(&string(&request, "op")?) {
+            self.store
+                .require_registered(string(&request, "session_id")?)?;
+        }
         let value = match string(&request, "op")? {
+            "create" | "launch" => self.create_operation(&request)?,
+            "operation" => {
+                self.store
+                    .operation(string(&request, "request_id")?)?
+                    .context("not_found: operation")?
+                    .1
+            }
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+self.workers.values().filter(|w|w.connection.is_some()).count()+self.shells.values().filter(|s|s.connected()).count(),"owns_agents":self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
             }
-            "discover" => {
-                let c = self.codex()?;
-                let mut threads = Vec::new();
-                for id in c.loaded()? {
-                    threads.push(c.metadata(&id)?);
-                }
-                json!(threads)
-            }
             "connection-info" => {
-                // Metadata only: discoverability never subscribes a thread or imports history.
                 let pid = self.codex()?.peer_pid;
                 let executable = if self.executable.contains('/') {
                     fs::canonicalize(&self.executable)?
@@ -276,6 +330,12 @@ impl Runtime {
                 json!({"server":self.server,"pid":pid,"executable":executable})
             }
             "list" => {
+                ensure!(
+                    request
+                        .get("include_removed")
+                        .is_none_or(|v| v.is_boolean()),
+                    "invalid_input: include_removed must be boolean"
+                );
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
                     let captured = self
@@ -289,151 +349,18 @@ impl Runtime {
                         || self
                             .registered
                             .get(session["native_thread_id"].as_str().unwrap())
-                            == session["id"].as_str().map(|s| s.to_owned()).as_ref();
-                    session["capture"] = json!(if captured {
+                            .is_some_and(|(id, _)| session["id"] == *id)
+                        || self.captures.contains_key(session["id"].as_str().unwrap());
+                    session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
                         "disconnected"
                     });
                 }
+                if request["include_removed"] != true {
+                    sessions.retain(|s| s["removed_ms"].is_null());
+                }
                 json!(sessions)
-            }
-            "register" => {
-                let thread = string(&request, "thread_id")?;
-                ensure!(
-                    self.codex()?.loaded()?.iter().any(|id| id == thread),
-                    "thread is not loaded; refusing to create or resume a replacement"
-                );
-                if let Some(id) = self.registered.get(thread) {
-                    return Ok((json!({"session_id":id,"already_registered":true}), false));
-                }
-                let metadata = self.codex()?.metadata(thread)?;
-                ensure!(metadata["id"] == thread, "thread identity mismatch");
-                let reply = self.codex()?.rpc(
-                    "thread/resume",
-                    json!({"threadId":thread,"excludeTurns":true}),
-                )?;
-                ensure!(
-                    reply["thread"]["id"] == thread,
-                    "subscription identity mismatch"
-                );
-                // Preserve other registrations' events while dropping this new
-                // target's pre-registration notifications and snapshot/history.
-                let pending: Vec<_> = self.codex()?.pending.drain(..).collect();
-                for message in pending {
-                    self.persist(message)?;
-                }
-                let id = self.store.register(
-                    self.server
-                        .as_deref()
-                        .context("no external server configured")?,
-                    &metadata,
-                )?;
-                self.store.local(&id,"capture.started",json!({"source":"codex_app_server","history_imported":false,"replay_available":false}))?;
-                self.registered.insert(thread.to_owned(), id.clone());
-                json!({"session_id":id,"native_thread_id":thread,"ownership":"external","capture":"connected"})
-            }
-            "send" => {
-                let session = string(&request, "session_id")?;
-                let request_id = string(&request, "request_id")?;
-                let message = string(&request, "message")?;
-                self.send(session, request_id, message)?
-            }
-            "create" => {
-                let id = string(&request, "request_id")?;
-                let name = string(&request, "name")?;
-                let kind = string(&request, "kind")?;
-                ensure!(
-                    ["codex", "shell"].contains(&kind),
-                    "unsupported instance kind"
-                );
-                ensure!(
-                    id.len() <= 100
-                        && name.len() <= 100
-                        && !name.trim().is_empty()
-                        && !name.chars().any(char::is_control),
-                    "invalid request ID or name"
-                );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)
-                    .context("Choose an existing folder.")?;
-                ensure!(cwd.is_dir(), "Choose a folder, not a file.");
-                let cwd = cwd.to_str().context("instance cwd must be UTF-8")?;
-                if let Some(previous) = self.store.launch(id)? {
-                    ensure!(
-                        previous["parent_id"].is_null()
-                            && previous["prompt"].is_null()
-                            && previous["cwd"] == cwd
-                            && previous["name"] == name
-                            && previous["kind"] == kind,
-                        "launch ID conflicts with previous inputs"
-                    );
-                } else {
-                    self.store.begin_launch(id, None, cwd, None, Some(name))?;
-                    self.store
-                        .0
-                        .execute("UPDATE workers SET kind=?2 WHERE launch_id=?1", [id, kind])?;
-                    if kind == "shell" {
-                        match Shell::start(&mut self.store, &self.state, id, cwd) {
-                            Ok(shell) => {
-                                self.shells.insert(shell.session.clone(), shell);
-                            }
-                            Err(error) => {
-                                self.store.worker_state(id, "failed")?;
-                                return Err(error);
-                            }
-                        }
-                    } else {
-                        match Worker::start(
-                            &mut self.store,
-                            &self.state,
-                            &self.executable,
-                            id,
-                            cwd,
-                            Some(name),
-                        ) {
-                            Ok(worker) => {
-                                self.workers.insert(worker.session.clone(), worker);
-                            }
-                            Err(error) => {
-                                self.store.worker_state(id, "failed")?;
-                                return Err(error);
-                            }
-                        }
-                    }
-                }
-                self.store.launch(id)?.context("creation receipt missing")?
-            }
-            "open" => {
-                ensure!(
-                    string(&request, "terminal")? == "ghostty",
-                    "terminal not supported yet"
-                );
-                let session = string(&request, "session_id")?;
-                for (id, child) in &mut self.terminals {
-                    if id == session && child.try_wait()?.is_none() {
-                        let window = terminal::focus(child.id())?;
-                        self.store.local(
-                            session,
-                            "interface.focus_requested",
-                            json!({"terminal":"ghostty","pid":child.id(),"window_id":window}),
-                        )?;
-                        return Ok((
-                            json!({"session_id":session,"pid":child.id(),"window_id":window,"state":"focus_requested"}),
-                            false,
-                        ));
-                    }
-                }
-                let info = self.attachment(session)?;
-                let record = self.store.session(session)?;
-                let child = terminal::open_instance(&info, &record)?;
-                let pid = child.id();
-                self.terminals.push((session.to_owned(), child));
-                self.store.local(
-                    session,
-                    "interface.open_requested",
-                    json!({"terminal":"ghostty","pid":pid}),
-                )?;
-                json!({"session_id":session,"terminal":"ghostty","pid":pid,"state":"opening","docked":false})
             }
             "shell-exec" => self
                 .shells
@@ -449,80 +376,12 @@ impl Runtime {
                 .get(string(&request, "session_id")?)
                 .context("not a managed shell")?
                 .output(request["after"].as_u64().unwrap_or(0)),
-            "launch" => {
-                let id = string(&request, "request_id")?;
-                let parent = string(&request, "parent_id")?;
-                let prompt = string(&request, "prompt")?;
-                ensure!(
-                    id.len() <= 100 && prompt.len() <= events::TEXT_LIMIT,
-                    "launch ID or prompt too long"
-                );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)
-                    .context("Choose an existing folder.")?;
-                ensure!(cwd.is_dir(), "worker cwd must be a directory");
-                let cwd = cwd.to_str().context("worker cwd must be UTF-8")?;
-                if let Some(previous) = self.store.launch(id)? {
-                    ensure!(
-                        previous["parent_id"] == parent
-                            && previous["cwd"] == cwd
-                            && previous["prompt"] == prompt,
-                        "launch ID conflicts with previous inputs"
-                    );
-                } else {
-                    self.ensure_connected(parent)?; // Parent must be connected at acceptance.
-                    self.store
-                        .begin_launch(id, Some(parent), cwd, Some(prompt), None)?;
-                    match Worker::start(
-                        &mut self.store,
-                        &self.state,
-                        &self.executable,
-                        id,
-                        cwd,
-                        None,
-                    ) {
-                        Ok(worker) => {
-                            self.workers.insert(worker.session.clone(), worker);
-                        }
-                        Err(error) => {
-                            self.store.worker_state(id, "failed")?;
-                            return Err(error);
-                        }
-                    }
-                    let session =
-                        self.store.launch(id)?.context("launch receipt missing")?["session_id"]
-                            .as_str()
-                            .context("missing session")?
-                            .to_owned();
-                    self.store.local(
-                        parent,
-                        "worker.launched",
-                        json!({"worker_session_id":session,"launch_id":id,"scope":"private"}),
-                    )?;
-                    // A lost acknowledgement is stored as uncertain, never silently replayed.
-                    if let Err(error) = self.send(&session, &format!("launch:{id}"), prompt) {
-                        self.store.local(&session,"task.submission_error",json!({"request_id":format!("launch:{id}"),"error":error.to_string(),"request":self.store.request(&format!("launch:{id}"))?,"automatic_retry":false}))?;
-                    }
-                }
-                let mut receipt = self.store.launch(id)?.unwrap();
-                receipt["initial_request"] = json!(self.store.request(&format!("launch:{id}"))?);
-                receipt
-            }
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
-            "stop-instance" => {
-                let id = string(&request, "session_id")?;
-                if let Some(shell) = self.shells.get_mut(id) {
-                    shell.stop(&self.store)?
-                } else {
-                    self.workers
-                        .get_mut(id)
-                        .context("not a managed instance; external sessions cannot be stopped")?
-                        .stop(&self.store)?
-                }
-            }
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
             "stop" => {
                 ensure!(
-                    !self.workers.values().any(|w| w.alive)
+                    self.creations.is_empty()
+                        && !self.workers.values().any(|w| w.alive)
                         && !self.shells.values().any(|s| s.alive),
                     "stop managed instances explicitly before stopping Voyager"
                 );
@@ -534,6 +393,7 @@ impl Runtime {
     }
 
     fn ensure_connected(&mut self, session: &str) -> Result<()> {
+        self.store.require_registered(session)?;
         if let Some(shell) = self.shells.get(session) {
             ensure!(shell.connected(), "shell is disconnected");
             return Ok(());
@@ -546,6 +406,9 @@ impl Runtime {
         if let Some(worker) = self.workers.get_mut(session) {
             return worker.client();
         }
+        if let Some((connection, _)) = self.captures.get_mut(session) {
+            return Ok(connection);
+        }
         let native = self.store.native(
             session,
             self.server
@@ -553,7 +416,7 @@ impl Runtime {
                 .context("no external server configured")?,
         )?;
         ensure!(
-            self.registered.get(&native).map(String::as_str) == Some(session),
+            self.registered.get(&native).map(|(id, _)| id.as_str()) == Some(session),
             "session is not currently registered for capture"
         );
         self.codex.as_mut().context("Codex disconnected")
@@ -567,61 +430,19 @@ impl Runtime {
             .workers
             .get(id)
             .context("not a live managed instance")?;
-        let launch = self
-            .store
-            .launch(&worker.launch)?
-            .context("launch receipt missing")?;
-        if !launch["prompt"].is_null() {
-            let request = self.store.request(&format!("launch:{}", worker.launch))?;
-            ensure!(
-                request.as_ref().is_some_and(|r| r["state"] == "accepted"),
-                "initial task has no accepted acknowledgement; inspect events before attaching"
-            );
-        }
         worker.attach()
-    }
-
-    fn send(&mut self, session: &str, request_id: &str, message: &str) -> Result<Value> {
-        ensure!(
-            request_id.len() <= 128 && message.len() <= events::TEXT_LIMIT,
-            "request ID or message too long"
-        );
-        if let Some(previous) = self.store.request(request_id)? {
-            ensure!(
-                previous["session_id"] == session && previous["message"] == message,
-                "request ID conflicts with previous inputs"
-            );
-            return Ok(previous);
-        }
-        let native = self.store.session(session)?["native_thread_id"]
-            .as_str()
-            .context("missing native thread")?
-            .to_owned();
-        let metadata = self.connection(session)?.metadata(&native)?;
-        ensure!(
-            metadata["status"]["type"] == "idle",
-            "agent is not idle; leave its current work alone"
-        );
-        self.store.begin_request(request_id, session, message)?;
-        let result=self.connection(session)?.rpc("turn/start",json!({"threadId":native,"clientUserMessageId":request_id,"input":[{"type":"text","text":message}]}))?;
-        let turn = result["turn"]["id"]
-            .as_str()
-            .context("no turn identity; request remains uncertain")?;
-        self.store.accepted(request_id, turn)?;
-        Ok(self.store.request(request_id)?.unwrap())
     }
 
     fn persist(&self, message: Value) -> Result<()> {
         if let Some(observation) = events::normalize(&message) {
-            if let Some(session) = self.registered.get(&observation.thread) {
-                self.store.record(session, observation)?;
+            if let Some((session, generation)) = self.registered.get(&observation.thread) {
+                self.store.record(session, *generation, observation)?;
             }
         }
         Ok(())
     }
 
     fn observe(&mut self) -> Result<()> {
-        // Reap only clients we launched. Closing them never stops a managed agent.
         for index in (0..self.terminals.len()).rev() {
             if self.terminals[index].1.try_wait()?.is_some() {
                 self.terminals.swap_remove(index).1.wait()?;
@@ -632,6 +453,34 @@ impl Runtime {
         }
         for worker in self.workers.values_mut() {
             worker.observe(&self.store)?;
+        }
+        let mut disconnected = Vec::new();
+        for (session, (connection, generation)) in &mut self.captures {
+            let native = self.store.session(session)?["native_thread_id"]
+                .as_str()
+                .context("native identity missing")?
+                .to_owned();
+            let mut notes: Vec<_> = connection.pending.drain(..).collect();
+            match connection.read() {
+                Ok(Some(note)) => notes.push(note),
+                Ok(None) => (),
+                Err(_) => disconnected.push(session.clone()),
+            }
+            for note in notes {
+                if let Some(event) = events::normalize(&note) {
+                    if event.thread == native {
+                        self.store.record(session, *generation, event)?;
+                    }
+                }
+            }
+        }
+        for session in disconnected {
+            self.captures.remove(&session);
+            self.store.local(
+                &session,
+                "capture.gap",
+                json!({"reason":"native_disconnected","replay_available":false}),
+            )?;
         }
         let pending: Vec<_> = self
             .codex
@@ -655,7 +504,11 @@ impl Runtime {
                 }
             }
         }
-        self.observe_control()
+        self.observe_control()?;
+        self.advance_native()?;
+        self.advance_creations()?;
+        self.advance_operations()?;
+        Ok(())
     }
 
     fn observe_control(&mut self) -> Result<()> {
@@ -670,7 +523,7 @@ impl Runtime {
     }
 
     fn gap(&self, reason: &str) -> Result<()> {
-        for session in self.registered.values() {
+        for (session, _) in self.registered.values() {
             self.store.local(
                 session,
                 "capture.gap",
@@ -680,10 +533,6 @@ impl Runtime {
         Ok(())
     }
 }
-
-/// Start independently of the app. The service's existing exclusive lock owns
-/// singleton arbitration; the readiness reply is checked rather than inferred
-/// from a successful spawn. No running session is restored or resubmitted.
 pub fn start(state: &Path) -> Result<Value> {
     private_dir(state)?;
     if let Ok(status) = client(state, json!({"op":"status"})) {
@@ -708,7 +557,6 @@ pub fn start(state: &Path) -> Result<Value> {
         .stdin(Stdio::null())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
-    // SAFETY: setsid is async-signal-safe; no allocations or locks in pre_exec.
     unsafe {
         command.pre_exec(|| {
             if nix::libc::setsid() < 0 {
