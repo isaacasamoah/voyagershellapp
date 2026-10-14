@@ -148,8 +148,9 @@ remove, capture cutoff, re-register and combined stop/remove.
 
 The separate native Codex test uses the installed model account and real
 Ghostty windows. It deliberately submits small tasks, including one through an
-independent native connection while Voyager capture is removed. Its private
-result contains the observed events and action results.
+independent native connection while Voyager capture is removed. It also checks the same native server through a separately owned external
+observation service, including stop refusal and fresh capture after removal.
+Its private result contains the observed events and action results.
 
 ```sh
 VOYAGER_NATIVE_PROOF_DIR="$HOME/.local/share/voyager-native-lifecycle-proof" \

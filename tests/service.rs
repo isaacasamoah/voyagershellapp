@@ -27,6 +27,54 @@ struct Fixture {
     service: Option<Child>,
 }
 
+#[test]
+fn cli_option_spelling_in_message_or_name_remains_data() {
+    let mut f = Fixture::new();
+    f.start();
+    let registration = f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
+        .args([
+            "--state",
+            f.dir.to_str().unwrap(),
+            "send",
+            registration["session_id"].as_str().unwrap(),
+            "cli-data",
+            "--background",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["message"], "--background");
+    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
+        .args([
+            "--state",
+            f.dir.to_str().unwrap(),
+            "create",
+            "shell",
+            "cli-name",
+            "--background",
+            f.dir.to_str().unwrap(),
+            "--background",
+            "--terminal",
+            "ghostty",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["name"], "--background");
+    assert_eq!(reply["window"], "closed");
+}
+
 fn metadata(id: &str) -> Value {
     json!({"id":id,"sessionId":id,"cwd":"/synthetic","source":"vscode","status":{"type":"idle"}})
 }

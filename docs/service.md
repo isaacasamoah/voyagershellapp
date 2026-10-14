@@ -54,7 +54,7 @@ independently owned native server as before.
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
 | `list [--include-removed]` | Active registrations; optionally include retained deregistered records |
 | `start` | Connect to the existing service or start it independently of the calling app |
-| `create codex\|shell REQUEST_ID NAME CWD [--background]` | Start/register/capture and open a native window by default |
+| `create codex\|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty]` | Start/register/capture and open a native window by default |
 | `open SESSION_ID ghostty` | Request a native Ghostty window for a managed instance; no new agent or control claim |
 | `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
 | `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |

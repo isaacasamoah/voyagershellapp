@@ -191,6 +191,79 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
             .is_some_and(|t| t.contains("REMOVED_ONLY_47"))),
         "re-register imported removed history"
     );
+    let external_state = state.join("external");
+    service::private_dir(&external_state)?;
+    let mut external = NativeProof(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .args([
+                "--state",
+                external_state.to_str().context("external state path")?,
+                "serve",
+                record["server"].as_str().context("native server")?,
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(fs::File::create(external_state.join("service.log"))?)
+            .spawn()?,
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while service::client(&external_state, json!({"op":"status"})).is_err() {
+        ensure!(
+            Instant::now() < deadline,
+            "external observer startup failed"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    let external_registration =
+        service::client(&external_state, json!({"op":"register","thread_id":thread}))?;
+    let external_session = external_registration["session_id"]
+        .as_str()
+        .context("external registration")?;
+    ensure!(service::client(&external_state,json!({"op":"stop-instance","session_id":external_session,"request_id":"external-refuse-stop"})).is_err(),"external runtime was stoppable");
+    action(
+        &external_state,
+        json!({"op":"remove","session_id":external_session,"request_id":"external-remove"}),
+    )?;
+    let hidden=native.rpc("turn/start",json!({"threadId":thread,"input":[{"type":"text","text":"Reply exactly EXTERNAL_REMOVED_47."}]}))?;
+    finished(
+        &mut native,
+        hidden["turn"]["id"]
+            .as_str()
+            .context("external hidden turn")?,
+    )?;
+    action(
+        &external_state,
+        json!({"op":"register-instance","session_id":external_session,"request_id":"external-register-again"}),
+    )?;
+    let visible=native.rpc("turn/start",json!({"threadId":thread,"input":[{"type":"text","text":"Reply exactly EXTERNAL_NEW_47."}]}))?;
+    finished(
+        &mut native,
+        visible["turn"]["id"]
+            .as_str()
+            .context("external new turn")?,
+    )?;
+    thread::sleep(Duration::from_millis(300));
+    let external_events = history(&external_state)?;
+    ensure!(
+        !external_events.iter().any(|e| e["payload"]["text"]
+            .as_str()
+            .is_some_and(|t| t.contains("EXTERNAL_REMOVED_47") || t.contains("BEFORE_CAPTURE_47"))),
+        "external observer imported old or removed content"
+    );
+    ensure!(
+        external_events
+            .iter()
+            .any(|e| e["payload"]["role"] == "assistant"
+                && e["payload"]["text"]
+                    .as_str()
+                    .is_some_and(|t| t.contains("EXTERNAL_NEW_47"))),
+        "fresh external capture missing"
+    );
+    service::client(&external_state, json!({"op":"stop"}))?;
+    ensure!(
+        external.0.wait()?.success(),
+        "external observer did not stop"
+    );
     let stopped = action(
         state,
         json!({"op":"remove","session_id":session,"stop":true,"request_id":"native-stop-remove"}),
@@ -204,7 +277,7 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
     fs::write(
         state.join("native-proof.json"),
         serde_json::to_vec_pretty(
-            &json!({"verdict":"pass","created":created,"background":background,"reopened":opened,"removed":removed,"registered":registered,"stopped":stopped,"events":events,"limits":["Real native Codex turns and Ghostty windows through the backend; physical gestures, voice and Electron Codex creation remain separate checks."]}),
+            &json!({"verdict":"pass","created":created,"background":background,"reopened":opened,"removed":removed,"registered":registered,"stopped":stopped,"events":events,"external_events":external_events,"limits":["Real native Codex turns, managed and external capture and Ghostty windows through the backend; physical gestures, voice and Electron Codex creation remain separate checks."]}),
         )?,
     )?;
     service::client(state, json!({"op":"stop"}))?;

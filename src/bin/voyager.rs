@@ -35,35 +35,57 @@ fn main() -> Result<()> {
     {
         bail!("--control is only supported by send, launch, shell-exec and stop-instance");
     }
-    let mut take_flag = |flag: &str| {
-        if let Some(index) = args.iter().position(|v| v == flag) {
-            args.remove(index);
-            true
-        } else {
-            false
-        }
+    let arity = match args.first().map(String::as_str) {
+        Some("create" | "launch") => 5,
+        Some("open") => 3,
+        Some("background" | "stop-instance" | "remove" | "register-instance") => 2,
+        Some("list") => 1,
+        _ => args.len(),
     };
-    let background = take_flag("--background");
-    let runtime_only = take_flag("--runtime-only");
-    let stop_removed = take_flag("--stop");
-    let include_removed = take_flag("--include-removed");
-    let request_id = if let Some(index) = args.iter().position(|v| v == "--request-id") {
-        if index + 1 >= args.len() {
-            bail!("provide an ID after --request-id");
-        }
-        let id = args.remove(index + 1);
-        args.remove(index);
-        Some(id)
+    let options = if args.len() > arity {
+        args.split_off(arity)
     } else {
-        None
+        Vec::new()
     };
     let op = args.first().map(String::as_str).unwrap_or("");
-    if (background && !["create", "launch"].contains(&op))
-        || (runtime_only && op != "stop-instance")
-        || (stop_removed && op != "remove")
-        || (include_removed && op != "list")
-    {
-        bail!("flag is not valid for this command");
+    let mut background = false;
+    let mut runtime_only = false;
+    let mut stop_removed = false;
+    let mut include_removed = false;
+    let mut request_id = None;
+    let mut terminal = None;
+    let mut options = options.into_iter();
+    while let Some(option) = options.next() {
+        match option.as_str() {
+            "--background" if ["create", "launch"].contains(&op) => background = true,
+            "--runtime-only" if op == "stop-instance" => runtime_only = true,
+            "--stop" if op == "remove" => stop_removed = true,
+            "--include-removed" if op == "list" => include_removed = true,
+            "--terminal" if op == "create" => {
+                terminal = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide a terminal after --terminal"))?,
+                )
+            }
+            "--request-id"
+                if [
+                    "open",
+                    "background",
+                    "stop-instance",
+                    "remove",
+                    "register-instance",
+                ]
+                .contains(&op) =>
+            {
+                request_id = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide an ID after --request-id"))?,
+                )
+            }
+            _ => bail!("invalid option for {op}: {option}"),
+        }
     }
     let mut request = match args.as_slice() {
         [op] if op == "serve" => return service::serve(&state, None),
@@ -142,7 +164,7 @@ fn main() -> Result<()> {
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
-            create codex|shell REQUEST_ID NAME CWD [--background] | open SESSION_ID ghostty [--request-id ID]\n\
+            create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] | open SESSION_ID ghostty [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
@@ -150,6 +172,9 @@ fn main() -> Result<()> {
             undock GENERATION (--control is supported by send, launch, shell-exec and stop-instance)"
         ),
     };
+    if let Some(terminal) = terminal {
+        request["terminal"] = json!(terminal);
+    }
     if [
         "open",
         "background",
