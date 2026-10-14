@@ -170,11 +170,9 @@ establish native desktop behavior. Run [the standard checks](../CONTRIBUTING.md)
 
 ### Bringing an existing window forward
 
-The service retains the exact terminal `Child` returned by its launcher. `open`
-checks that child is still alive, identifies its single X11 window by PID, and
-requests activation with the window manager. It never selects a window by title.
-Missing or ambiguous windows produce an error; no duplicate terminal is launched
-as a fallback. The service records `interface.focus_requested`, and control
-ownership is unchanged. This uses the desktop's
-[EWMH activation request](https://specifications.freedesktop.org/wm/latest-single/);
-window-manager focus policy still applies. Native Wayland needs its own adapter.
+`open` requests activation of the exact live owned viewer and records
+`interface.focus_requested`. A confirmed closed viewer is reopened on the same
+runtime; unidentified or ambiguous openings are not replaced. Control is
+unchanged. The [lifecycle contract](lifecycle.md#window-and-process-ownership)
+defines ownership and closure. Window-manager focus policy still applies;
+native Wayland needs its own adapter.

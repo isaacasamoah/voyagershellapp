@@ -68,7 +68,7 @@ exports.run = async ({ panelWin, rpc, refresh, inventory, stateDir, setExpanded 
   const action = async (session, label, accept) => {
     await refresh();
     await ui(
-      `(async () => { const row=Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(session.id)}); if(!row)throw Error('Missing instance'); const menu=row.querySelector('details');menu.open=true; const button=Array.from(menu.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(label)}); if(!button)throw Error('Missing action'); const bounds=row.querySelector('.instance-actions').getBoundingClientRect(); if(bounds.top<0 || bounds.bottom>innerHeight || bounds.left<0 || bounds.right>innerWidth)throw Error('Action menu is clipped'); if(getComputedStyle(button).getPropertyValue('-webkit-app-region')!=='no-drag')throw Error('Action button is a drag region'); await button.onclick(); const error=document.getElementById('instance-error').textContent; if(error) throw Error(error); })()`,
+      `(async () => { const row=Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(session.id)}); if(!row)throw Error('Missing instance'); const menu=row.querySelector('.instance-menu');menu.querySelector(':scope > button').click(); const button=Array.from(menu.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(label)}); if(!button)throw Error('Missing action'); const bounds=row.querySelector('.instance-actions').getBoundingClientRect(); if(bounds.top<0 || bounds.bottom>innerHeight || bounds.left<0 || bounds.right>innerWidth)throw Error('Action menu is clipped'); const hit=document.elementFromPoint((bounds.left+bounds.right)/2, button.getBoundingClientRect().top + button.getBoundingClientRect().height/2); if(hit!==button)throw Error('Action button is clipped or covered'); if(getComputedStyle(button).getPropertyValue('-webkit-app-region')!=='no-drag')throw Error('Action button is a drag region'); await button.onclick(); const error=document.getElementById('instance-error').textContent; if(error) throw Error(error); })()`,
     );
     await wait(list, accept, `${label} did not achieve its result`);
     await wait(
@@ -110,6 +110,16 @@ exports.run = async ({ panelWin, rpc, refresh, inventory, stateDir, setExpanded 
       (windows) => !windows.some((w) => w.visible && w.title === a.name),
       'Background window remains',
     );
+    const viewer = observations.find((o) => o.action === 'create' && o.session === a.id).window;
+    observations.push({
+      action: 'viewer closed',
+      window: viewer.id,
+      process_resident: await fs.stat(`/proc/${viewer.pid}`).then(
+        () => true,
+        () => false,
+      ),
+    });
+    await action(a, 'Run in background', async () => true);
     await wait(
       async () => fs.readFile(output, 'utf8').catch(() => ''),
       (text) => text === 'same-shell',
@@ -188,6 +198,17 @@ exports.run = async ({ panelWin, rpc, refresh, inventory, stateDir, setExpanded 
         rows.find((s) => s.id === b.id)?.worker_state === 'stopped',
     );
     assert(!(await inventory()).some((w) => w.visible && w.title === b.name));
+    await refresh();
+    assert(
+      !(await ui(
+        `Array.from(document.querySelectorAll('[data-key]')).some(b=>b.dataset.key===${JSON.stringify(b.id)})`,
+      )),
+      'Stopped and removed instance remains in the panel',
+    );
+    const lifecycle = (await events()).filter((e) => e.session_id === b.id);
+    assert(lifecycle.some((e) => e.type === 'interface.closed'));
+    assert(lifecycle.some((e) => e.type === 'shell.stopped'));
+    assert(lifecycle.some((e) => e.type === 'session.removed'));
     assert((await events()).some((e) => e.session_id === a.id && e.type === 'shell.command'));
     await save('surface');
     console.log('Lifecycle panel proof saved.');

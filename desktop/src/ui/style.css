@@ -316,27 +316,32 @@ select {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
 }
-.instance-menu summary {
+.instance-menu > button {
   cursor: pointer;
   list-style: none;
   padding: 4px 8px;
   border-radius: 8px;
+  background: transparent;
+  border: 0;
 }
-.instance-menu summary:hover {
+.instance-menu > button:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 .instance-actions {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  right: 28px;
+  position: fixed;
+  inset: auto;
+  margin: 0;
   z-index: 4;
-  display: grid;
   min-width: 150px;
   padding: 6px;
   border-radius: 12px;
   background: rgba(240, 244, 250, 0.98);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  border: 0;
+  color: #172837;
+}
+.instance-actions:popover-open {
+  display: grid;
 }
 .instance-actions button {
   text-align: left;

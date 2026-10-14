@@ -1,5 +1,3 @@
-// Explicit live experiment. Uses the selected native session and makes bounded
-// model calls. Private receipts stay in VOYAGER_STATE, never in this repository.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -43,7 +41,6 @@ exports.run = async ({
   );
   await save('running');
 
-  // Real same-title negative arm. No synthetic title matching or hidden registration.
   const unrelated = spawn(
     '/usr/bin/ghostty',
     [
@@ -110,18 +107,22 @@ exports.run = async ({
   );
   await save('running', { sessionId: session.id, firstRegistration: !existing });
 
-  // Rejoin the panel without altering the registered native session.
+  const markerBounds = avatarWin.getBounds();
+  const controlBefore = (await rpc('status')).control;
   await setExpanded(true);
+  assert.equal(getState().seated, false);
+  assert.deepEqual(avatarWin.getBounds(), markerBounds);
+  assert.deepEqual((await rpc('status')).control, controlBefore);
   assert.equal(
     await avatarWin.webContents.executeJavaScript(
       "getComputedStyle(document.getElementById('avatar')).opacity",
     ),
-    '1',
+    '0.3',
   );
   const lifted = (await inventory()).find((w) => w.id === avatarId);
   assert(
-    lifted.input_region.some((r) => r.width > 1 && r.height > 1),
-    'Seated avatar must accept input',
+    lifted.input_region.every((r) => r.width <= 1 && r.height <= 1),
+    'Showing the panel must leave the docked marker passive',
   );
   const cursor = (await rpc('events', '0')).cursor;
   const request = `dock-demo-${Date.now()}`;

@@ -104,11 +104,24 @@ api.onState((value) => {
       };
       row.append(open);
     }
-    const menu = element('details', '', 'instance-menu');
-    const summary = element('summary', '⋯');
+    const menu = element('div', '', 'instance-menu');
+    const summary = element('button', '⋯');
     summary.setAttribute('aria-label', `Actions for ${name}`);
     menu.append(summary);
     const actions = element('div', '', 'instance-actions');
+    actions.popover = 'auto';
+    actions.id = `actions-${s.id}`;
+    summary.setAttribute('aria-controls', actions.id);
+    actions.addEventListener('toggle', (event) => {
+      summary.setAttribute('aria-expanded', String(event.newState === 'open'));
+    });
+    summary.onclick = () => {
+      if (!actions.togglePopover()) return;
+      const anchor = summary.getBoundingClientRect();
+      const bounds = actions.getBoundingClientRect();
+      actions.style.left = `${Math.max(8, Math.min(innerWidth - bounds.width - 8, anchor.right - bounds.width))}px`;
+      actions.style.top = `${Math.max(8, Math.min(innerHeight - bounds.height - 8, anchor.bottom))}px`;
+    };
     function addAction(label, call) {
       const button = element('button', label);
       button.onclick = async () => {
@@ -119,7 +132,7 @@ api.onState((value) => {
         try {
           await call(pendingActions.get(key));
           pendingActions.delete(key);
-          menu.open = false;
+          if (actions.isConnected) actions.hidePopover();
           showError('');
         } catch (error) {
           showError(error.message);

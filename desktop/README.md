@@ -61,7 +61,8 @@ their clicks reach the renderer.
 
 Terminal docking now also holds a service control connection. Its lifetime is
 independent of panel visibility. Lifecycle menus use named preload methods and
-the same CLI/service operations as an agent. Main never kills an agent directly. Clicking the docked astronaut reveals the panel
+the same CLI/service operations as an agent. Native popovers keep the scrolling
+instance list from clipping actions. Main never kills an agent directly. Clicking the docked astronaut reveals the panel
 at its saved position; it never moves the astronaut or releases control.
 See [the control contract](../docs/control.md) for events, exact-generation release,
 restart behavior and the unimplemented voice handoff. `test/control.test.cjs`
@@ -96,6 +97,12 @@ ignores mouse events; hovering restores pointer input without taking keyboard
 focus. Pulling detaches with the same cue as leaving the panel. A held pointer
 button prevents activation during an existing selection drag. Ctrl+Alt+V is the
 keyboard alternative; there is no separate Detach button.
+
+Drop and hover exclude only the astronaut and candidate outline from native
+window hit testing. The panel remains an occluder. Returning to it requires its
+exact window to be in front and the pointer to hit the rendered glass, rather
+than transparent rectangular padding. Showing the panel preserves the terminal
+attachment, marker position and passive fade.
 
 `voyager-windows above` can reposition only a window belonging to its calling
 Electron process. It also reports pointer button state for hover, without injecting

@@ -72,6 +72,9 @@ test('extra windows, duplicate clients, PID reuse and changed arguments refuse d
   assert.match(resolve({ ...a, visible: false }).error, /unavailable/);
 });
 test('hit testing chooses the frontmost visible window, never a covered terminal', () => {
-  assert.equal(windowAt([a, { ...b, x: 0 }], { x: 50, y: 50 }, 999).id, 2);
-  assert.equal(windowAt([a, { ...b, x: 0 }], { x: 50, y: 50 }, 20).id, 1);
+  assert.equal(windowAt([a, { ...b, x: 0 }], { x: 50, y: 50 }).id, 2);
+  assert.equal(windowAt([a, { ...b, x: 0 }], { x: 50, y: 50 }, [2]).id, 1);
+  const panel = { ...a, id: 3, pid: 999 };
+  const avatar = { ...panel, id: 4 };
+  assert.equal(windowAt([a, panel, avatar], { x: 50, y: 50 }, [4]).id, panel.id);
 });

@@ -123,6 +123,10 @@ async function discoverTerminals() {
   }
   records = found;
 }
+function windowBehindAvatar(stack, point) {
+  const overlays = [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE());
+  return windowAt(stack, point, overlays);
+}
 function syncLayer() {
   const terminal = Boolean(binding && !seated && !dragging);
   const next = terminal ? (dockHovered ? 'hover' : 'passive') : 'floating';
@@ -146,7 +150,7 @@ async function placeAboveTerminal() {
     return;
   const p = avatarPosition();
   const center = screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 });
-  if (windowAt(stack, center, process.pid)?.id !== target) {
+  if (windowBehindAvatar(stack, center)?.id !== target) {
     avatarWin.hide();
     setDockHovered(false);
     return;
@@ -267,7 +271,7 @@ function park() {
   const area = screen.getPrimaryDisplay().workArea;
   setExpanded(false);
   placeAvatar(area.x + area.width - avatarSize - 24, area.y + 28);
-  placePanel(); // Establish the home position even if the panel starts hidden.
+  placePanel();
 }
 function overAvatar(point) {
   const p = avatarPosition();
@@ -282,7 +286,7 @@ function setDockHovered(value) {
 }
 function updateDockHover(snapshot) {
   const point = screen.screenToDipPoint(snapshot.pointer);
-  const top = windowAt(snapshot.windows, screen.dipToScreenPoint(point), process.pid);
+  const top = windowBehindAvatar(snapshot.windows, screen.dipToScreenPoint(point));
   setDockHovered(
     Boolean(
       binding &&
@@ -306,6 +310,8 @@ function updatePointer() {
       const panel = panelWin.getBounds();
       const overPanel =
         expanded &&
+        windowBehindAvatar(snapshot.windows, snapshot.pointer)?.id ===
+          panelWin.getNativeWindowHandle().readUInt32LE() &&
         point.x >= panel.x + margin &&
         point.x < panel.x + panel.width - margin &&
         point.y >= panel.y + margin &&
@@ -336,7 +342,7 @@ function advanceDrag(p, now = performance.now()) {
   }
   if (dragging.moved) {
     placeAvatar(p.x - dragging.x, p.y - dragging.y);
-    const target = windowAt(windows, screen.dipToScreenPoint(p), process.pid);
+    const target = windowBehindAvatar(windows, screen.dipToScreenPoint(p));
     if (
       target &&
       records.filter((r) => r.pid === target.pid).length === 1 &&
@@ -404,7 +410,7 @@ async function dock(id) {
     [target.record],
     await identities(),
   );
-  if (generation !== dockGeneration) return false; // User moved away while awaiting acknowledgement.
+  if (generation !== dockGeneration) return false;
   if (fresh.error) {
     undock(fresh.error);
     return false;
@@ -685,12 +691,14 @@ app.whenReady().then(async () => {
     }
     const cursor = screen.getCursorScreenPoint();
     const panel = panelWin.getBounds();
+    windows = await inventory();
+    const target = windowBehindAvatar(windows, screen.dipToScreenPoint(cursor));
     if (
       expanded &&
-      cursor.x >= panel.x &&
-      cursor.x < panel.x + panel.width &&
-      cursor.y >= panel.y &&
-      cursor.y < panel.y + panel.height
+      target?.id === panelWin.getNativeWindowHandle().readUInt32LE() &&
+      (await panelWin.webContents.executeJavaScript(
+        `Boolean(document.elementFromPoint(${cursor.x - panel.x}, ${cursor.y - panel.y})?.closest('#panel'))`,
+      ))
     ) {
       setSeated(true);
       placeAvatar(panel.x + 108, panel.y + 44);
@@ -698,10 +706,8 @@ app.whenReady().then(async () => {
       avatarWin.webContents.send('dock-sound', 'dock');
       return;
     }
-    const point = screen.dipToScreenPoint(cursor);
-    windows = await inventory();
-    const target = windowAt(windows, point, process.pid);
-    if (target) await dock(target.id);
+    if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE())
+      await dock(target.id);
     else {
       undock();
     }

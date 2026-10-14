@@ -1,5 +1,3 @@
-// Opt-in: uses the existing service and real desktop windows. No model calls.
-// App-local pointer events verify the click handler, not compositor-level drag.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -25,8 +23,6 @@ exports.run = async ({
   const receipts = [];
   const file = path.join(stateDir, 'desktop-refinement-proof.json');
   await fs.writeFile(file, JSON.stringify({ verdict: 'running' }));
-  // sendInputEvent bypasses native hit testing: clickable controls must also be
-  // excluded from Electron's window-drag regions, which swallow real clicks.
   const region = (client, selector) =>
     client.webContents.executeJavaScript(
       `getComputedStyle(document.querySelector(${JSON.stringify(selector)})).getPropertyValue('-webkit-app-region')`,
@@ -100,6 +96,10 @@ exports.run = async ({
     await setExpanded(false);
     assert.equal(await dock(unrelated.id), false);
     assert(!panelWin.isVisible(), 'Dropping on an unsupported window must not open the panel');
+    other.kill('SIGTERM');
+    for (let n = 0; n < 30 && (await inventory()).some((w) => w.pid === other.pid); n++)
+      await delay(100);
+    if (session.ownership === 'managed') await rpc('open', session.id, 'ghostty');
     assert.equal(await dock(ours.id), true);
     assert(!panelWin.isVisible(), 'Docking the floating astronaut must not open the panel');
     assert.equal(getState().binding.session.id, session.id);
@@ -126,8 +126,6 @@ exports.run = async ({
       windows: stack,
       pointer: { ...screen.dipToScreenPoint(point), buttons },
     });
-    // Exercise the same hover transition with explicit pointer samples, without
-    // moving the desktop pointer or making a claim about physical mouse delivery.
     updateDockHover(sample(center, 256));
     assert(!getState().dockHovered, 'An existing text-selection drag must stay with the terminal');
     updateDockHover({ ...sample(center, 0), windows: [] });
@@ -150,6 +148,38 @@ exports.run = async ({
     assert(!getState().dockHovered, 'Leaving restores the passive marker');
     receipts.push(
       'Hover brightened and enabled native input; leave, held button and covered target stayed passive',
+    );
+    const savedPanel = panelWin.getBounds();
+    const savedMarker = avatarWin.getBounds();
+    const savedControl = (await rpc('status')).control;
+    await setExpanded(true);
+    assert(!getState().seated);
+    assert.deepEqual(avatarWin.getBounds(), savedMarker);
+    assert.deepEqual((await rpc('status')).control, savedControl);
+    panelWin.setPosition(savedMarker.x - 100, savedMarker.y - 120);
+    for (let n = 0; n < 30 && avatarWin.isVisible(); n++) {
+      await delay(100);
+      await refresh();
+    }
+    assert(!avatarWin.isVisible(), 'A foreground panel covering the marker hides it');
+    updateDockHover({ ...sample(center, 0), windows: await inventory() });
+    assert(!getState().dockHovered, 'Hover cannot activate through the panel');
+    await setExpanded(false);
+    panelWin.setBounds(savedPanel);
+    for (let n = 0; n < 30 && !avatarWin.isVisible(); n++) {
+      await delay(100);
+      await refresh();
+    }
+    assert(avatarWin.isVisible(), 'Closing the panel restores the terminal marker');
+    updateDockHover(sample({ x: bounds.x - 20, y: bounds.y }, 0));
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        "getComputedStyle(document.getElementById('avatar')).opacity",
+      ),
+      '0.3',
+    );
+    receipts.push(
+      'Panel opening preserves docking; panel occlusion stays passive and fades on return',
     );
   } finally {
     other.kill('SIGTERM');
@@ -220,7 +250,6 @@ exports.run = async ({
   await pointer('mouseDown');
   await delay(50);
   const start = getState().dragging.start;
-  // Exercise the same main-process drag transition; this is not compositor mouse injection.
   advanceDrag({ x: start.x + 30, y: start.y + 20 });
   await delay(100);
   assert(panelWin.isVisible() && !getState().seated);
@@ -232,7 +261,6 @@ exports.run = async ({
     'The panel stays put when the astronaut leaves',
   );
   assert.deepEqual(await sounds(), ['undock'], 'Exactly one undock cue is emitted per departure');
-  // Settle the synthetic pointer at the actual cursor before moving the panel independently.
   advanceDrag(start);
   await delay(50);
   const detachedAvatar = avatarWin.getBounds();
@@ -268,10 +296,7 @@ exports.run = async ({
   park();
   await setExpanded(true);
   await delay(350);
-  // Read the real X11 stack after selecting each row. Renderer-injected clicks
-  // alone would still reach an astronaut that the panel has covered.
   const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
-  // Reopen before each row: a just-shown parent is the mapping-race case.
   for (let attempt = 0; attempt < getState().sessions.length * 3; attempt++) {
     const index = attempt % getState().sessions.length;
     await setExpanded(false);
@@ -344,7 +369,9 @@ exports.run = async ({
   assert(rows.some((row) => row.connected === 'true' && row.label.includes('Connected')));
   assert.deepEqual(
     rows.map((row) => row.name),
-    getState().sessions.map((s) => s.cwd.split('/').filter(Boolean).at(-1) || 'This computer'),
+    getState().sessions.map(
+      (s) => s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer',
+    ),
   );
   receipts.push(
     'Rows lead with project names and accessible connection dots, without harness labels',
@@ -371,7 +398,6 @@ exports.run = async ({
   assert.equal((await processIdentity(after.pid)).start, original.start);
   assert.equal((await rpc('status')).instance, serviceBefore.instance);
   receipts.push('Detach preserved the same native process and service instance');
-  // Leave the real overlay docked for physical hover, drag and sound checks.
   assert.equal(await dock(ours.id), true);
   await delay(250);
   await fs.writeFile(

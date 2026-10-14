@@ -99,13 +99,13 @@ function registeredSession(record, sessions) {
   return sessions.find((s) => s.server === record.server && s.native_thread_id === record.nativeId);
 }
 
-function windowAt(windows, point, excludedPid) {
+function windowAt(windows, point, excludedIds = []) {
   return [...windows]
     .reverse()
     .find(
       (w) =>
         w.visible &&
-        w.pid !== excludedPid &&
+        !excludedIds.includes(w.id) &&
         point.x >= w.x &&
         point.y >= w.y &&
         point.x < w.x + w.width &&
