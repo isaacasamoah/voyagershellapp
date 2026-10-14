@@ -68,7 +68,7 @@ exports.run = async ({ panelWin, rpc, refresh, inventory, stateDir, setExpanded 
   const action = async (session, label, accept) => {
     await refresh();
     await ui(
-      `(async () => { const row=Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(session.id)}); if(!row)throw Error('Missing instance'); const menu=row.querySelector('details');menu.open=true; const button=Array.from(menu.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(label)}); if(!button)throw Error('Missing action'); await button.onclick(); const error=document.getElementById('instance-error').textContent; if(error) throw Error(error); })()`,
+      `(async () => { const row=Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(session.id)}); if(!row)throw Error('Missing instance'); const menu=row.querySelector('details');menu.open=true; const button=Array.from(menu.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(label)}); if(!button)throw Error('Missing action'); const bounds=row.querySelector('.instance-actions').getBoundingClientRect(); if(bounds.top<0 || bounds.bottom>innerHeight || bounds.left<0 || bounds.right>innerWidth)throw Error('Action menu is clipped'); if(getComputedStyle(button).getPropertyValue('-webkit-app-region')!=='no-drag')throw Error('Action button is a drag region'); await button.onclick(); const error=document.getElementById('instance-error').textContent; if(error) throw Error(error); })()`,
     );
     await wait(list, accept, `${label} did not achieve its result`);
     await wait(
