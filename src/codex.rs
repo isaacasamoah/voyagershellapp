@@ -1,5 +1,3 @@
-//! A client of an already-running Codex app server. Never launches/resumes a
-//! replacement process, changes permissions, or answers approval requests.
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     sys::socket::{getsockopt, sockopt},
@@ -7,7 +5,7 @@ use nix::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     io,
     os::unix::net::UnixStream,
     path::Path,
@@ -16,17 +14,20 @@ use std::{
 use tungstenite::{Message, WebSocket};
 
 pub struct Codex {
+    pub peer_pid: u32,
     socket: WebSocket<UnixStream>,
     next_id: u64,
     failed: bool,
     pub pending: VecDeque<Value>,
+    replies: HashMap<u64, Value>,
 }
 
 impl Codex {
     pub fn connect(path: &Path) -> Result<Self> {
         let stream = UnixStream::connect(path).context("connect to existing Codex socket")?;
+        let peer = getsockopt(&stream, sockopt::PeerCredentials)?;
         ensure!(
-            getsockopt(&stream, sockopt::PeerCredentials)?.uid() == Uid::effective().as_raw(),
+            peer.uid() == Uid::effective().as_raw(),
             "different-user Codex server"
         );
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -38,12 +39,14 @@ impl Codex {
         });
         socket
             .get_mut()
-            .set_read_timeout(Some(Duration::from_millis(50)))?;
+            .set_read_timeout(Some(Duration::from_millis(2)))?;
         let mut this = Self {
+            peer_pid: u32::try_from(peer.pid()).context("invalid native server PID")?,
             socket,
             next_id: 1,
             failed: false,
             pending: VecDeque::new(),
+            replies: HashMap::new(),
         };
         this.rpc("initialize", json!({"clientInfo":{"name":"voyager_shell","title":"Voyager Shell","version":"0.2.0"},"capabilities":{"experimentalApi":true}}))?;
         this.socket.send(Message::Text(
@@ -53,6 +56,17 @@ impl Codex {
     }
 
     pub fn rpc(&mut self, method: &str, params: Value) -> Result<Value> {
+        let id = self.begin_rpc(method, params)?;
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while Instant::now() < deadline {
+            if let Some(value) = self.poll_rpc(id)? {
+                return Ok(value);
+            }
+        }
+        bail!("Codex {method} timed out; delivery may be uncertain")
+    }
+
+    pub fn begin_rpc(&mut self, method: &str, params: Value) -> Result<u64> {
         let id = self.next_id;
         self.next_id += 1;
         self.socket.send(Message::Text(
@@ -60,29 +74,44 @@ impl Codex {
                 .to_string()
                 .into(),
         ))?;
-        let deadline = Instant::now() + Duration::from_secs(8);
-        while Instant::now() < deadline {
-            if let Some(value) = self.read()? {
-                if value.get("id").and_then(Value::as_u64) == Some(id) {
-                    // Do not echo upstream errors: they can contain private input.
-                    ensure!(value.get("error").is_none(), "Codex rejected {method}");
-                    return value.get("result").cloned().context("missing RPC result");
-                }
-                if self.pending.len() >= 512 {
-                    self.failed = true;
-                    bail!("Codex notification backlog exceeded");
-                }
-                self.pending.push_back(value);
+        Ok(id)
+    }
+
+    pub fn poll_rpc(&mut self, id: u64) -> Result<Option<Value>> {
+        if let Some(value) = self.read()? {
+            if self.pending.len() >= 512 {
+                self.failed = true;
+                bail!("Codex notification backlog exceeded");
             }
+            self.pending.push_back(value);
         }
-        bail!("Codex {method} timed out; delivery may be uncertain")
+        self.replies
+            .remove(&id)
+            .map(|value| {
+                ensure!(
+                    value.get("error").is_none(),
+                    "provider_failed: Codex rejected the request"
+                );
+                value.get("result").cloned().context("missing RPC result")
+            })
+            .transpose()
     }
 
     pub fn read(&mut self) -> Result<Option<Value>> {
         ensure!(!self.failed, "Codex capture connection failed");
         match self.socket.read() {
             Ok(Message::Text(text)) => match serde_json::from_str(&text) {
-                Ok(value) => Ok(Some(value)),
+                Ok(value) => {
+                    let value: Value = value;
+                    if value.get("method").is_none() {
+                        if let Some(id) = value["id"].as_u64() {
+                            ensure!(self.replies.len() < 128, "Codex reply backlog exceeded");
+                            self.replies.insert(id, value);
+                            return Ok(None);
+                        }
+                    }
+                    Ok(Some(value))
+                }
                 Err(error) => {
                     self.failed = true;
                     Err(error.into())

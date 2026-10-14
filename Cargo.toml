@@ -17,9 +17,9 @@ path = "src/bin/voyager.rs"
 
 [dependencies]
 anyhow = "1"
-nix = { version = "0.31.3", features = ["socket", "uio", "user", "ioctl", "fs", "signal", "process"] }
+nix = { version = "0.31.3", features = ["socket", "uio", "user", "ioctl", "fs", "signal", "process", "term"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde_json = "1"
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 uuid = { version = "1.26.1", features = ["v4"] }
-x11rb = "0.14.0"
+x11rb = { version = "0.14.0", features = ["shape"] }

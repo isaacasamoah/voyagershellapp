@@ -4,7 +4,7 @@ This first service slice connects to a Codex app server that is already running.
 
 ## Build and run
 
-Linux, Rust and a C linker are required. Python 3 is needed only for the original probe tests. The implementation was developed against Codex app-server 0.162.0; the integration is experimental.
+Linux, Rust and a C linker are required. Python 3.11+ is needed only for the original probe tests. The implementation was developed against Codex app-server 0.162.0; the integration is experimental.
 
 ```sh
 cargo build --locked --bin voyager
@@ -38,25 +38,48 @@ target/debug/voyager --state "$VOYAGER_STATE" send SESSION_ID request-001 \
 
 The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. Sending to an already-active thread is refused. Native input can race that check, so the returned native turn ID is authoritative; a send is not promised to create an independent task.
 
-`serve` stays in the foreground unless your process manager launches it in the background. No system service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
+`serve` stays in the foreground unless your process manager launches it in the background. `start` instead runs it independently, and the Electron app uses that operation. No OS service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
 
 ## Commands
 
+To start without an existing native server, use `serve` with no socket argument.
+Then [create a named instance](instances.md). `serve CODEX_SOCKET` connects to an
+independently owned native server as before.
+
 | Command | Result |
 | --- | --- |
-| `status` | Service instance, connection/capture count and whether it currently owns a worker |
+| `status` | Service instance, connection/capture count, worker ownership, current control attachment and voice capability |
+| `connection-info` | Connected native server identity and configured native executable; no subscription |
 | `discover` | Metadata for currently loaded threads; no conversation history |
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
-| `list` | Saved registrations, ownership and whether capture is currently connected |
+| `list [--include-removed]` | Active registrations; optionally include retained deregistered records |
+| `start` | Connect to the existing service or start it independently of the calling app |
+| `create codex\|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty]` | Start/register/capture and open a native window by default |
+| `open SESSION_ID ghostty` | Request a native Ghostty window for a managed instance; no new agent or control claim |
+| `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
+| `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |
+| `shell-attach SESSION_ID` | Attach this terminal to the managed Bash byte transport |
 | `send SESSION_ID REQUEST_ID MESSAGE` | Record the request and send text; acceptance is separate from observed completion |
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
 | `watch --pretty [CURSOR]` | Readable You/Agent messages and lifecycle lines, with terminal control characters escaped |
-| `launch PARENT_SESSION REQUEST_ID CWD PROMPT` | Start one service-owned worker and submit its first task; see [worker commands](workers.md) |
-| `attach SESSION_ID` | Replace this terminal client with Codex's native interface connected to the worker |
+| `launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background]` | Start/register/capture, submit one initial task and open by default; task acceptance is not completion |
+| `attach SESSION_ID` | Replace this terminal client with the managed instance's native attachment |
 | `attach-info SESSION_ID` | Inspect the worker's native connection command and process identity |
-| `stop-worker SESSION_ID` | Explicitly stop the owned worker server; never stop an external session |
-| `stop` | Refuse while a worker is alive; otherwise stop Voyager and record a capture gap |
+| `background SESSION_ID` | Close the owned viewer while runtime and capture continue |
+| `stop-instance SESSION_ID [--runtime-only]` | Stop owned runtime and close its viewer by default |
+| `remove SESSION_ID [--stop]` | Deregister and retain history; optionally stop and close first |
+| `register-instance SESSION_ID` | Explicitly resume future capture of a removed instance, without importing history |
+| `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
+| `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
+| `undock GENERATION` | Release only that current control attachment, leaving registration and work alone |
+
+See [docking and control](control.md) for the persistent desktop connection,
+`interface.docked`/`interface.undocked` events and optional `--control GENERATION`
+precondition on agent commands. The interface events are recorded alongside
+conversation events; they are not model-generated observations.
+
+Lifecycle actions use saved operation results: see [their inputs, outcomes and failure contract](lifecycle.md). The CLI generates an action ID unless supplied with `--request-id`; retain that ID to inspect an uncertain result.
 
 Reusing a request ID with the same inputs returns the prior submission record. Changing its inputs is rejected. Delivery whose acknowledgement was lost remains uncertain and is never retried automatically. The request record stays about submission; the event stream carries the observed turn outcome.
 
@@ -74,13 +97,13 @@ Reasoning, raw terminal output, message deltas, old conversation history, attach
 
 Events retain native turn/item identifiers and a deduplication key, plus recorded time and source time where supplied. A registration maps the event's session ID to its native thread/server. The store does not treat a completed turn as proof its answer is correct. Unsupported notifications are outside this policy and are not represented as captured knowledge.
 
-The private database lives in the selected state directory, never in the Git checkout. Records persist until you explicitly remove that dedicated directory after stopping Voyager. Text fields are capped at 16 KiB with a truncation marker. SQLite is capped at 8192 pages (32 MiB with the new database's default 4096-byte pages); temporary journal space is additional. A storage failure stops capture and is reported on stderr; a durable gap cannot be promised when storage itself is unavailable.
+The private database lives in the selected state directory, never in the Git checkout. Removing an instance deregisters it; historical events remain. Records persist until you explicitly remove that dedicated directory after stopping Voyager. Text fields are capped at 16 KiB with a truncation marker. SQLite is capped at 8192 pages (32 MiB with the new database's default 4096-byte pages); temporary journal space is additional. A storage failure stops capture and is reported on stderr; a durable gap cannot be promised when storage itself is unavailable.
 
 ## Disconnect and restart
 
 The app-server notification stream has no replay cursor established here. Voyager therefore records capture gaps on disconnect, normal stop and restart. After restart the saved registrations remain, but capture is disconnected until you register again. No prompt or old conversation is replayed. A request and its acceptance survive a service restart; uncertain requests remain uncertain.
 
-The first managed-worker increment is described in [workers.md](workers.md). There is no arbitrary process-adoption, task-cancellation protocol, live-upgrade or machine-reboot guarantee. The native app remains responsible for approvals. Voyager does not answer approval or tool-execution requests from Codex.
+The first managed-worker increment is described in [workers.md](workers.md). Voyager-launched sessions default to YOLO (no command sandbox or approval prompts); external registration preserves the existing session's permissions. There is no arbitrary process-adoption, task-cancellation protocol, live-upgrade or machine-reboot guarantee. Voyager does not answer approval or tool-execution requests from Codex.
 
 ## Verification
 
@@ -90,7 +113,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Eight earlier black-box process fixtures remain. Five Rust tests exercise the service against local WebSocket protocol fixtures and test source deduplication/text bounds. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, a concurrency limit and explicit stop. They are not substitutes for the separate real Codex demonstrations.
+Eight earlier black-box process fixtures remain. Twelve Rust tests exercise the service against local WebSocket protocol fixtures, test source deduplication/text bounds, and cover parentless named creation, failed native startup and schema migration. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, several concurrent owned workers and explicit stop. The shell test uses a real Bash PTY, shared working state, unfinished input and close/reopen during work. They are not substitutes for the separate native demonstrations.
 
 ## Real Codex check — 9 October 2026
 

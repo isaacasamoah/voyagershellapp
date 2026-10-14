@@ -12,6 +12,9 @@ body {
   background: transparent;
   overflow: hidden;
 }
+body[data-capturing='true'] {
+  visibility: hidden;
+}
 button {
   font: inherit;
   color: inherit;
@@ -54,7 +57,7 @@ body[data-view='panel'] #avatar {
   height: 104px;
   padding: 0;
   border-radius: 50%;
-  /* An outer shadow would be cut into a square by the compact floating window. */
+
   box-shadow:
     inset 0 1px 0 #ffffffdf,
     inset 0 -1px 0 #ffffff66;
@@ -84,7 +87,6 @@ body[data-view='panel'] #avatar {
   pointer-events: none;
 }
 body[data-seated='true'] .avatar {
-  /* The panel supplies the glass, so the seated astronaut has no separate rim. */
   background: none;
   border-color: transparent;
   box-shadow: none;
@@ -117,6 +119,21 @@ body[data-connected='true'] #indicator {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  isolation: isolate;
+}
+#panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(145deg, #f9fdff, #eaf6ff 50%, #f4fbff);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  z-index: -1;
+}
+body[data-panel-hovered='true'] #panel::before {
+  opacity: 1;
 }
 #tagline {
   margin: 0;
@@ -183,12 +200,6 @@ body[data-connected='false'] #connection {
   color: #435b6b;
   font-size: 11px;
 }
-#undock {
-  background: transparent;
-  border: 1px solid #ffffff90;
-  border-radius: 6px;
-  padding: 7px 10px;
-}
 #quit {
   position: absolute;
   top: 108px;
@@ -223,4 +234,212 @@ body[data-dock-error='true'] #indicator {
   .avatar img {
     animation: none;
   }
+}
+
+.avatar[data-state='docked']:not([data-hovered='true']) {
+  opacity: 0.3;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.instances-heading,
+.instance-row,
+.folder-field,
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.instances-heading {
+  justify-content: space-between;
+}
+.instances-heading button,
+.open-instance,
+.folder-field button {
+  border: 0;
+  border-radius: 6px;
+  background: #ffffff70;
+  padding: 4px 8px;
+}
+.instances-heading button {
+  font-size: 19px;
+  line-height: 20px;
+}
+.instance-row .session {
+  flex: 1;
+  min-width: 0;
+}
+#create-form {
+  display: grid;
+  gap: 9px;
+  -webkit-app-region: no-drag;
+}
+#create-form label {
+  display: grid;
+  gap: 4px;
+}
+input,
+select {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #ffffffc0;
+  border-radius: 5px;
+  background: #ffffffa0;
+  color: inherit;
+  -webkit-app-region: no-drag;
+}
+.form-actions {
+  justify-content: flex-end;
+}
+.form-actions button {
+  border: 1px solid #ffffffc0;
+  border-radius: 5px;
+  padding: 7px;
+  background: #ffffffa0;
+}
+.form-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+  color: #42566a;
+}
+#instance-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #823621;
+  -webkit-app-region: no-drag;
+}
+
+.instance-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+}
+.instance-menu > button {
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+}
+.instance-menu > button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.instance-actions {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: 4;
+  min-width: 150px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(240, 244, 250, 0.98);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  border: 0;
+  color: #172837;
+}
+.instance-actions:popover-open {
+  display: grid;
+}
+.instance-actions button {
+  text-align: left;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.instance-actions button:hover {
+  background: rgba(100, 120, 150, 0.12);
+}
+#unregistered {
+  margin-top: 14px;
+}
+
+#drawing {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  -webkit-app-region: no-drag;
+}
+#voyager-ui {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+#panel,
+#avatar {
+  pointer-events: auto;
+}
+body[data-drawing='true'] #panel {
+  -webkit-app-region: no-drag;
+}
+#whiteboard-controls {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  border-top: 1px solid #ffffff80;
+  padding-top: 7px;
+}
+#wb-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: #344e60;
+}
+.chevron {
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+#wb-toggle[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+}
+#wb-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 8px;
+}
+.drawing-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.drawing-tools button {
+  border: 1px solid #ffffff90;
+  border-radius: 6px;
+  padding: 5px 6px;
+  background: #ffffff28;
+  font-size: 11px;
+}
+.drawing-tools button:hover {
+  background: #ffffff65;
+}
+.drawing-tools button[aria-pressed='true'] {
+  background: #d2eae1d9;
+  border-color: #70a38f;
+  color: #214f41;
+}
+#wb-hide {
+  margin-left: auto;
+}
+#wb-status {
+  margin: 0;
+  color: #435b6b;
+  font-size: 10px;
+  line-height: 1.5;
 }

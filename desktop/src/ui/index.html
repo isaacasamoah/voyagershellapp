@@ -5,14 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'none'"
     />
     <title>Voyager</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="whiteboard/style.css" />
   </head>
   <body>
-    <main>
-      <section id="panel" hidden aria-label="Voyager agents">
+    <div id="drawing" hidden>
+      <svg id="board" role="img" aria-label="Draw on the desktop"></svg>
+      <input id="editor" aria-label="Edit text on the desktop" maxlength="120" hidden />
+    </div>
+    <main id="voyager-ui">
+      <section id="panel" hidden aria-label="Voyager instances">
         <svg class="brand" viewBox="0 0 224 120" aria-hidden="true">
           <defs>
             <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -51,8 +56,71 @@
           </g>
         </svg>
         <div id="connection" role="status">Connecting…</div>
-        <div id="sessions" aria-label="Your agents"></div>
-        <button id="undock" hidden>Detach</button>
+        <div class="instances-heading">
+          <span>Instances</span
+          ><button id="add" aria-label="New instance" title="New instance">+</button>
+        </div>
+        <form id="create-form" hidden>
+          <label
+            >Type<select id="instance-kind">
+              <option value="codex">Codex</option>
+              <option value="shell">Terminal · Bash</option>
+            </select></label
+          >
+          <label
+            >Name<input
+              id="instance-name"
+              maxlength="100"
+              required
+              placeholder="What are you working on?"
+          /></label>
+          <label
+            >Folder<span class="folder-field"
+              ><input id="instance-cwd" required /><button
+                id="choose-folder"
+                type="button"
+                aria-label="Choose folder"
+              >
+                …
+              </button></span
+            ></label
+          >
+          <p class="form-hint">Opens in Ghostty. Terminal commands are saved locally.</p>
+          <div class="form-actions">
+            <button id="cancel-create" type="button">Cancel</button
+            ><button id="create" type="submit">Create and open</button>
+          </div>
+        </form>
+        <p id="instance-error" role="alert" hidden></p>
+        <div id="sessions" aria-label="Your instances"></div>
+        <section id="unregistered" hidden aria-label="Unregistered instances">
+          <div class="instances-heading">Unregistered instances</div>
+          <div id="unregistered-sessions"></div>
+        </section>
+        <section id="whiteboard-controls" aria-label="Desktop whiteboard">
+          <button id="wb-toggle" aria-expanded="false" aria-controls="wb-tools">
+            <span>Whiteboard</span><span class="chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div id="wb-tools" hidden>
+            <div class="drawing-tools" aria-label="Drawing tools">
+              <button data-drawing-tool="pen" aria-pressed="false">Pen</button>
+              <button data-drawing-tool="box" aria-pressed="false">Box</button>
+              <button data-drawing-tool="text" aria-pressed="false">Text</button>
+              <button data-drawing-tool="arrow" aria-pressed="false">Connect</button>
+              <button data-drawing-tool="select" aria-pressed="false">Select</button>
+            </div>
+            <div class="drawing-tools" aria-label="Drawing actions">
+              <button id="wb-snip" title="Drag an area of the desktop to add as an image">
+                Snip
+              </button>
+              <button id="wb-undo" disabled>Undo</button>
+              <button id="wb-delete" disabled>Delete</button>
+              <button id="wb-clear">Clear</button>
+              <button id="wb-hide" disabled title="Return to your desktop">Done</button>
+            </div>
+            <p id="wb-status" role="status" hidden></p>
+          </div>
+        </section>
         <p id="tagline">Let’s Go Together</p>
         <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
       </section>
@@ -68,5 +136,6 @@
       </button>
     </main>
     <script src="renderer.js"></script>
+    <script type="module" src="whiteboard/renderer.mjs"></script>
   </body>
 </html>

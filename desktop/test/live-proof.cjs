@@ -1,15 +1,15 @@
-// Opt-in: uses the existing service and real desktop windows. No model calls.
-// App-local pointer events verify the click handler, not compositor-level drag.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { processIdentity, windowAt } = require('../src/binding.cjs');
+const { screen } = require('electron');
+const { processIdentity, registeredSession, windowAt } = require('../src/binding.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
   avatarWin,
   panelWin,
   advanceDrag,
+  updateDockHover,
   rpc,
   refresh,
   inventory,
@@ -23,8 +23,6 @@ exports.run = async ({
   const receipts = [];
   const file = path.join(stateDir, 'desktop-refinement-proof.json');
   await fs.writeFile(file, JSON.stringify({ verdict: 'running' }));
-  // sendInputEvent bypasses native hit testing: clickable controls must also be
-  // excluded from Electron's window-drag regions, which swallow real clicks.
   const region = (client, selector) =>
     client.webContents.executeJavaScript(
       `getComputedStyle(document.querySelector(${JSON.stringify(selector)})).getPropertyValue('-webkit-app-region')`,
@@ -39,31 +37,36 @@ exports.run = async ({
     'drag',
     'The panel background must move its native window',
   );
-  for (const selector of ['#quit', '#undock', '.session'])
+  for (const selector of ['#quit', '.session'])
     assert.equal(await region(panelWin, selector), 'no-drag', `${selector} must remain clickable`);
   receipts.push('Native drag regions exclude the astronaut and panel buttons');
-  const worker = getState().sessions.find(
-    (s) => s.ownership === 'managed' && s.capture === 'connected',
-  );
-  assert(worker, 'A connected real worker is required');
+  const existing = getState().records.find((r) => {
+    const session = registeredSession(r, getState().sessions);
+    return (
+      session?.capture === 'connected' &&
+      getState().windows.some((w) => w.pid === r.pid && w.visible)
+    );
+  });
+  assert(existing, 'Open a registered native terminal before running this proof');
+  const session = registeredSession(existing, getState().sessions);
   const serviceBefore = await rpc('status');
-  const workerBefore = await rpc('attach-info', worker.id);
-  const original = await processIdentity(workerBefore.pid);
-  const existing = getState().records.find(
-    (r) =>
-      r.sessionId === worker.id && getState().windows.some((w) => w.pid === r.pid && w.visible),
-  );
-  assert(existing, 'Open the native worker terminal before running this proof');
+  const nativeBefore =
+    session.ownership === 'managed'
+      ? await rpc('attach-info', session.id)
+      : { pid: existing.frontend.pid };
+  const original = await processIdentity(nativeBefore.pid);
   const opened = {
     terminalPid: existing.pid,
     frontendPid: existing.frontend.pid,
-    sessionId: worker.id,
+    sessionId: session.id,
   };
   await refresh();
   const ours = getState().windows.find((w) => w.pid === opened.terminalPid && w.visible);
   assert(ours, 'The native terminal must be present');
   if (existing)
-    receipts.push('Rediscovered an already-open native worker terminal without a UI launch record');
+    receipts.push(
+      'Rediscovered an already-open native session terminal without a UI launch record',
+    );
   const other = spawn(
     '/usr/bin/ghostty',
     [
@@ -86,29 +89,111 @@ exports.run = async ({
       await delay(250);
       await refresh();
       unrelated = getState().windows.find((w) => w.pid === other.pid && w.visible);
-      if (unrelated) break;
+      if (unrelated?.title === ours.title) break;
     }
     assert(unrelated, 'The unrelated terminal must be visible');
     assert.equal(unrelated.title, ours.title);
     await setExpanded(false);
     assert.equal(await dock(unrelated.id), false);
     assert(!panelWin.isVisible(), 'Dropping on an unsupported window must not open the panel');
+    other.kill('SIGTERM');
+    for (let n = 0; n < 30 && (await inventory()).some((w) => w.pid === other.pid); n++)
+      await delay(100);
+    if (session.ownership === 'managed') await rpc('open', session.id, 'ghostty');
     assert.equal(await dock(ours.id), true);
     assert(!panelWin.isVisible(), 'Docking the floating astronaut must not open the panel');
-    assert.equal(getState().binding.session.id, worker.id);
+    assert.equal(getState().binding.session.id, session.id);
+    const markerId = avatarWin.getNativeWindowHandle().readUInt32LE();
+    const stack = await inventory();
+    assert(stack.findIndex((w) => w.id === markerId) > stack.findIndex((w) => w.id === ours.id));
+    assert.deepEqual(
+      (await inventory()).find((w) => w.id === markerId).input_region,
+      [{ x: 0, y: 0, width: 1, height: 1 }],
+      'Docked marker yields input except its transparent corner pixel',
+    );
     await delay(250);
     assert.equal(
       await avatarWin.webContents.executeJavaScript(
         "getComputedStyle(document.getElementById('avatar')).opacity",
       ),
-      '1',
-      'The docked astronaut keeps its full brightness',
+      '0.3',
+      'Only the terminal marker fades',
     );
-    receipts.push('Exact native worker accepted; unrelated same-title terminal refused');
+    receipts.push('Exact native session accepted; unrelated same-title terminal refused');
+    const bounds = avatarWin.getBounds();
+    const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    const sample = (point, buttons) => ({
+      windows: stack,
+      pointer: { ...screen.dipToScreenPoint(point), buttons },
+    });
+    updateDockHover(sample(center, 256));
+    assert(!getState().dockHovered, 'An existing text-selection drag must stay with the terminal');
+    updateDockHover({ ...sample(center, 0), windows: [] });
+    assert(!getState().dockHovered, 'A covered or missing target must not activate');
+    updateDockHover(sample(center, 0));
+    assert(getState().dockHovered, 'Hover over the visible marker enables grabbing');
+    assert.equal(avatarWin.isFocusable(), false, 'Hover must leave keyboard focus alone');
+    const region = (await inventory()).find((w) => w.id === markerId).input_region;
+    assert(
+      region.some((r) => r.width > 1 && r.height > 1),
+      'Hover restores native pointer input',
+    );
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        "getComputedStyle(document.getElementById('avatar')).opacity",
+      ),
+      '1',
+    );
+    updateDockHover(sample({ x: bounds.x - 20, y: bounds.y }, 0));
+    assert(!getState().dockHovered, 'Leaving restores the passive marker');
+    receipts.push(
+      'Hover brightened and enabled native input; leave, held button and covered target stayed passive',
+    );
+    const savedPanel = panelWin.getBounds();
+    const savedMarker = avatarWin.getBounds();
+    const savedControl = (await rpc('status')).control;
+    await setExpanded(true);
+    assert(!getState().seated);
+    assert.deepEqual(avatarWin.getBounds(), savedMarker);
+    assert.deepEqual((await rpc('status')).control, savedControl);
+    panelWin.setPosition(savedMarker.x - 100, savedMarker.y - 120);
+    for (let n = 0; n < 30 && avatarWin.isVisible(); n++) {
+      await delay(100);
+      await refresh();
+    }
+    assert(!avatarWin.isVisible(), 'A foreground panel covering the marker hides it');
+    updateDockHover({ ...sample(center, 0), windows: await inventory() });
+    assert(!getState().dockHovered, 'Hover cannot activate through the panel');
+    await setExpanded(false);
+    panelWin.setBounds(savedPanel);
+    for (let n = 0; n < 30 && !avatarWin.isVisible(); n++) {
+      await delay(100);
+      await refresh();
+    }
+    assert(avatarWin.isVisible(), 'Closing the panel restores the terminal marker');
+    updateDockHover(sample({ x: bounds.x - 20, y: bounds.y }, 0));
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        "getComputedStyle(document.getElementById('avatar')).opacity",
+      ),
+      '0.3',
+    );
+    receipts.push(
+      'Panel opening preserves docking; panel occlusion stays passive and fades on return',
+    );
   } finally {
     other.kill('SIGTERM');
   }
+  undock();
   await setExpanded(false);
+  const floatingRegion = (await inventory()).find(
+    (w) => w.id === avatarWin.getNativeWindowHandle().readUInt32LE(),
+  ).input_region;
+  assert(
+    floatingRegion.some((r) => r.width > 1 && r.height > 1),
+    'Floating avatar accepts input again',
+  );
+  receipts.push('Native input shape yields the docked artwork and returns for the floating avatar');
   avatarWin.focus();
   await delay(300);
   const pointer = async (type) => {
@@ -145,15 +230,17 @@ exports.run = async ({
   assert.equal(await outline(), 'none', 'A released click must not leave a focus ring');
   receipts.push('Clicks toggled the separate panel without resizing the avatar');
 
+  undock();
   await setExpanded(true);
   await delay(100);
+  await avatarWin.webContents.executeJavaScript('window.dockSounds = []');
   const panelBefore = panelWin.getBounds();
   await pointer('mouseDown');
   await delay(450);
   assert.notEqual(await outline(), 'none', 'Holding highlights the astronaut');
   assert(panelWin.isVisible(), 'Holding must leave the panel visible');
   assert(getState().seated, 'Holding alone must not lift the astronaut');
-  assert.equal(getState().binding?.session.id, worker.id);
+  assert.equal(getState().binding, null, 'Bringing the avatar home releases terminal control');
   await pointer('mouseUp');
   await delay(100);
   assert(panelWin.isVisible() && getState().seated, 'Stationary release does not toggle or undock');
@@ -163,7 +250,6 @@ exports.run = async ({
   await pointer('mouseDown');
   await delay(50);
   const start = getState().dragging.start;
-  // Exercise the same main-process drag transition; this is not compositor mouse injection.
   advanceDrag({ x: start.x + 30, y: start.y + 20 });
   await delay(100);
   assert(panelWin.isVisible() && !getState().seated);
@@ -175,7 +261,6 @@ exports.run = async ({
     'The panel stays put when the astronaut leaves',
   );
   assert.deepEqual(await sounds(), ['undock'], 'Exactly one undock cue is emitted per departure');
-  // Settle the synthetic pointer at the actual cursor before moving the panel independently.
   advanceDrag(start);
   await delay(50);
   const detachedAvatar = avatarWin.getBounds();
@@ -193,7 +278,11 @@ exports.run = async ({
   assert(getState().seated && panelWin.isVisible());
   assert.equal(avatarWin.getParentWindow(), panelWin, 'Escape restores the native parent');
   assert.equal(await outline(), 'none', 'Cancelling the gesture clears its highlight');
-  assert.equal(getState().binding?.session.id, worker.id, 'Escape restores the prior attachment');
+  assert.equal(
+    getState().binding,
+    null,
+    'Escape returns to the panel without inventing terminal control',
+  );
   assert.deepEqual(
     await sounds(),
     ['undock', 'dock'],
@@ -207,10 +296,7 @@ exports.run = async ({
   park();
   await setExpanded(true);
   await delay(350);
-  // Read the real X11 stack after selecting each row. Renderer-injected clicks
-  // alone would still reach an astronaut that the panel has covered.
   const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
-  // Reopen before each row: a just-shown parent is the mapping-race case.
   for (let attempt = 0; attempt < getState().sessions.length * 3; attempt++) {
     const index = attempt % getState().sessions.length;
     await setExpanded(false);
@@ -252,10 +338,11 @@ exports.run = async ({
     hasDockButtons:Boolean(document.getElementById('targets')),
     hasNotice:Boolean(document.getElementById('notice')),
     hasLauncher:Boolean(document.getElementById('open-terminal')),
+    hasDetach:Boolean(document.getElementById('undock')),
     scroll:document.getElementById('sessions').scrollHeight>document.getElementById('sessions').clientHeight,
     sessionCount:document.querySelectorAll('.session').length
   })`);
-  assert(!ui.hasEvents && !ui.hasDockButtons && !ui.hasNotice && !ui.hasLauncher);
+  assert(!ui.hasEvents && !ui.hasDockButtons && !ui.hasNotice && !ui.hasLauncher && !ui.hasDetach);
   assert(!ui.scroll, 'The real agent list must fit without scrolling');
   for (const s of getState().sessions)
     assert(!ui.text.includes(s.id) && !ui.text.includes(s.native_thread_id));
@@ -282,7 +369,9 @@ exports.run = async ({
   assert(rows.some((row) => row.connected === 'true' && row.label.includes('Connected')));
   assert.deepEqual(
     rows.map((row) => row.name),
-    getState().sessions.map((s) => s.cwd.split('/').filter(Boolean).at(-1) || 'This computer'),
+    getState().sessions.map(
+      (s) => s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer',
+    ),
   );
   receipts.push(
     'Rows lead with project names and accessible connection dots, without harness labels',
@@ -301,11 +390,20 @@ exports.run = async ({
     path.join(stateDir, 'desktop-refinement-avatar.png'),
     (await avatarWin.webContents.capturePage()).toPNG(),
   );
-  const after = await rpc('attach-info', worker.id);
-  assert.equal(after.pid, workerBefore.pid);
+  const after =
+    session.ownership === 'managed'
+      ? await rpc('attach-info', session.id)
+      : { pid: existing.frontend.pid };
+  assert.equal(after.pid, nativeBefore.pid);
   assert.equal((await processIdentity(after.pid)).start, original.start);
   assert.equal((await rpc('status')).instance, serviceBefore.instance);
-  receipts.push('Detach preserved the same worker process and service instance');
+  receipts.push('Detach preserved the same native process and service instance');
+  assert.equal(await dock(ours.id), true);
+  await delay(250);
+  await fs.writeFile(
+    path.join(stateDir, 'desktop-docked-avatar.png'),
+    (await avatarWin.webContents.capturePage()).toPNG(),
+  );
   await fs.writeFile(
     file,
     JSON.stringify(
@@ -314,11 +412,11 @@ exports.run = async ({
         receipts,
         rediscovered: Boolean(existing),
         opened,
-        workerPid: after.pid,
-        workerStart: original.start,
+        nativePid: after.pid,
+        nativeStart: original.start,
         limits: [
           'Physical drag, perceived flicker and audible cue still need a human desktop test',
-          'Only dedicated Ghostty XWayland clients of the known worker',
+          'Only dedicated Ghostty XWayland clients of the known session',
           'No arbitrary CLI registration or current-thread switching detection',
         ],
       },
@@ -326,5 +424,5 @@ exports.run = async ({
       2,
     ),
   );
-  console.log('Refinement proof saved. Panel left open; unrelated test shell closed.');
+  console.log('Refinement proof saved. Marker docked and panel open; unrelated test shell closed.');
 };

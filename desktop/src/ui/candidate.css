@@ -1,0 +1,13 @@
+html {
+  height: 100%;
+  background: transparent;
+}
+body {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  border: 2px solid #c0e0ffbf;
+  border-radius: 14px;
+  box-shadow: inset 0 0 12px #c0e0ff30;
+  background: transparent;
+}

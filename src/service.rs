@@ -1,4 +1,13 @@
-use crate::{codex::Codex, events, store::Store, worker::Worker};
+use crate::{
+    actions::{Action, PendingOperation},
+    codex::Codex,
+    control::Control,
+    events,
+    shell::Shell,
+    store::Store,
+    terminal,
+    worker::{StartingWorker, Worker},
+};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
@@ -13,13 +22,20 @@ use std::{
     collections::HashMap,
     fs::{self, DirBuilder, OpenOptions},
     io::{self, BufRead, BufReader, Read, Write},
+    os::unix::process::CommandExt,
     os::unix::{
         fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt},
         net::{UnixListener, UnixStream},
     },
     path::{Path, PathBuf},
+    process::Child,
+    process::{Command, Stdio},
     time::Duration,
 };
+
+mod lifecycle;
+mod native;
+use native::NativeCall;
 
 const REQUEST_LIMIT: u64 = 64 * 1024;
 
@@ -57,7 +73,6 @@ pub fn client(state: &Path, request: Value) -> Result<Value> {
     stream.set_read_timeout(Some(Duration::from_secs(20)))?;
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     writeln!(stream, "{request}")?;
-    // A paged response contains at most 100 bounded event payloads.
     let mut bytes = Vec::new();
     BufReader::new(stream)
         .take(4 * 1024 * 1024)
@@ -80,7 +95,7 @@ impl Drop for SocketPath {
     }
 }
 
-pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
+pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     umask(Mode::from_bits_truncate(0o077));
     private_dir(state)?;
     let lock = OpenOptions::new()
@@ -99,7 +114,7 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
             meta.file_type().is_socket() && meta.uid() == Uid::effective().as_raw(),
             "refusing to replace non-socket state"
         );
-        fs::remove_file(&socket_path)?; // Exclusive lock proves no current service owns it.
+        fs::remove_file(&socket_path)?;
     }
     let db_path = state.join("events.sqlite");
     if let Ok(meta) = fs::symlink_metadata(&db_path) {
@@ -109,6 +124,7 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
         );
     }
     let store = Store::open(&db_path)?;
+    store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
         [],
@@ -120,39 +136,93 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
             json!({"reason":"service_restarted","replay_available":false}),
         )?;
     }
-    let server = fs::canonicalize(codex_path)?.to_string_lossy().into_owned();
+    let server = codex_path.map(fs::canonicalize).transpose()?;
+    let codex = server.as_deref().map(Codex::connect).transpose()?;
     let mut runtime = Runtime {
+        control: Control::new(&store)?,
         store,
-        codex: Some(Codex::connect(Path::new(&server))?),
-        server,
+        codex,
+        server: server.map(|p| p.to_string_lossy().into_owned()),
         registered: HashMap::new(),
+        captures: HashMap::new(),
         instance: uuid::Uuid::new_v4().to_string(),
-        worker: None,
+        workers: HashMap::new(),
+        shells: HashMap::new(),
+        terminals: Vec::new(),
+        operations: HashMap::new(),
+        creations: HashMap::new(),
+        native_calls: Vec::new(),
         state: fs::canonicalize(state)?,
         executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
     };
     let listener = UnixListener::bind(&socket_path)?;
     let _socket = SocketPath(socket_path);
     listener.set_nonblocking(true)?;
-    eprintln!("Voyager ready; native agents remain externally owned");
+    eprintln!("Voyager ready; external registrations and managed launches remain separate");
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 stream.set_read_timeout(Some(Duration::from_secs(1)))?;
                 stream.set_write_timeout(Some(Duration::from_secs(1)))?;
-                let result = (|| -> Result<(Value, bool)> {
+                let result = (|| -> Result<Option<(Value, bool)>> {
                     ensure!(
                         getsockopt(&stream, sockopt::PeerCredentials)?.uid()
                             == Uid::effective().as_raw(),
                         "different-user peer"
                     );
-                    runtime.dispatch(frame(&mut stream)?)
+                    let request = frame(&mut stream)?;
+                    runtime.observe()?;
+                    if request["op"] == "dock" {
+                        runtime.ensure_connected(string(&request, "session_id")?)?;
+                        let peer =
+                            u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
+                        return Ok(Some((
+                            runtime.control.dock(
+                                &runtime.store,
+                                &request,
+                                peer,
+                                stream.try_clone()?,
+                            )?,
+                            false,
+                        )));
+                    }
+                    if ["discover", "register", "send"]
+                        .iter()
+                        .any(|op| request["op"] == *op)
+                    {
+                        return Ok(runtime
+                            .begin_native(request, stream.try_clone()?)?
+                            .map(|v| (v, false)));
+                    }
+                    runtime.dispatch(request).map(Some)
                 })();
                 let (reply, stop) = match result {
-                    Ok((value, stop)) => (json!({"result":value}), stop),
-                    Err(error) => (json!({"error":error.to_string()}), false),
+                    Ok(Some((value, stop))) => (json!({"result":value}), stop),
+                    Ok(None) => continue,
+                    Err(error) => {
+                        let message = error.to_string();
+                        let code = message
+                            .split(':')
+                            .next()
+                            .filter(|c| {
+                                [
+                                    "invalid_input",
+                                    "not_found",
+                                    "forbidden",
+                                    "removed",
+                                    "external_owner",
+                                    "busy",
+                                    "unsupported",
+                                    "request_conflict",
+                                    "outcome_unknown",
+                                ]
+                                .contains(c)
+                            })
+                            .unwrap_or("provider_failed");
+                        (json!({"error":message,"code":code}), false)
+                    }
                 };
-                // A disappeared CLI client is not a reason to stop capture.
+
                 let _ = writeln!(stream, "{reply}");
                 if stop {
                     break;
@@ -166,19 +236,35 @@ pub fn serve(state: &Path, codex_path: &Path) -> Result<()> {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+    runtime
+        .control
+        .release(&runtime.store, None, "service_stopped")?;
     runtime.gap("service_stopped")?;
     Ok(())
 }
 
 struct Runtime {
+    control: Control,
     store: Store,
     codex: Option<Codex>,
-    server: String,
-    registered: HashMap<String, String>, // native thread -> Voyager registration
+    server: Option<String>,
+    registered: HashMap<String, (String, i64)>,
+    captures: HashMap<String, (Codex, i64)>,
     instance: String,
-    worker: Option<Worker>,
+    workers: HashMap<String, Worker>,
+    shells: HashMap<String, Shell>,
+    terminals: Vec<Terminal>,
+    operations: HashMap<String, PendingOperation>,
+    creations: HashMap<String, (Value, StartingWorker)>,
+    native_calls: Vec<NativeCall>,
     state: PathBuf,
     executable: String,
+}
+
+struct Terminal {
+    session: String,
+    child: Child,
+    window: Option<u32>,
 }
 
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
@@ -195,144 +281,116 @@ impl Runtime {
             .context("Codex disconnected; restart Voyager and register again")
     }
 
-    fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
-        let value = match string(&request, "op")? {
-            "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.registered.len()+usize::from(self.worker.as_ref().is_some_and(|w|w.connection.is_some())),"owns_agents":self.worker.as_ref().is_some_and(|w|w.alive)})
+    fn check_control(&self, request: &Value) -> Result<()> {
+        if let Some(generation) = request.get("control_generation") {
+            ensure!(
+                ["send", "launch", "stop-instance", "shell-exec"].contains(&string(request, "op")?),
+                "control precondition is only for agent commands"
+            );
+            let source = self
+                .control
+                .require(generation.as_str().context("invalid control generation")?)?;
+            if request["op"] == "launch" {
+                ensure!(
+                    request["parent_id"] == source,
+                    "launch parent must be the current control session"
+                );
             }
-            "discover" => {
-                let c = self.codex()?;
-                let mut threads = Vec::new();
-                for id in c.loaded()? {
-                    threads.push(c.metadata(&id)?);
-                }
-                json!(threads)
+        }
+        Ok(())
+    }
+
+    fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
+        self.check_control(&request)?;
+        if let Some(action) = Action::parse(&request)? {
+            return Ok((self.begin_action(&request, action)?, false));
+        }
+        if ["shell-exec", "shell-read", "send"].contains(&string(&request, "op")?) {
+            self.store
+                .require_registered(string(&request, "session_id")?)?;
+        }
+        let value = match string(&request, "op")? {
+            "create" | "launch" => self.create_operation(&request)?,
+            "operation" => {
+                self.store
+                    .operation(string(&request, "request_id")?)?
+                    .context("not_found: operation")?
+                    .1
+            }
+            "status" => {
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+            }
+            "undock" => {
+                json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
+            }
+            "connection-info" => {
+                let pid = self.codex()?.peer_pid;
+                let executable = if self.executable.contains('/') {
+                    fs::canonicalize(&self.executable)?
+                } else {
+                    std::env::split_paths(&std::env::var_os("PATH").context("PATH is missing")?)
+                        .map(|dir| dir.join(&self.executable))
+                        .find(|path| path.is_file())
+                        .context("native Codex executable is unavailable")?
+                        .canonicalize()?
+                };
+                json!({"server":self.server,"pid":pid,"executable":executable})
             }
             "list" => {
+                ensure!(
+                    request
+                        .get("include_removed")
+                        .is_none_or(|v| v.is_boolean()),
+                    "invalid_input: include_removed must be boolean"
+                );
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
                     let captured = self
-                        .worker
-                        .as_ref()
-                        .is_some_and(|w| session["id"] == w.session && w.connection.is_some())
+                        .workers
+                        .values()
+                        .any(|w| session["id"] == w.session && w.connection.is_some())
+                        || self
+                            .shells
+                            .values()
+                            .any(|s| session["id"] == s.session && s.connected())
                         || self
                             .registered
                             .get(session["native_thread_id"].as_str().unwrap())
-                            == session["id"].as_str().map(|s| s.to_owned()).as_ref();
-                    session["capture"] = json!(if captured {
+                            .is_some_and(|(id, _)| session["id"] == *id)
+                        || self.captures.contains_key(session["id"].as_str().unwrap());
+                    session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
                         "disconnected"
                     });
                 }
+                if request["include_removed"] != true {
+                    sessions.retain(|s| s["removed_ms"].is_null());
+                }
                 json!(sessions)
             }
-            "register" => {
-                let thread = string(&request, "thread_id")?;
-                ensure!(
-                    self.codex()?.loaded()?.iter().any(|id| id == thread),
-                    "thread is not loaded; refusing to create or resume a replacement"
-                );
-                if let Some(id) = self.registered.get(thread) {
-                    return Ok((json!({"session_id":id,"already_registered":true}), false));
-                }
-                let metadata = self.codex()?.metadata(thread)?;
-                ensure!(metadata["id"] == thread, "thread identity mismatch");
-                let reply = self.codex()?.rpc(
-                    "thread/resume",
-                    json!({"threadId":thread,"excludeTurns":true}),
-                )?;
-                ensure!(
-                    reply["thread"]["id"] == thread,
-                    "subscription identity mismatch"
-                );
-                // Preserve other registrations' events while dropping this new
-                // target's pre-registration notifications and snapshot/history.
-                let pending: Vec<_> = self.codex()?.pending.drain(..).collect();
-                for message in pending {
-                    self.persist(message)?;
-                }
-                let id = self.store.register(&self.server, &metadata)?;
-                self.store.local(&id,"capture.started",json!({"source":"codex_app_server","history_imported":false,"replay_available":false}))?;
-                self.registered.insert(thread.to_owned(), id.clone());
-                json!({"session_id":id,"native_thread_id":thread,"ownership":"external","capture":"connected"})
-            }
-            "send" => {
-                let session = string(&request, "session_id")?;
-                let request_id = string(&request, "request_id")?;
-                let message = string(&request, "message")?;
-                self.send(session, request_id, message)?
-            }
-            "launch" => {
-                let id = string(&request, "request_id")?;
-                let parent = string(&request, "parent_id")?;
-                let prompt = string(&request, "prompt")?;
-                ensure!(
-                    id.len() <= 100 && prompt.len() <= events::TEXT_LIMIT,
-                    "launch ID or prompt too long"
-                );
-                let cwd = fs::canonicalize(string(&request, "cwd")?)?;
-                ensure!(cwd.is_dir(), "worker cwd must be a directory");
-                let cwd = cwd.to_str().context("worker cwd must be UTF-8")?;
-                if let Some(previous) = self.store.launch(id)? {
-                    ensure!(
-                        previous["parent_id"] == parent
-                            && previous["cwd"] == cwd
-                            && previous["prompt"] == prompt,
-                        "launch ID conflicts with previous inputs"
-                    );
-                } else {
-                    self.connection(parent)?; // Parent must be connected at acceptance.
-                    self.store.begin_launch(id, parent, cwd, prompt)?;
-                    match Worker::start(&mut self.store, &self.state, &self.executable, id, cwd) {
-                        Ok(worker) => self.worker = Some(worker),
-                        Err(error) => {
-                            self.store.worker_state(id, "failed")?;
-                            return Err(error);
-                        }
-                    }
-                    let session = self.worker.as_ref().unwrap().session.clone();
-                    self.store.local(
-                        parent,
-                        "worker.launched",
-                        json!({"worker_session_id":session,"launch_id":id,"scope":"private"}),
-                    )?;
-                    // A lost acknowledgement is stored as uncertain, never silently replayed.
-                    if let Err(error) = self.send(&session, &format!("launch:{id}"), prompt) {
-                        self.store.local(&session,"task.submission_error",json!({"request_id":format!("launch:{id}"),"error":error.to_string(),"request":self.store.request(&format!("launch:{id}"))?,"automatic_retry":false}))?;
-                    }
-                }
-                let mut receipt = self.store.launch(id)?.unwrap();
-                receipt["initial_request"] = json!(self.store.request(&format!("launch:{id}"))?);
-                receipt
-            }
-            "attach-info" => {
-                let id = string(&request, "session_id")?;
-                let w = self
-                    .worker
-                    .as_ref()
-                    .filter(|w| w.session == id)
-                    .context("not a live managed worker")?;
-                let request = self.store.request(&format!("launch:{}", w.launch))?;
-                ensure!(
-                    request.as_ref().is_some_and(|r| r["state"] == "accepted"),
-                    "initial task has no accepted acknowledgement; inspect events before attaching"
-                );
-                w.attach()?
-            }
-            "stop-worker" => {
-                let id = string(&request, "session_id")?;
-                self.worker
-                    .as_mut()
-                    .filter(|w| w.session == id)
-                    .context("not a live managed worker; external sessions cannot be stopped")?
-                    .stop(&self.store)?
-            }
+            "shell-exec" => self
+                .shells
+                .get_mut(string(&request, "session_id")?)
+                .context("not a managed shell")?
+                .submit(
+                    &self.store,
+                    string(&request, "request_id")?,
+                    string(&request, "command")?,
+                )?,
+            "shell-read" => self
+                .shells
+                .get(string(&request, "session_id")?)
+                .context("not a managed shell")?
+                .output(request["after"].as_u64().unwrap_or(0)),
+            "attach-info" => self.attachment(string(&request, "session_id")?)?,
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
             "stop" => {
                 ensure!(
-                    !self.worker.as_ref().is_some_and(|w| w.alive),
-                    "stop the managed worker explicitly before stopping Voyager"
+                    self.creations.is_empty()
+                        && !self.workers.values().any(|w| w.alive)
+                        && !self.shells.values().any(|s| s.alive),
+                    "stop managed instances explicitly before stopping Voyager"
                 );
                 return Ok((json!({"stopping":true,"native_agents_stopped":false}), true));
             }
@@ -341,60 +399,101 @@ impl Runtime {
         Ok((value, false))
     }
 
-    fn connection(&mut self, session: &str) -> Result<&mut Codex> {
-        if self.worker.as_ref().is_some_and(|w| w.session == session) {
-            return self.worker.as_mut().unwrap().client();
+    fn ensure_connected(&mut self, session: &str) -> Result<()> {
+        self.store.require_registered(session)?;
+        if let Some(shell) = self.shells.get(session) {
+            ensure!(shell.connected(), "shell is disconnected");
+            return Ok(());
         }
-        let native = self.store.native(session, &self.server)?;
-        ensure!(
-            self.registered.get(&native).map(String::as_str) == Some(session),
-            "session is not currently registered for capture"
-        );
-        self.codex()
+        self.connection(session)?;
+        Ok(())
     }
 
-    fn send(&mut self, session: &str, request_id: &str, message: &str) -> Result<Value> {
-        ensure!(
-            request_id.len() <= 128 && message.len() <= events::TEXT_LIMIT,
-            "request ID or message too long"
-        );
-        if let Some(previous) = self.store.request(request_id)? {
-            ensure!(
-                previous["session_id"] == session && previous["message"] == message,
-                "request ID conflicts with previous inputs"
-            );
-            return Ok(previous);
+    fn connection(&mut self, session: &str) -> Result<&mut Codex> {
+        if let Some(worker) = self.workers.get_mut(session) {
+            return worker.client();
         }
-        let native = self.store.session(session)?["native_thread_id"]
-            .as_str()
-            .context("missing native thread")?
-            .to_owned();
-        let metadata = self.connection(session)?.metadata(&native)?;
+        if let Some((connection, _)) = self.captures.get_mut(session) {
+            return Ok(connection);
+        }
+        let native = self.store.native(
+            session,
+            self.server
+                .as_deref()
+                .context("no external server configured")?,
+        )?;
         ensure!(
-            metadata["status"]["type"] == "idle",
-            "agent is not idle; leave its current work alone"
+            self.registered.get(&native).map(|(id, _)| id.as_str()) == Some(session),
+            "session is not currently registered for capture"
         );
-        self.store.begin_request(request_id, session, message)?;
-        let result=self.connection(session)?.rpc("turn/start",json!({"threadId":native,"clientUserMessageId":request_id,"input":[{"type":"text","text":message}]}))?;
-        let turn = result["turn"]["id"]
-            .as_str()
-            .context("no turn identity; request remains uncertain")?;
-        self.store.accepted(request_id, turn)?;
-        Ok(self.store.request(request_id)?.unwrap())
+        self.codex.as_mut().context("Codex disconnected")
+    }
+
+    fn attachment(&self, id: &str) -> Result<Value> {
+        if let Some(shell) = self.shells.get(id) {
+            return shell.attach(&self.state);
+        }
+        let worker = self
+            .workers
+            .get(id)
+            .context("not a live managed instance")?;
+        worker.attach()
     }
 
     fn persist(&self, message: Value) -> Result<()> {
         if let Some(observation) = events::normalize(&message) {
-            if let Some(session) = self.registered.get(&observation.thread) {
-                self.store.record(session, observation)?;
+            if let Some((session, generation)) = self.registered.get(&observation.thread) {
+                self.store.record(session, *generation, observation)?;
             }
         }
         Ok(())
     }
 
     fn observe(&mut self) -> Result<()> {
-        if let Some(worker) = self.worker.as_mut() {
+        for index in (0..self.terminals.len()).rev() {
+            if self.terminals[index].child.try_wait()?.is_some()
+                && self.terminals[index]
+                    .window
+                    .map(terminal::exists)
+                    .transpose()?
+                    != Some(true)
+            {
+                self.terminals.swap_remove(index).child.wait()?;
+            }
+        }
+        for shell in self.shells.values_mut() {
+            shell.observe(&self.store)?;
+        }
+        for worker in self.workers.values_mut() {
             worker.observe(&self.store)?;
+        }
+        let mut disconnected = Vec::new();
+        for (session, (connection, generation)) in &mut self.captures {
+            let native = self.store.session(session)?["native_thread_id"]
+                .as_str()
+                .context("native identity missing")?
+                .to_owned();
+            let mut notes: Vec<_> = connection.pending.drain(..).collect();
+            match connection.read() {
+                Ok(Some(note)) => notes.push(note),
+                Ok(None) => (),
+                Err(_) => disconnected.push(session.clone()),
+            }
+            for note in notes {
+                if let Some(event) = events::normalize(&note) {
+                    if event.thread == native {
+                        self.store.record(session, *generation, event)?;
+                    }
+                }
+            }
+        }
+        for session in disconnected {
+            self.captures.remove(&session);
+            self.store.local(
+                &session,
+                "capture.gap",
+                json!({"reason":"native_disconnected","replay_available":false}),
+            )?;
         }
         let pending: Vec<_> = self
             .codex
@@ -418,11 +517,26 @@ impl Runtime {
                 }
             }
         }
+        self.observe_control()?;
+        self.advance_native()?;
+        self.advance_creations()?;
+        self.advance_operations()?;
+        Ok(())
+    }
+
+    fn observe_control(&mut self) -> Result<()> {
+        self.control.observe(&self.store)?;
+        if let Some(session) = self.control.session().map(str::to_owned) {
+            if self.ensure_connected(&session).is_err() {
+                self.control
+                    .release(&self.store, None, "capture_disconnected")?;
+            }
+        }
         Ok(())
     }
 
     fn gap(&self, reason: &str) -> Result<()> {
-        for session in self.registered.values() {
+        for (session, _) in self.registered.values() {
             self.store.local(
                 session,
                 "capture.gap",
@@ -430,5 +544,54 @@ impl Runtime {
             )?;
         }
         Ok(())
+    }
+}
+pub fn start(state: &Path) -> Result<Value> {
+    private_dir(state)?;
+    if let Ok(status) = client(state, json!({"op":"status"})) {
+        return Ok(status);
+    }
+    let log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .custom_flags(nix::libc::O_NOFOLLOW)
+        .open(state.join("service.log"))?;
+    let meta = log.metadata()?;
+    ensure!(
+        meta.is_file() && meta.uid() == Uid::effective().as_raw() && meta.mode() & 0o077 == 0,
+        "service log must be private"
+    );
+    let mut command = Command::new(std::env::current_exe()?);
+    command
+        .args(["--state"])
+        .arg(state)
+        .arg("serve")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log.try_clone()?))
+        .stderr(Stdio::from(log));
+    unsafe {
+        command.pre_exec(|| {
+            if nix::libc::setsid() < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().context("start Voyager service")?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Ok(status) = client(state, json!({"op":"status"})) {
+            return Ok(status);
+        }
+        ensure!(
+            child.try_wait()?.is_none(),
+            "Voyager failed to start; inspect service.log"
+        );
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "service startup not confirmed; inspect service.log before retrying"
+        );
+        std::thread::sleep(Duration::from_millis(50));
     }
 }

@@ -1,4 +1,3 @@
-//! One service-owned Codex server. Native terminal clients attach independently.
 use crate::{codex::Codex, events, store::Store};
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
@@ -21,7 +20,6 @@ impl Process {
         if let Some(status) = self.0.try_wait()? {
             return Ok(status);
         }
-        // This process group was created by this exact Child. Never recover ownership from a PID.
         killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGTERM)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline {
@@ -49,17 +47,17 @@ pub struct Worker {
     pub server: String,
     pub executable: String,
     pub alive: bool,
+    pub generation: i64,
 }
 
 impl Worker {
-    pub fn start(
-        store: &mut Store,
+    pub fn begin(
         state: &Path,
         executable: &str,
         launch: &str,
         cwd: &str,
-    ) -> Result<Self> {
-        // Each launch has a new private socket; a stale endpoint is never reused.
+        name: Option<&str>,
+    ) -> Result<StartingWorker> {
         let dir = state.join(format!("w-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir(&dir)?;
         let socket = dir.join("c.sock");
@@ -67,12 +65,27 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
+        let binary = std::env::current_exe()?;
         let child = Command::new(executable)
             .args([
                 "app-server",
+                "-c",
+                "sandbox_mode=\"danger-full-access\"",
+                "-c",
+                "approval_policy=\"never\"",
                 "--listen",
                 &format!("unix://{}", socket.display()),
             ])
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_STATE={}",
+                json!(state)
+            ))
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_BIN={}",
+                json!(binary)
+            ))
             .current_dir(cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -80,39 +93,37 @@ impl Worker {
             .process_group(0)
             .spawn()
             .context("start worker Codex server")?;
-        let mut process = Process(child);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while !socket.exists() {
-            ensure!(
-                process.0.try_wait()?.is_none(),
-                "worker server exited before creating its socket"
-            );
-            ensure!(Instant::now() < deadline, "worker socket startup timed out");
-            thread::sleep(Duration::from_millis(20));
-        }
-        let mut connection = Codex::connect(&socket)?;
-        let reply = connection.rpc("thread/start", json!({"cwd":cwd}))?;
-        let metadata = &reply["thread"];
-        let native = metadata["id"]
-            .as_str()
-            .context("worker has no native identity")?
-            .to_owned();
         let server = socket.to_string_lossy().into_owned();
-        let session = store.register_worker(launch, &server, metadata, process.0.id())?;
-        store.local(
-            &session,
-            "worker.started",
-            json!({"pid":process.0.id(),"launch_id":launch,"ownership":"managed"}),
-        )?;
-        Ok(Self {
-            process,
-            connection: Some(connection),
-            session,
-            native,
-            launch: launch.to_owned(),
+        let cwd = cwd.to_owned();
+        let name = name.map(str::to_owned);
+        let (sender, ready) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            let result = (|| -> Result<(Codex, Value)> {
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while !socket.exists() {
+                    ensure!(Instant::now() < deadline, "worker socket startup timed out");
+                    thread::sleep(Duration::from_millis(20));
+                }
+                let mut connection = Codex::connect(&socket)?;
+                let reply=connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?;
+                let metadata = reply["thread"].clone();
+                if let Some(name) = name {
+                    connection.rpc(
+                        "thread/name/set",
+                        json!({"threadId":metadata["id"],"name":name}),
+                    )?;
+                }
+                Ok((connection, metadata))
+            })();
+            let _ = sender.send(result);
+        });
+        Ok(StartingWorker {
+            process: Some(Process(child)),
+            ready,
+            launch: launch.into(),
             server,
-            executable: executable.to_owned(),
-            alive: true,
+            executable: executable.into(),
+            deadline: Instant::now() + Duration::from_secs(10),
         })
     }
 
@@ -134,7 +145,7 @@ impl Worker {
     fn persist(&self, store: &Store, message: Value) -> Result<()> {
         if let Some(event) = events::normalize(&message) {
             if event.thread == self.native {
-                store.record(&self.session, event)?;
+                store.record(&self.session, self.generation, event)?;
             }
         }
         Ok(())
@@ -178,20 +189,76 @@ impl Worker {
         Ok(())
     }
 
-    pub fn stop(&mut self, store: &Store) -> Result<Value> {
-        if !self.alive {
-            bail!("worker already ended");
+    pub fn request_stop(&mut self, force: bool) -> Result<()> {
+        if self.process.0.try_wait()?.is_none() {
+            killpg(
+                Pid::from_raw(self.process.0.id() as i32),
+                if force {
+                    Signal::SIGKILL
+                } else {
+                    Signal::SIGTERM
+                },
+            )?;
         }
-        store.local(&self.session, "worker.stop_requested", json!({}))?;
-        let exit = self.process.stop()?;
-        self.alive = false;
-        self.connection = None;
+        Ok(())
+    }
+
+    pub fn stopped(&self, store: &Store) -> Result<()> {
         store.worker_state(&self.launch, "stopped")?;
         store.local(
             &self.session,
             "worker.stopped",
-            json!({"exit_code":exit.code(),"unfinished_turn_outcome":"uncertain"}),
+            json!({"unfinished_turn_outcome":"uncertain"}),
+        )
+    }
+}
+
+pub struct StartingWorker {
+    process: Option<Process>,
+    ready: std::sync::mpsc::Receiver<Result<(Codex, Value)>>,
+    launch: String,
+    server: String,
+    executable: String,
+    deadline: Instant,
+}
+
+impl StartingWorker {
+    pub fn poll(&mut self, store: &mut Store) -> Result<Option<Worker>> {
+        let process = self.process.as_mut().context("startup process missing")?;
+        ensure!(
+            process.0.try_wait()?.is_none(),
+            "provider_failed: native server exited during startup"
+        );
+        ensure!(
+            Instant::now() < self.deadline,
+            "outcome_unknown: native startup timed out"
+        );
+        let (connection, metadata) = match self.ready.try_recv() {
+            Ok(result) => result?,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return Ok(None),
+            Err(_) => bail!("outcome_unknown: native startup connection ended"),
+        };
+        let native = metadata["id"]
+            .as_str()
+            .context("native identity missing")?
+            .to_owned();
+        let session =
+            store.register_worker(&self.launch, &self.server, &metadata, process.0.id())?;
+        store.local(
+            &session,
+            "worker.started",
+            json!({"pid":process.0.id(),"launch_id":self.launch,"ownership":"managed"}),
         )?;
-        Ok(json!({"session_id":self.session,"state":"stopped","exit_code":exit.code()}))
+        Ok(Some(Worker {
+            process: self.process.take().context("startup process missing")?,
+            connection: Some(connection),
+            session,
+            native,
+            launch: self.launch.clone(),
+            server: self.server.clone(),
+            executable: self.executable.clone(),
+            alive: true,
+            generation: 1,
+        }))
     }
 }
