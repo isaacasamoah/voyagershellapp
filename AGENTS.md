@@ -1,6 +1,6 @@
 # Working on Voyager Shell
 
-Voyager is an experimental Rust service around existing native agent interfaces. Electron is a later client. Preserve that product boundary: do not add a terminal UI, run tmux or Herdr as a backend, or pretend registration transfers process ownership.
+Voyager is an experimental Rust service around existing native agent interfaces. Electron is its desktop client. Preserve that product boundary: do not add a terminal UI, run tmux or Herdr as a backend, or pretend registration transfers process ownership.
 
 - Work in small increments with one user-visible experiment and a known-different test.
 - Inspect the repository and dirty state before editing. Preserve unrelated work.
@@ -16,3 +16,14 @@ Voyager is an experimental Rust service around existing native agent interfaces.
 - No automatic agent resubmission or process restoration after an uncertain failure.
 
 The detailed design work can evolve before an implementation increment is accepted. Update the README's actual status when behavior changes; do not call a scaffold a working feature.
+
+Read the small Rust conventions in `CONTRIBUTING.md`. Keep source readable for
+people learning with us, and preserve the same checks and docs in every increment.
+Use a working branch and PR; never use the admin bypass without Isaac explicitly
+authorizing that particular merge or protected-branch update.
+
+Lifecycle operations are owned by `src/service/lifecycle.rs`; native requests by
+`src/service/native.rs`; both use the one service-owned store and process maps.
+Read [the lifecycle contract](docs/lifecycle.md) before changing either boundary.
+Keep changed code comment-free, including doc comments and explanatory docstrings.
+Put mechanisms, invariants and design reasons in the owning context document.

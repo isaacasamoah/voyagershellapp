@@ -1,45 +1,81 @@
 # Voyager Shell
 
-An experiment in connecting the coding agents you already use to a local Rust service: orchestration, persistent work, and an evidence-based memory of what happened.
+Voyager connects native coding agents and terminals to a local Rust service.
+Electron provides a floating astronaut and a small control panel. Your agent keeps
+its own interface; Voyager manages the work it starts and records what happens.
 
-Keep your terminal. Keep your agent's interface. Voyager should help those agents work together and carry context between sessions.
+We build small, real experiments, try them ourselves, and share the results here.
 
-We are building in small increments: try a real workflow, use it ourselves, document what failed, and change the next increment from that experience. This repository is public so others can learn with us and help shape it.
+## Current prototype
 
-## Starting boundary
+- **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
+  Creation registers it and starts capture. Native windows open by default.
+- **↗** focuses an existing window or reopens the same running instance.
+- **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
+  capture and instruction routing; historical events remain.
+- Docking selects the human control attachment. Undocking or closing Electron
+  leaves agents and capture running. The terminal marker fades until hovered.
+- Codex sessions launched by Voyager use YOLO. External sessions keep their
+  existing permissions. Bash commands share the human's shell state.
+- Agent messages can start a turn only while the target is idle. Active-turn
+  steering is not implemented.
 
-The background service and the interface are separate. The service connects agents, owns the work it launches, and records attributed events. A later Electron app provides the Voyager avatar, docking and a small status panel.
+The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
+`codex` launches, tabs, other terminals, macOS and native Wayland are not supported
+by the current matcher. Registration does not transfer ownership of an external
+process. Persistence covers client disconnection, not daemon crashes or reboots.
 
-Connecting an existing agent is different from taking ownership of its process. Hooks can provide events and tools without replacing the agent's interface. Live persistence requires the original process to keep running; restarting from saved conversation is recovery. Our first experiment tests cooperative transfer from an existing terminal owner. It does not establish that an ordinary terminal currently exposes that integration.
+Captain/crew authority, supervisor priority, automatic native voice, knowledge
+extraction and shared graphs are later work. Voyager is an experimental prototype.
 
-This is not a new terminal UI or a tmux integration. We are learning from the process ownership in Herdr and tmux, and from Pi's structured events. We are writing our own small service, without copying those applications.
+## Try it
 
-## First experiments
+See [native instances](docs/instances.md) for setup, then use the panel's **+**.
+The [desktop guide](docs/desktop.md) describes docking and gestures.
+The [lifecycle contract](docs/lifecycle.md) defines each action and its result.
+The [CLI reference](docs/service.md#commands) exposes the same operations to scripts
+and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that workflow.
 
-1. Test a terminal handing an already-running process's PTY connection to a Rust receiver, including a shutdown-policy counterexample.
-2. Collect synthetic structured events alongside that process and prove a collector failure leaves it running.
-3. Take the measured boundary to one real terminal/harness integration. Then prove interactive detach/reconnect and correctly attributed tasks through that adapter.
-4. Add the existing avatar/docking design as a client of the same service.
-5. Use the event evidence to build and retrieve personal knowledge; add explicit team sharing later.
+## Checks
 
-Persistence initially means surviving client disconnect. It does not mean preserving processes across a daemon crash, reboot or machine migration.
-
-## Status
-
-Two Linux mechanism probes run: cooperative PTY handoff and separate synthetic event capture. Eight black-box fixture tests pass on Fedora 43. There is no installed service, native agent adapter, Electron integration or knowledge graph yet. The receiver forwards PTY output for inspection; it is not a reconnectable interactive terminal client.
-
-## Try the experiments
-
-On Linux with Rust, a C linker and Python 3 installed:
+On Linux, install Rust, a C linker and Python 3.11+. Then:
 
 ```sh
 git clone https://github.com/isaacasamoah/voyagershellapp.git
 cd voyagershellapp
+cargo fmt --check
 cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
 ```
 
-The tests create disposable local processes, sockets and synthetic records, then clean them up. They make no model calls, need no credentials or root privileges, and do not attach to existing sessions. Cargo downloads the locked dependencies on the first build. macOS support is still to be proved.
+For Electron, use Node 24:
 
-The service is written in Rust. Python is only the independent process fixture used to test it. Read the [experiment walkthrough and limits](docs/experiments.md) before running the low-level probe commands manually.
+```sh
+cd desktop
+npm ci
+npm run format:check
+npm test
+```
 
-Read [what we are learning](docs/research.md) and [how to contribute](CONTRIBUTING.md). Small experiments and evidence are welcome, especially reports of what a native harness actually exposes.
+Normal checks use disposable fixtures and real PTYs, without a desktop or model
+account. [Native checks](docs/lifecycle.md#native-checks) open real windows;
+the separate Codex test uses the installed account. Programmatic checks do not
+replace a person trying gestures and sound.
+
+## Source map
+
+| Location | Responsibility |
+| --- | --- |
+| `src/` | Rust service, runtime ownership, capture and storage |
+| `src/bin/` | CLI and X11 window helper |
+| `desktop/src/` | Electron main, window binding, preload and local UI |
+| `tests/`, `desktop/test/` | Contract tests and opt-in native checks |
+| `docs/` | Contracts, run guides and evidence |
+| `skills/` | Agent instructions for the CLI |
+
+The [desktop source map](desktop/README.md) explains its process boundaries.
+Python supports experiments; the service runtime is Rust. We learn from Herdr,
+tmux and Pi without using them as Voyager's backend or copying their code.
+
+Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
+Reports of real workflows, failures and integration limits are welcome.

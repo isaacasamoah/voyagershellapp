@@ -1,6 +1,8 @@
 /target/
 /.state/
+__pycache__/
 /.env
 /.env.*
 *.log
 .DS_Store
+/desktop/node_modules

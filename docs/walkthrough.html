@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Voyager — step by step</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.55 system-ui, sans-serif; color: #20313c; background: #edf3f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(ellipse at 10% 0%, #e4e7fa 0, transparent 50%), radial-gradient(ellipse at 95% 70%, #dff3eb 0, transparent 55%); min-height: 100vh; }
+    main { max-width: 1400px; margin: auto; padding: 30px 32px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+    .brand { font: 700 14px ui-monospace, monospace; letter-spacing: .15em; background: linear-gradient(90deg,#b24b76,#a26827,#3b8562,#397baf,#7756aa); color: transparent; background-clip: text; }
+    h1 { font-size: clamp(24px,3vw,36px); font-weight: 580; letter-spacing: -.04em; margin: 8px 0; }
+    p { margin: 0 0 14px; }
+    .muted, small { color: #556773; }
+    .notice { font-size: 13px; max-width: 330px; border-left: 2px solid #a2afb6; padding-left: 16px; }
+    nav { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; margin: 24px 0; }
+    button { font: inherit; cursor: pointer; border: 1px solid #a8bac066; border-radius: 12px; background: #ffffff65; padding: 11px 8px; color: inherit; }
+    button:hover { background: #fff; }
+    button[aria-current="step"] { background: #244c50; color: white; border-color: #244c50; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #8d64bb; outline-offset: 3px; }
+    button:disabled { opacity: .4; cursor: default; }
+    .layout { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(300px,1fr); gap: 20px; align-items: start; }
+    .glass { background: #ffffff96; border: 1px solid #ffffff; box-shadow: 0 10px 45px #34485b08; border-radius: 22px; }
+    .diagram { padding: 20px 18px 12px; }
+    .diagram-head { display: flex; justify-content: space-between; gap: 10px; padding: 0 8px; font-size: 13px; }
+    #bridge { color: #246957; }
+    svg { display: block; width: 100%; height: auto; margin-top: 8px; }
+    .node { opacity: .2; }
+    .node.on { opacity: 1; }
+    .node rect { fill: #f9fbfc; stroke: #94a9b8; stroke-width: 1.4; }
+    .node text { font: 15px system-ui, sans-serif; fill: #20313c; }
+    .node .sub { font-size: 11px; fill: #556773; }
+    .node.owned rect { fill: #edf7f1; stroke: #6d9a88; }
+    .edge { opacity: .1; }
+    .edge.on { opacity: 1; }
+    .edge path { fill: none; stroke: #708a94; stroke-width: 1.7; marker-end: url(#arrow); }
+    .edge text { font: 11px ui-monospace, monospace; fill: #49616c; }
+    .dock-marker { display: none; }
+    .dock-marker.on { display: inline; }
+    .dock-marker circle { fill: #e1ebed; stroke: #8584bd; stroke-width: 2; }
+    .dock-marker text { font: 12px ui-monospace, monospace; fill: #66548c; text-anchor: middle; }
+    .legend { display: flex; flex-wrap: wrap; gap: 7px 18px; font-size: 12px; border-top: 1px solid #bac8ce60; padding: 12px 8px 0; }
+    .legend span::before { content: '● '; color: #789587; }
+    .legend span:last-child::before { color: #bfcbd1; }
+    article { padding: 24px; }
+    .eyebrow { font: 12px ui-monospace, monospace; color: #5a737c; letter-spacing: .08em; text-transform: uppercase; }
+    h2 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; margin: 10px 0 18px; }
+    h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .055em; margin: 22px 0 8px; color: #5b6e78; }
+    #expect { padding: 12px 14px; border-radius: 12px; background: #e8f2ed; font-size: 14px; }
+    pre { padding: 14px; border-radius: 12px; background: #e9eff2; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; margin: 10px 0; }
+    #source { font-size: 12px; color: #426f88; overflow-wrap: anywhere; }
+    .controls { display: flex; justify-content: space-between; margin-top: 22px; }
+    .controls button { padding: 9px 15px; }
+    footer { padding: 20px 4px 0; font-size: 12px; color: #5b6e78; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } main { padding: 20px 16px; } header { display: block; } .notice { max-width: none; margin-top: 12px; } nav { grid-template-columns: repeat(3,1fr); } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="brand">VOYAGER</div><h1>Let’s walk through it.</h1><p class="muted">Your terminal. Your agent. One service connecting the work.</p></div>
+    <p class="notice">A guide, not a live monitor.<br>These buttons change the diagram only. This demo requires a prepared terminal; ordinary-terminal docking is not complete.</p>
+  </header>
+  <nav aria-label="Walkthrough steps"></nav>
+  <div class="layout">
+    <section class="glass diagram" aria-label="Architecture diagram">
+      <div class="diagram-head"><span>What is connected at this step</span><strong id="bridge"></strong></div>
+      <svg viewBox="0 0 800 535" role="img" aria-labelledby="diagram-title diagram-description">
+        <title id="diagram-title">Voyager service and native agent connections</title>
+        <desc id="diagram-description">Active components and connections are highlighted as each walkthrough step is selected.</desc>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#708a94"/></marker></defs>
+        <g class="edge" data-edge="panel"><path d="M240 72 H300"/><text x="248" y="60">status</text></g>
+        <g class="edge" data-edge="store"><path d="M530 72 H580"/><text x="543" y="60">save</text></g>
+        <g class="edge" data-edge="leadClient"><path d="M240 265 H300"/><text x="246" y="251">native</text></g>
+        <g class="edge" data-edge="capture"><path d="M416 220 V115"/><text x="428" y="166">send / capture</text></g>
+        <g class="edge" data-edge="launch"><path d="M530 96 H564 V474 H530"/><text x="580" y="380">launch + own</text><text x="580" y="397">send / capture</text></g>
+        <g class="edge" data-edge="workerClient"><path d="M240 474 H300"/><text x="246" y="460">native</text></g>
+        <g class="node" data-node="electron"><rect x="20" y="30" width="220" height="85" rx="15"/><text x="38" y="62">Voyager avatar + panel</text><text class="sub" x="38" y="86">Electron · the interface</text></g>
+        <g class="node owned" data-node="service"><rect x="300" y="30" width="230" height="85" rx="15"/><text x="318" y="62">Voyager service</text><text class="sub" x="318" y="86">Rust · runs independently</text></g>
+        <g class="node" data-node="store"><rect x="580" y="30" width="200" height="85" rx="15"/><text x="598" y="62">Private event record</text><text class="sub" x="598" y="86">SQLite · future events only</text></g>
+        <g class="node" data-node="leadClient"><rect x="20" y="220" width="220" height="90" rx="15"/><text x="38" y="253">Your terminal</text><text class="sub" x="38" y="278">Ghostty + actual Codex UI</text></g>
+        <g class="node" data-node="lead"><rect x="300" y="220" width="230" height="90" rx="15"/><text x="318" y="253">Your existing agent</text><text class="sub" x="318" y="278">Native Codex server</text><text class="sub" x="318" y="297">Owned outside Voyager</text></g>
+        <g class="node" data-node="workerClient"><rect x="20" y="429" width="220" height="90" rx="15"/><text x="38" y="462">Worker terminal</text><text class="sub" x="38" y="487">Another actual Codex UI</text></g>
+        <g class="node owned" data-node="worker"><rect x="300" y="429" width="230" height="90" rx="15"/><text x="318" y="462">Worker agent</text><text class="sub" x="318" y="487">Separate Codex server · YOLO</text><text class="sub" x="318" y="506">Started and owned by Voyager</text></g>
+        <g class="dock-marker" data-marker="lead"><circle cx="219" cy="304" r="15"/><text x="219" y="308">V</text></g>
+        <g class="dock-marker" data-marker="worker"><circle cx="219" cy="513" r="15"/><text x="219" y="517">V</text></g>
+      </svg>
+      <div class="legend"><span>Green boxes: Voyager service and owned worker</span><span>Faded: not part of this step yet</span></div>
+    </section>
+    <article class="glass" aria-live="polite">
+      <div class="eyebrow" id="number"></div><h2 id="title"></h2>
+      <p id="action"></p><p id="expect"></p>
+      <h3>Underneath</h3><p id="underneath"></p>
+      <h3>Code in play</h3><a id="source" target="_blank" rel="noopener"></a><pre id="code"></pre>
+      <div class="controls"><button id="back" type="button">← Back</button><button id="next" type="button">Next →</button></div>
+    </article>
+  </div>
+  <footer>Earlier registration journey; use the panel + for new instances. Current prototype: Fedora / XWayland, a dedicated Ghostty window per agent, several owned Codex or Bash instances. No arbitrary CLI adoption, knowledge extraction, or survival across a Voyager crash is claimed. Closing an interface and stopping an agent are separate actions.</footer>
+</main>
+<script>
+  const steps = [
+    {
+      label: 'Open Voyager', title: 'The service is ready.', bridge: 'No terminal attached',
+      action: 'Open Voyager. Click the floating astronaut to show or hide its panel.',
+      expect: 'Online, with no registered sessions. No conversation is being captured.',
+      underneath: 'For this prototype, our demo launcher starts the Rust service and Electron separately. Electron reads status over a local Unix socket. It does not own agents or start the service automatically. The existing shared Codex daemon stays outside Voyager.',
+      source: 'desktop/src/main.cjs', line: 58,
+      code: "exec(binary, ['--state', stateDir, ...args])\n\n// Electron asks the Rust CLI for:\nstatus\nlist\nconnection-info",
+      nodes: ['electron','service'], edges: ['panel'], marker: null
+    },
+    {
+      label: 'Open terminal', title: 'A prepared native client.', bridge: 'Not registered',
+      action: 'We open one dedicated Ghostty terminal with Codex’s own interface. Leave Voyager beside it.',
+      expect: 'You can talk to Codex normally. Voyager still has no registered sessions.',
+      underneath: 'The demo helper supplies an explicit server address and conversation ID when opening the native client. This proves a binding mechanism, not ordinary-terminal docking. The latest run also recorded read-only terminal turns after YOLO setup; verify effective permissions before launching a worker.',
+      source: 'desktop/src/binding.cjs', line: 45,
+      code: 'codex --remote unix://CODEX_SOCKET \\\n  resume THREAD_ID --no-alt-screen\n\n// Setup requested YOLO; verify the next native turn.\n// Remote resume rejects permission flags.',
+      nodes: ['electron','service','leadClient','lead'], edges: ['panel','leadClient'], marker: null
+    },
+    {
+      label: 'Dock', title: 'The drop selects current control.', bridge: 'Control: your agent',
+      action: 'Press and hold the astronaut, pull it out of the panel, then drop it onto the supported terminal.',
+      expect: 'The agent appears in the panel. Rust records interface.docked and selects current control. New conversation events begin recording.',
+      underneath: 'Electron checks the window and native session identity. The Rust service checks that the exact thread is already loaded, subscribes to future events, and returns a registration. A separate open socket represents the control attachment; acknowledgement precedes the dock cue. It does not import earlier messages, change permissions or take process ownership. Click the astronaut to toggle the panel where you left it; control stays with the terminal.',
+      source: 'desktop/src/main.cjs', line: 379,
+      code: "if (target.record.external)\n  await rpc('register', target.record.nativeId);\n\n// src/service.rs: register → thread/resume\n// src/events.rs: normalize notifications\n// src/store.rs: record attributed events",
+      nodes: ['electron','service','leadClient','lead','store'], edges: ['panel','leadClient','capture','store'], marker: 'lead'
+    },
+    {
+      label: 'Start worker', title: 'Your agent starts another.', bridge: 'Bridge: your agent',
+      action: 'After verifying that the native lead can call Voyager, use the voyager-worker skill to launch a small task and open a separate native terminal.',
+      expect: 'A second agent appears. Its work belongs to the service; its native terminal is just another client.',
+      underneath: 'The lead calls Voyager’s launch command. Voyager starts a private Codex app server, creates a YOLO thread, records its parent, then submits the task. Opening the terminal is a separate demo action. An accepted task still needs a completed turn and result before we call it finished.',
+      source: 'src/worker.rs', line: 97,
+      code: 'connection.rpc("thread/start", json!({\n  "cwd": cwd,\n  "approvalPolicy": "never",\n  "sandbox": "danger-full-access"\n}))?;\n\n// service.rs then sends the initial task.\n// voyager attach WORKER_SESSION opens its native UI.',
+      nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'lead'
+    },
+    {
+      label: 'Detach', title: 'The interface leaves. Work stays.', bridge: 'No terminal attached',
+      action: 'Hover over the docked astronaut to brighten it, then pull it away. Ctrl+Alt+V is the keyboard alternative. Let the worker continue its task.',
+      expect: 'Both registrations and event capture remain. The worker keeps running.',
+      underneath: 'Undocking releases the exact current-control attachment and records interface.undocked. It sends no unregister or stop request. The faded overlay is normally click-through; hovering enables grabbing without taking keyboard focus. Closing a worker terminal also leaves its service-owned server running; an external lead has a different ownership boundary.',
+      source: 'desktop/src/main.cjs', line: 357,
+      code: "// Electron releases the exact attachment.\nawait rpc('undock', generation);\nconnection.close();\n\n// Rust records interface.undocked.\n// EOF also releases control if Electron exits.\n// Registration, capture and agent work continue.",
+      nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: null
+    },
+    {
+      label: 'Switch agent', title: 'Dock to the worker.', bridge: 'Control: worker',
+      action: 'Move the astronaut onto the worker’s terminal. Open the panel to see the other registered agent too.',
+      expect: 'The same worker and conversation remain. We have changed which interface is attached, not restarted any work.',
+      underneath: 'The worker was registered when Voyager launched it. Electron matches that registration and Rust acknowledges a new current-control attachment. Moving the avatar does not change parents, interrupt a task or change permissions. Returning to the lead likewise rejoins its existing registration.',
+      source: 'desktop/src/main.cjs', line: 434,
+      code: 'const session = registeredSession(\n  fresh.record, sessions\n);\nbinding = { ...fresh, session };\nselected = session.id;\n\n// Rust acknowledges a control attachment before this binding.\n// Registration persists independently.',
+      nodes: ['electron','service','leadClient','lead','store','worker','workerClient'], edges: ['panel','leadClient','capture','store','launch','workerClient'], marker: 'worker'
+    }
+  ];
+  const nav = document.querySelector('nav');
+  const sourceRoot = 'https://github.com/isaacasamoah/voyagershellapp/blob/bd6103217d8b5697cf35a3701b1d7f6a7813a16e/';
+  let current = 0;
+  steps.forEach((step, index) => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = `${index + 1}. ${step.label}`;
+    button.addEventListener('click', () => show(index)); nav.append(button);
+  });
+  function show(index) {
+    current = Math.max(0, Math.min(steps.length - 1, index));
+    const step = steps[current];
+    for (const key of ['title','action','expect','underneath','code','bridge']) document.getElementById(key).textContent = step[key];
+    document.getElementById('number').textContent = `Step ${current + 1} / ${steps.length}`;
+    const source = document.getElementById('source');
+    source.textContent = `${step.source}:${step.line}`; source.href = `${sourceRoot}${step.source}#L${step.line}`;
+    document.querySelectorAll('[data-node]').forEach(el => el.classList.toggle('on', step.nodes.includes(el.dataset.node)));
+    document.querySelectorAll('[data-edge]').forEach(el => el.classList.toggle('on', step.edges.includes(el.dataset.edge)));
+    document.querySelectorAll('[data-marker]').forEach(el => el.classList.toggle('on', el.dataset.marker === step.marker));
+    [...nav.children].forEach((button, i) => { if (i === current) button.setAttribute('aria-current','step'); else button.removeAttribute('aria-current'); });
+    document.getElementById('diagram-description').textContent = `${step.title} ${step.underneath}`;
+    document.getElementById('back').disabled = current === 0;
+    document.getElementById('next').disabled = current === steps.length - 1;
+    history.replaceState(null,'',`#${current + 1}`);
+  }
+  document.getElementById('back').addEventListener('click', () => show(current - 1));
+  document.getElementById('next').addEventListener('click', () => show(current + 1));
+  const initial = Number(location.hash.slice(1));
+  show(Number.isInteger(initial) && initial >= 1 && initial <= steps.length ? initial - 1 : 0);
+</script>
+</body>
+</html>
