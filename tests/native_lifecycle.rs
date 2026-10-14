@@ -2,18 +2,39 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 use voyager_shell::{codex::Codex, service};
 
-struct NativeProof(Child);
+struct NativeProof {
+    process: Child,
+    state: PathBuf,
+}
 impl Drop for NativeProof {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        if self.process.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        if let Ok(rows) = service::client(&self.state, json!({"op":"list","include_removed":true}))
+        {
+            for instance in rows
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["ownership"] == "managed" && s["worker_state"] == "running")
+            {
+                let _ = action(
+                    &self.state,
+                    json!({"op":"stop-instance","session_id":instance["id"],"close_window":false,"request_id":uuid::Uuid::new_v4().to_string()}),
+                );
+            }
+        }
+        let _ = service::client(&self.state, json!({"op":"stop"}));
+        let _ = self.process.kill();
+        let _ = self.process.wait();
     }
 }
 
@@ -75,8 +96,9 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
     ensure!(!state.exists(), "use a fresh directory");
     service::private_dir(state)?;
     let log = fs::File::create(state.join("service.log"))?;
-    let mut daemon = NativeProof(
-        Command::new(env!("CARGO_BIN_EXE_voyager"))
+    let mut daemon = NativeProof {
+        state: state.to_path_buf(),
+        process: Command::new(env!("CARGO_BIN_EXE_voyager"))
             .args([
                 "--state",
                 state.to_str().context("UTF-8 state path")?,
@@ -86,7 +108,7 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
             .stdout(Stdio::null())
             .stderr(log)
             .spawn()?,
-    );
+    };
     let deadline = Instant::now() + Duration::from_secs(10);
     while service::client(state, json!({"op":"status"})).is_err() {
         ensure!(Instant::now() < deadline, "service startup failed");
@@ -193,8 +215,9 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
     );
     let external_state = state.join("external");
     service::private_dir(&external_state)?;
-    let mut external = NativeProof(
-        Command::new(env!("CARGO_BIN_EXE_voyager"))
+    let mut external = NativeProof {
+        state: external_state.clone(),
+        process: Command::new(env!("CARGO_BIN_EXE_voyager"))
             .args([
                 "--state",
                 external_state.to_str().context("external state path")?,
@@ -205,7 +228,7 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
             .stdout(Stdio::null())
             .stderr(fs::File::create(external_state.join("service.log"))?)
             .spawn()?,
-    );
+    };
     let deadline = Instant::now() + Duration::from_secs(10);
     while service::client(&external_state, json!({"op":"status"})).is_err() {
         ensure!(
@@ -261,7 +284,7 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
     );
     service::client(&external_state, json!({"op":"stop"}))?;
     ensure!(
-        external.0.wait()?.success(),
+        external.process.wait()?.success(),
         "external observer did not stop"
     );
     let stopped = action(
@@ -281,6 +304,6 @@ fn native_codex_lifecycle_and_capture_cutoff() -> Result<()> {
         )?,
     )?;
     service::client(state, json!({"op":"stop"}))?;
-    ensure!(daemon.0.wait()?.success(), "service shutdown failed");
+    ensure!(daemon.process.wait()?.success(), "service shutdown failed");
     Ok(())
 }
