@@ -2,7 +2,7 @@
 
 Each worker has its own service-owned Codex app server. Your existing registered lead can call Voyager's CLI to launch it, submit a task and read its events. A separate terminal runs Codex's own interface as a client of that server. Closing the terminal leaves Voyager and the worker server running.
 
-This uses Codex 0.162.0's [remote terminal interface](https://learn.chatgpt.com/docs/cli/reference) over a private Unix socket. It does not implement a terminal emulator, adopt an existing CLI process, relay PTY output or depend on Herdr/tmux. Other harnesses need their own integration and proof.
+This uses Codex's [remote terminal interface](https://learn.chatgpt.com/docs/cli/reference) over a private Unix socket, tested with 0.162.0 and 0.162.1. It does not implement a terminal emulator, adopt an existing CLI process, relay PTY output or depend on Herdr/tmux. Other harnesses need their own integration and proof.
 
 Create/launch now open a native viewer by default. Use `--background` for an
 explicit background-only launch. See [the lifecycle contract](lifecycle.md) for
@@ -10,7 +10,12 @@ combined stop/window closure, removal and saved operation outcomes.
 
 ## Try it
 
-Build and start the service as described in [the service guide](service.md). The service uses `codex` from its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the absolute installed native Codex executable when starting **Voyager**. Authentication and model selection stay with the user's native Codex configuration; Voyager never copies credentials.
+Build and start the service from a graphical login as described in
+[the instance guide](instances.md#start-the-app). The service uses `codex` from
+its PATH for newly launched workers. If needed, set `VOYAGER_CODEX_BIN` to the
+absolute installed native Codex executable when starting Voyager. Authentication
+and model selection stay with the user's native Codex configuration; Voyager
+never copies credentials.
 
 Every Voyager worker creation requests **YOLO**: `approvalPolicy: never` and
 `sandbox: danger-full-access`. The owned server process now starts with matching
@@ -37,35 +42,41 @@ history before attachment. To create an empty conversation without a parent or
 setup task, use [the named-instance flow](instances.md); it materializes native
 history by setting the chosen name instead.
 
-In a separate terminal:
+`launch` opens the worker's dedicated Ghostty XWayland viewer by default. Append
+`--background` only for a launch without a viewer. To show a background worker
+or reopen its closed viewer, use the same service operation as the panel:
 
 ```sh
-target/debug/voyager --state "$VOYAGER_STATE" attach WORKER_SESSION
+target/debug/voyager --state "$VOYAGER_STATE" open WORKER_SESSION ghostty \
+  --request-id worker-open-001
 ```
 
-Or open a new Ghostty window from a graphical session:
+An already-open viewer receives a focus request; no second viewer or runtime is
+created. If opening fails, inspect `operation worker-open-001` before repairing
+the same instance with a new open request. Do not launch a replacement worker.
+The service needs the graphical-session environment to open windows; a CLI caller
+with a display cannot add that environment to an already-running service.
 
-```sh
-ghostty --gtk-single-instance=false --title="Voyager worker" \
-  -e "$PWD/target/debug/voyager" --state "$VOYAGER_STATE" attach WORKER_SESSION
-```
+`attach WORKER_SESSION` instead runs the native client in the caller's terminal.
+That terminal is not a service-owned viewer, and this does not make arbitrary
+terminal docking supported.
 
-`launch` starts the worker; `attach` uses the terminal where it is called. A
-headless agent can explicitly `launch --background` without a display. `open WORKER_SESSION ghostty`
-now requests a native window through the same service boundary. The explicit
-Ghostty command above is also possible. Either opening path needs the caller's
-normal graphical-session environment; process launch alone does not prove a
-visible window.
-
-The native interface displays history and handles its own input. Detach by closing its window or using Codex's `/quit`; repeat `attach` to reconnect to that same live worker. Keep Voyager running. Voyager requests YOLO at worker creation; `attach` only executes the native resume command and does not select permissions. Voyager does not answer native approval requests on an agent's behalf.
+The native interface displays history and handles its own input. Detach by closing
+its window or using Codex's `/quit`; `open` reconnects to that same live worker.
+Keep Voyager running. Voyager requests YOLO at worker creation; native attachment
+does not select permissions. Voyager does not answer native approval requests on
+an agent's behalf.
 
 Inspect activity or send another task:
 
 ```sh
 target/debug/voyager --state "$VOYAGER_STATE" list
-target/debug/voyager --state "$VOYAGER_STATE" watch --pretty
 target/debug/voyager --state "$VOYAGER_STATE" send WORKER_SESSION task-002 "Your next task"
+target/debug/voyager --state "$VOYAGER_STATE" watch --pretty
 ```
+
+`send` requires an idle target. It cannot steer or interrupt an active turn;
+acceptance remains separate from the recorded turn outcome.
 
 Repeated launch IDs with identical inputs return the saved operation result; changed inputs conflict. Several managed workers and shells may run together. Closing a viewer never issues stop. To end the worker explicitly:
 
@@ -79,8 +90,8 @@ target/debug/voyager --state "$VOYAGER_STATE" stop
 ## Worker skill
 
 [voyager-worker](../skills/voyager-worker/SKILL.md) describes the existing CLI
-workflow for an agent. It checks current control, launches one bounded task and,
-when requested, opens the worker's native terminal. It introduces no executable
+workflow for an agent. It checks current control and launches one bounded task
+with a native terminal by default. It introduces no executable
 wrapper or new service API. It does not grant permissions or discover an
 arbitrary running terminal.
 
@@ -103,8 +114,9 @@ harness's skill catalog if needed. Catalog discovery and format validation do
 not prove a successful launch; verify the service's receipt and turn events.
 
 The initial skill passed format validation and was discovered as enabled by the
-running native Codex server's `skills/list` with `forceReload`. Its first live
-worker launch is still pending the permission check below.
+running native Codex server's `skills/list` with `forceReload`. The external-lead
+run below failed before launching a worker; catalog discovery alone was not
+launch evidence.
 
 ## Earlier manual run: external lead permission failure
 
@@ -114,10 +126,10 @@ recorded `read-only`. Its attempt to call Voyager's `status` failed with
 `Operation not permitted`; no worker was launched in this run. Earlier successful
 worker experiments below remain historical evidence, not proof of this launch.
 
-The transition that changed the effective policy has not yet been isolated.
-Check a real tool call from the native interface after correcting its permissions,
-then retry the same bounded worker request. Neither a YOLO launch request nor an
-attachment response alone proves the policy of the next terminal-entered turn.
+The transition that changed the effective policy was not isolated in that run.
+The later YOLO lead experiment below is separate evidence. Neither a YOLO launch
+request nor an attachment response alone proves the policy of the next
+terminal-entered turn.
 
 ## Persistence boundary
 

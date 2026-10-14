@@ -17,6 +17,8 @@ We build small, real experiments, try them ourselves, and share the results here
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
+- Agent messages can start a turn only while the target is idle. Active-turn
+  steering is not implemented.
 
 The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
@@ -24,8 +26,7 @@ by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
 Captain/crew authority, supervisor priority, automatic native voice, knowledge
-extraction and shared graphs are later work. This branch is a prototype awaiting
-user feedback, not a release.
+extraction and shared graphs are later work. Voyager is an experimental prototype.
 
 ## Try it
 
@@ -42,6 +43,7 @@ On Linux, install Rust, a C linker and Python 3.11+. Then:
 ```sh
 git clone https://github.com/isaacasamoah/voyagershellapp.git
 cd voyagershellapp
+cargo fmt --check
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
