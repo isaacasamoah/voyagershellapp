@@ -65,7 +65,12 @@ async function rpc(...args) {
     });
     return JSON.parse(result.stdout);
   } catch (error) {
-    throw Error(error.stderr?.trim().replace(/^Error: /, '') || 'Voyager did not respond.');
+    throw Error(
+      error.stderr
+        ?.trim()
+        .replace(/^Error: /, '')
+        .replace(/ \(operation [^)]+\)$/, '') || 'Voyager did not respond.',
+    );
   }
 }
 async function inventory() {
