@@ -1,162 +1,108 @@
 # Instance lifecycle
 
-The lifecycle experiment separates a registered instance, its running process,
-and its native terminal window. Registration decides whether Voyager captures
-and orchestrates it. Owning a process permits stopping it. A window is a client,
-so closing it does not stop work. Docking is a separate human control attachment.
+The Rust service owns lifecycle decisions. The panel and CLI call the same
+operations. Registration, runtime, window and docking are separate state.
+See the [CLI reference](service.md#commands) for command syntax.
 
-The [CLI reference](service.md#commands) is the command surface. The panel calls
-that same surface through named preload/IPC methods. There is no second frontend
-implementation of process shutdown or registration.
+## Actions
 
-## Inputs and results
+| Action | Runtime | Native window | Registration |
+| --- | --- | --- | --- |
+| Create / launch | Starts an owned instance | Opens by default; `--background` skips it | Starts capture |
+| Open | Keeps the same runtime | Focuses or reopens its viewer | Unchanged |
+| Background | Keeps working | Closes the owned viewer | Capture continues |
+| Stop | Stops the owned runtime | Closes its viewer; `--runtime-only` skips explicit close | Retained |
+| Remove | Unchanged | Unchanged | Ends future capture and instruction routing |
+| Stop and remove | Stops, then closes | Closure is confirmed before removal | Deregisters; history remains |
+| Register again | Keeps existing work | Unchanged | Resumes future capture explicitly |
 
-Creation requires a request ID, kind, short name and existing absolute folder.
-The service validates and canonicalizes the folder before starting a process.
-`create` starts no initial task. `launch` requires an active parent and a task;
-it submits once, waits for native acceptance, then opens a viewer. Both open by
-default; `--background` is the explicit alternative.
+Creation validates an existing absolute folder, kind and short name. `create`
+starts without a task; `launch` requires an active parent and submits one task.
+An accepted task is not a completed task.
 
-`open` reuses the exact live owned terminal or opens one for the same runtime.
-`background` closes only that owned viewer. `stop-instance` stops its owned
-runtime and then closes its viewer; `--runtime-only` omits the close phase.
-`remove` ends registration and future conversation/command capture, releases
-its current control attachment and retains history. Runtime and window remain.
-`remove --stop` completes stop and close before deregistration. Removal does not
-delete historical records, stop children, or affect other instances.
+Active `list` excludes removed instances; `--include-removed` returns history.
+Removed live owned instances remain in the panel's Unregistered section so their
+owner can open or stop them. Stopped-and-removed instances disappear from the
+panel. Removal neither deletes events nor stops children.
 
-The active `list` excludes removed instances. `--include-removed` includes their
-retained records. Removed live owned instances remain in the panel's separate
-Unregistered section; an owner can open or stop them. Opening never registers
-them. Only `register-instance` deliberately resumes future capture.
+## Receipts and retries
 
-Every lifecycle action has an immutable request ID and input set. The CLI
-generates an ID unless `--request-id` supplies one; create/launch use their
-positional ID. Saved operations contain action, session, runtime/window/
-registration state, completed or requested effects, and the final event sequence.
-The service returns `pending` promptly. The CLI polls `operation REQUEST_ID`
-and prints the final result. Electron stays asynchronous during that wait.
+Every action has an immutable request ID and input set. Results distinguish
+`pending`, `completed`, `partial` and `uncertain`, with observed runtime, window,
+registration and effects. The service returns promptly; the CLI polls
+`operation REQUEST_ID`. Electron remains asynchronous.
 
-States are `pending`, `completed`, `partial` or `uncertain`. An action completing
-does not mean an agent task completed. `initial_request.state: accepted` is only
-native task acceptance; observed turn/command events carry task outcomes.
-Repeating the same ID and inputs returns its saved result, never replays effects.
-Changed inputs with that ID fail. A new-ID `open` can repair a failed opening
-without launching another instance. A restart makes interrupted operations
-uncertain, rather than rerunning them.
+Repeating identical inputs with the same ID returns the saved result. Changed
+inputs fail. An uncertain action is not replayed automatically. Failed opening
+can be repaired by a new `open` on the same instance, without launching another
+runtime. Restart marks unfinished actions uncertain and never restores ownership.
 
-An existing-window result confirms a focus request reached X11. It does not
-claim the compositor gave keyboard focus. A new-window result requires the
-launched child to be live and its exact window to be mapped. A close result
-requires both client exit and window disappearance. Deadline expiry preserves
-an incomplete result, including any effects that already happened.
+## Window and process ownership
 
-## Ownership and execution
+A live `Child` establishes process ownership; stored PIDs do not. External
+registrations may be removed, but owned open/background/stop actions refuse them.
+The daemon refuses shutdown while any owned runtime is live, including removed
+instances.
 
-`service.rs` owns the store, runtime maps and service loop. Its private
-`service/lifecycle.rs` implements creation and action progression;
-`service/native.rs` progresses native discovery/registration/submission.
-`actions.rs` defines typed actions and phases. JSON remains at wire/storage
-boundaries. There is no new async runtime, global mutable registry or trait
-framework.
-
-The service advances bounded operations between capture passes. Waiting for
-startup, native replies, stop or window closure does not block another
-instance's capture/status. Native socket initialization is performed by an
-owned helper thread; it returns a connection and metadata. That thread never
-writes the store or changes runtime maps. Failed startup cleanup may briefly
-wait while dropping its owned process; it does not adopt a replacement.
-
-Each created runtime has a live `Child` handle. Normal stop signals that exact
-owned runtime, observes exit, and escalates its owned process group after two
-seconds if necessary. An external registration can be removed, but cannot be
-stopped, backgrounded or opened through owned-runtime actions. Stop-and-remove
-of an external instance refuses unchanged. Stored PIDs never establish ownership;
-service restart leaves earlier runtimes unknown. Daemon `stop` refuses while an
-owned runtime remains live, including removed instances.
-
-Codex server ownership and native connection ownership are separate. A shell
-owns a Bash child and PTY; its attach client carries bytes, without running
-commands in a second shell. Bash stop sends HUP so Bash can forward it to jobs;
+Stop signals the exact owned runtime, observes exit, and may escalate within its
+process group after two seconds. Bash receives HUP so it can forward it to jobs;
 independently disowned or escaped processes are outside this contract.
 
-Ghostty runs a dedicated XWayland client process. The service checks its live
-`Child` before finding the one X11 window with that PID. Missing or multiple
-matches fail instead of choosing by title. Close uses `_NET_CLOSE_WINDOW`;
-focus uses `_NET_ACTIVE_WINDOW`. Voyager-created clients start with per-launch
-`--confirm-close-surface=false`: they display service-owned work, so closing the
-viewer is a detach. No global Ghostty setting changes, no existing terminal is
-reconfigured, and no confirmation dialog is answered automatically. See
-[Ghostty's option reference](https://ghostty.org/docs/config/reference#confirm-close-surface).
+Each viewer has its own child and the exact mapped X11 window ID. Mapping requires
+one window belonging to the live child; ambiguous or unidentified windows fail.
+Focus uses `_NET_ACTIVE_WINDOW` and confirms the request, not keyboard focus.
+Close uses `_NET_CLOSE_WINDOW`; completion means that mapped window is gone.
+Ghostty may remain resident afterward. A known closed viewer can be reopened
+without restarting the runtime; an unidentified opening is not guessed away.
 
-`Child::try_wait` observes/reaps without waiting for an unfinished process.
-Dropping Rust's standard `Child` alone does not stop it; Voyager's process
-owner therefore handles runtime cleanup explicitly. See the
-[standard-library contract](https://doc.rust-lang.org/std/process/struct.Child.html).
+Voyager launches dedicated Ghostty XWayland clients with
+`--confirm-close-surface=false`. Closing that viewer detaches from service-owned
+work. Global settings and external terminals are untouched. See
+[Ghostty's configuration](https://ghostty.org/docs/config/reference#confirm-close-surface).
 
-## Capture cutoff and recovery
+## Capture cutoff
 
-Every observation carries its source's capture generation. The store accepts it
-only when the instance is registered and its generation still matches. Removal
-commits the cutoff and its removal event in one transaction. A failed event
-write rolls that change back. Late native observations and queued shell boundaries
-cannot restore capture. Administrative lifecycle records may still describe
-removal or stopping; no later conversation/command content is captured.
+Removal commits its cutoff and `session.removed` event in one transaction; failed
+writes roll back. Observations must match an active registration and its capture
+generation. Late or queued content cannot resume recording after removal.
+Administrative lifecycle events may still describe stopped or removed work.
 
-Re-registering Codex establishes a fresh native observation connection, resumes
-the same conversation without snapshot turns, drains pre-acknowledgement
-notifications, and increments the generation. The previous subscription cannot
-gain that generation. Re-registering Bash requires an idle prompt, no pending
-command, no partially entered line and no incomplete hook frame. Its output
-buffer is cleared on removal and is not retained while removed. Existing
-history remains; only future content resumes.
+Codex re-registration creates a fresh observation connection without importing
+snapshot turns. Bash requires a clean idle prompt with no pending command,
+partial input or incomplete hook frame. Its removed-period buffer is discarded.
+Opening a window never implicitly registers it.
 
-SQLite schema version one adds cutoff/generation and operation records.
-Version-zero migration runs transactionally and rolls back on failure; a newer
-unsupported version is refused before mutation. This is forward migration,
-not permission to run an older binary on this database. Crash/reboot recovery,
-process adoption, role authentication, priority arbitration and voice handoff
-are outside this increment.
+## Implementation boundaries
 
-## Low-level invariants
+`service.rs` owns the store and runtime/window maps. Private `service/lifecycle.rs`
+progresses typed actions; `service/native.rs` progresses native requests. Startup
+helpers return connections and metadata without mutating the store. Waiting
+phases advance between capture passes, keeping other instances responsive.
+JSON stays at protocol and storage boundaries.
 
-The service socket is private, locked, bounded and same-UID checked. Replacement
-of a stale socket happens only while holding its exclusive service lock.
-The client response limit permits one bounded event page. Native RPCs route
-responses by ID and preserve allowed observations while waiting; unsupported
-notifications are filtered, rather than manufactured into knowledge.
-
-The PTY resize ioctl receives a live PTY descriptor and a valid winsize pointer.
-Shell pre-exec setup uses only async-signal-safe syscalls with its already-bound
-slave descriptors; hook descriptor nine is deliberately inherited. Service
-pre-exec setsid is also async-signal-safe. See `shell.rs` and `service.rs` for
-these boundaries. No allocation, lock or store access belongs after fork.
-Shell submission freezes uncertain state before writing bytes; incomplete
-writes are never replayed. Typeahead remains protected across prompt/command
-notifications so an agent cannot append to a person's unfinished line.
+The private socket is locked, bounded and same-UID checked. SQLite version-one
+migration is transactional; unsupported newer schemas are refused before writes.
+PTY ioctl calls use live descriptors and valid pointers. Post-fork setup uses
+async-signal-safe calls only; inherited hook descriptor nine is intentional.
+Uncertain or incomplete shell writes are never replayed, and human typeahead
+remains protected. Rust's `Child` does not stop a process merely when dropped;
+Voyager's runtime owner handles cleanup explicitly.
 
 ## Native checks
 
-Normal `cargo test --locked` and `desktop/npm test` use disposable fixtures and
-real PTYs without a desktop/model account. They establish contract/failure
-behavior, not native window usability.
+Normal Cargo/Electron tests use fixtures and real PTYs without model calls.
+The [panel lifecycle proof](../desktop/README.md#lifecycle-experiment) uses two
+real Bash/Ghostty instances. It checks menu hit testing, background/reopen,
+already-closed viewers, stop, capture cutoff, re-registration, and row removal.
 
-From a graphical login, build the binaries and use a fresh private directory for
-the opt-in [panel lifecycle proof](../desktop/README.md#lifecycle-experiment).
-It drives actual renderer handlers, preload, IPC and Rust with two real Bash
-instances in Ghostty. It covers background/reopen, independent work, stop,
-remove, capture cutoff, re-register and combined stop/remove.
-
-The separate native Codex test uses the installed model account and real
-Ghostty windows. It deliberately submits small tasks, including one through an
-independent native connection while Voyager capture is removed. It also checks the same native server through a separately owned external
-observation service, including stop refusal and fresh capture after removal.
-Its private result contains the observed events and action results.
+The separate Codex check uses real native tasks, managed and external capture,
+background completion, same-runtime reopen, removal and stop refusal:
 
 ```sh
 VOYAGER_NATIVE_PROOF_DIR="$HOME/.local/share/voyager-native-lifecycle-proof" \
   cargo test --locked --test native_lifecycle -- --ignored --nocapture
 ```
 
-Physical pointer delivery, menu legibility and sound are a separate user check.
-Linux/Ghostty observations do not establish macOS, other terminals or voice.
+Use a fresh private directory. Physical gestures, menu readability and sound
+still require a person. These checks do not establish other platforms, role
+authentication, voice handoff or crash/reboot recovery.

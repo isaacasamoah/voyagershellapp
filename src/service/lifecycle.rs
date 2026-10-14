@@ -1,4 +1,4 @@
-use super::{Runtime, string};
+use super::{Runtime, Terminal, string};
 use crate::{
     actions::{self, Action, PendingOperation, Phase},
     codex::Codex,
@@ -254,18 +254,23 @@ impl Runtime {
         } else {
             "unknown"
         });
+        let mut window_state = "closed";
+        for terminal in self.terminals.iter_mut().filter(|t| &t.session == id) {
+            match terminal.window {
+                Some(window) if terminal::exists(window)? => {
+                    window_state = "open";
+                    break;
+                }
+                None if terminal.child.try_wait()?.is_none() => window_state = "unknown",
+                _ => {}
+            }
+        }
         operation.receipt["window"] = json!(if matches!(operation.phase, Phase::WaitOpen) {
             "unknown"
         } else if matches!(operation.phase, Phase::WaitClose { .. }) {
             "close_requested"
-        } else if self
-            .terminals
-            .iter_mut()
-            .any(|(s, c)| s == id && matches!(c.try_wait(), Ok(None)))
-        {
-            "open"
         } else {
-            "closed"
+            window_state
         });
         Ok(())
     }
@@ -334,11 +339,26 @@ impl Runtime {
         match std::mem::replace(&mut operation.phase, Phase::Start) {
             Phase::Start => match operation.action {
                 Action::Open => {
-                    for (session, child) in &mut self.terminals {
-                        if session == &id && child.try_wait()?.is_none() {
-                            let window = terminal::focus(child.id())?;
+                    for terminal in self.terminals.iter_mut().rev().filter(|t| t.session == id) {
+                        if terminal.child.try_wait()?.is_some() {
+                            ensure!(
+                                terminal.window.map(terminal::exists).transpose()? != Some(true),
+                                "outcome_unknown: the previous terminal window is still closing"
+                            );
+                        } else {
+                            let window = terminal.window.context(
+                                "outcome_unknown: terminal opening has not been identified",
+                            )?;
+                            if !terminal::exists(window)? {
+                                continue;
+                            }
+                            ensure!(
+                                terminal::window(terminal.child.id())? == Some(window),
+                                "outcome_unknown: terminal window identity changed"
+                            );
+                            terminal::focus(terminal.child.id())?;
                             operation.receipt["window_id"] = json!(window);
-                            operation.receipt["pid"] = json!(child.id());
+                            operation.receipt["pid"] = json!(terminal.child.id());
                             operation.effect("open", "confirmed");
                             self.store.local(
                                 &id,
@@ -351,7 +371,11 @@ impl Runtime {
                     let info = self.attachment(&id)?;
                     let child = terminal::open_instance(&info, &self.store.session(&id)?)?;
                     let pid = child.id();
-                    self.terminals.push((id.clone(), child));
+                    self.terminals.push(Terminal {
+                        session: id.clone(),
+                        child,
+                        window: None,
+                    });
                     operation.receipt["pid"] = json!(pid);
                     operation.effect("open", "requested");
                     operation.phase = Phase::WaitOpen;
@@ -470,56 +494,52 @@ impl Runtime {
                 Ok(false)
             }
             Phase::Close => {
-                if let Some((_, child)) = self
-                    .terminals
-                    .iter_mut()
-                    .find(|(session, _)| session == &id)
-                {
-                    if child.try_wait()?.is_none() {
-                        let window = terminal::close(child.id())?;
-                        operation.effect("close", "requested");
-                        operation.phase = Phase::WaitClose { window };
-                        return Ok(false);
+                if let Some(terminal) = self.terminals.iter_mut().rev().find(|t| t.session == id) {
+                    if let Some(window) = terminal.window {
+                        if terminal::exists(window)? {
+                            if terminal.child.try_wait()?.is_none() {
+                                ensure!(
+                                    terminal::window(terminal.child.id())? == Some(window),
+                                    "outcome_unknown: terminal window identity changed"
+                                );
+                                terminal::close(terminal.child.id())?;
+                            }
+                            operation.effect("close", "requested");
+                            operation.phase = Phase::WaitClose { window };
+                            return Ok(false);
+                        }
+                    } else {
+                        ensure!(
+                            terminal.child.try_wait()?.is_some(),
+                            "outcome_unknown: terminal opening has not been identified"
+                        );
                     }
                 }
-                operation.effect("close", "confirmed");
-                if operation.action == (Action::Remove { stop: true }) {
-                    operation.phase = Phase::Remove;
-                    Ok(false)
-                } else {
-                    Ok(true)
-                }
+                self.finish_close(operation)
             }
             Phase::WaitClose { window } => {
-                let alive = self
-                    .terminals
-                    .iter_mut()
-                    .any(|(s, c)| s == &id && matches!(c.try_wait(), Ok(None)));
-                if !alive && !terminal::exists(window)? {
-                    operation.effect("close", "confirmed");
-                    self.store.local(&id,"interface.closed",json!({"request_id":operation.id,"runtime_stopped":operation.action != Action::Background}))?;
-                    if operation.action == (Action::Remove { stop: true }) {
-                        operation.phase = Phase::Remove;
-                        Ok(false)
-                    } else {
-                        Ok(true)
-                    }
+                if !terminal::exists(window)? {
+                    self.finish_close(operation)
                 } else {
                     operation.phase = Phase::WaitClose { window };
                     Ok(false)
                 }
             }
             Phase::WaitOpen => {
-                let child = self
+                let pid = operation.receipt["pid"]
+                    .as_u64()
+                    .context("opening process missing")?;
+                let terminal = self
                     .terminals
                     .iter_mut()
-                    .find(|(s, _)| s == &id)
+                    .find(|t| t.session == id && u64::from(t.child.id()) == pid)
                     .context("provider_failed: terminal exited before opening")?;
                 ensure!(
-                    child.1.try_wait()?.is_none(),
+                    terminal.child.try_wait()?.is_none(),
                     "provider_failed: terminal exited before opening"
                 );
-                if let Some(window) = terminal::window(child.1.id())? {
+                if let Some(window) = terminal::window(terminal.child.id())? {
+                    terminal.window = Some(window);
                     operation.receipt["window_id"] = json!(window);
                     operation.effect("open", "confirmed");
                     Ok(true)
@@ -668,5 +688,16 @@ impl Runtime {
         }
         count += self.shells.values().filter(|s| s.connected()).count();
         Ok(count)
+    }
+
+    fn finish_close(&self, operation: &mut PendingOperation) -> Result<bool> {
+        operation.effect("close", "confirmed");
+        self.store.local(&operation.session,"interface.closed",json!({"request_id":operation.id,"runtime_stopped":operation.action != Action::Background}))?;
+        if operation.action == (Action::Remove { stop: true }) {
+            operation.phase = Phase::Remove;
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 }

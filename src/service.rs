@@ -5,6 +5,7 @@ use crate::{
     events,
     shell::Shell,
     store::Store,
+    terminal,
     worker::{StartingWorker, Worker},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -252,12 +253,18 @@ struct Runtime {
     instance: String,
     workers: HashMap<String, Worker>,
     shells: HashMap<String, Shell>,
-    terminals: Vec<(String, Child)>,
+    terminals: Vec<Terminal>,
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
     state: PathBuf,
     executable: String,
+}
+
+struct Terminal {
+    session: String,
+    child: Child,
+    window: Option<u32>,
 }
 
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
@@ -444,8 +451,14 @@ impl Runtime {
 
     fn observe(&mut self) -> Result<()> {
         for index in (0..self.terminals.len()).rev() {
-            if self.terminals[index].1.try_wait()?.is_some() {
-                self.terminals.swap_remove(index).1.wait()?;
+            if self.terminals[index].child.try_wait()?.is_some()
+                && self.terminals[index]
+                    .window
+                    .map(terminal::exists)
+                    .transpose()?
+                    != Some(true)
+            {
+                self.terminals.swap_remove(index).child.wait()?;
             }
         }
         for shell in self.shells.values_mut() {
