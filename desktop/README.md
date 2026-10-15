@@ -136,3 +136,6 @@ It writes `lifecycle-proof.json` and `panel-lifecycle.png` privately. It is a
 programmatic native check; Isaac still tests pointer delivery and visual quality.
 It makes no model requests. The separate ignored Rust native test in the
 [lifecycle guide](../docs/lifecycle.md#native-checks) uses the actual Codex account.
+
+The opt-in `whiteboard-read.cjs` endpoint serves fresh renderer PNG snapshots to
+the Rust CLI. Its protocol and privacy scope live in [whiteboard](../docs/whiteboard.md).

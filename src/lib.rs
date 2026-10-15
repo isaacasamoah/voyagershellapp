@@ -7,4 +7,5 @@ pub mod shell;
 pub mod shell_transport;
 pub mod store;
 pub mod terminal;
+pub mod whiteboard;
 pub mod worker;

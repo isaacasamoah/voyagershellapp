@@ -232,6 +232,7 @@ window.whiteboard = {
   },
   image: () =>
     new Promise((resolve, reject) => {
+      if (editing || gesture) return reject(Error('Finish the current edit or stroke first'));
       const copy = svg.cloneNode(true);
       copy.querySelectorAll('[data-selection]').forEach((e) => e.remove());
       const { width, height } = canvasSize;
@@ -246,7 +247,10 @@ window.whiteboard = {
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-        canvas.getContext('2d').drawImage(image, 0, 0);
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#17231f';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0);
         URL.revokeObjectURL(url);
         resolve(canvas.toDataURL('image/png'));
       };

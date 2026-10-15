@@ -103,3 +103,41 @@ Programmatic input and native stack observations do not establish physical
 drawing feel or every compositor interaction. The live app remains the final
 human check. The proof exits its own UI and does not send an agent prompt or stop
 a worker.
+
+## Let an agent read the board
+
+On the `experiment/whiteboard-agent-read` branch, opt in when opening the desktop:
+
+```sh
+VOYAGER_STATE=/absolute/path/to/service-state npm start -- --expanded --whiteboard-read
+```
+
+From the repository root, an agent can request a fresh picture:
+
+```sh
+target/debug/voyager --state /absolute/path/to/service-state whiteboard-read /tmp/new-board.png
+```
+
+The command prints the image path, byte count and `whiteboard-only` scope as JSON.
+Open that PNG with the agent harness's image tool to interpret it. The bundled
+[whiteboard-read skill](../skills/whiteboard-read/SKILL.md) describes this workflow;
+it can be read directly by any image-capable harness or installed in its skills
+folder. No model provider API or model-specific SDK is embedded in the desktop.
+
+This is a read-only picture snapshot, including freehand marks and snippets.
+It does not capture the underlying desktop, edit the drawing, send a prompt,
+export a knowledge graph, or implement MCP. Finish any stroke or inline edit
+before requesting it. The board can be read after pressing Done, while the app
+remains open; closing the app still loses the in-memory sketch.
+
+The opt-in desktop owns `whiteboard.sock` in the selected service directory.
+Its existing single-instance lock protects that endpoint; proof windows do not
+serve it. Each connection requests one fresh PNG and closes. The socket and
+output PNG are owner-only; the CLI never overwrites an existing path, limits
+reads to 16 MiB and times out after ten seconds. Local programs running as the
+same OS user can read the board while this option is enabled. A dark export
+background makes light ink visible without including other desktop content.
+
+For native docking, start the service with `VOYAGER_CODEX_BIN` set to the absolute
+Codex executable path. This experiment's desktop discovery expects that path in
+the existing attach-info response.

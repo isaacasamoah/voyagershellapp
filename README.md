@@ -30,7 +30,9 @@ extraction and shared graphs are later work. Voyager is an experimental prototyp
 
 The [desktop whiteboard experiment](docs/whiteboard.md) adds collapsible drawing
 controls to the glass panel, with direct text editing, group selection and a
-native Snip action that adds desktop images on Fedora GNOME. Agent
+native Snip action that adds desktop images on Fedora GNOME. This branch also
+adds an opt-in `whiteboard-read` CLI and skill: an image-capable agent can inspect
+a fresh picture of the board and discuss it in the conversation. Agent editing,
 MCP tools and board persistence are still planned.
 
 

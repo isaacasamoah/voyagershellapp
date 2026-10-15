@@ -606,6 +606,12 @@ app.whenReady().then(async () => {
       sendState();
     },
   );
+  if (process.argv.includes('--whiteboard-read') && !whiteboardProof) {
+    const close = await require('./whiteboard-read.cjs').serveWhiteboard(stateDir, () =>
+      panelWin.webContents.executeJavaScript('window.whiteboard.image()'),
+    );
+    panelWin.once('closed', close);
+  }
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
