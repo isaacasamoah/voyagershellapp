@@ -144,3 +144,5 @@ See the [observed trial results](collaboration-proof.md) for evidence and limits
 API references: [TypeSafe reference](https://docs.typesafe.ai/api),
 [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
 [Codex app-server protocol](https://developers.openai.com/codex/app-server/).
+
+Invalid composed candidates are rejected before graph mutation and retained as validation attempts with the reason. Missing attribution or mismatched evidence does not stop unrelated later candidates. Transport failures and unknown provider outcomes still pause processing and are not automatically retried.

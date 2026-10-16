@@ -157,3 +157,27 @@ fn parser_accepts_resolution_inside_fenced_prose() {
     );
     assert!(resolution::extract("{not json} no resolution").is_none());
 }
+
+#[test]
+fn rejected_composition_is_audited_without_blocking_next_candidate() {
+    let db = Db::open(std::path::Path::new(":memory:")).unwrap();
+    let mut c = knowledge("one", "crew").composition;
+    c.existing_topic_ids.clear();
+    c.decision_maker = None;
+    let window = vec![event("e1", "Use jobs")];
+    assert!(!pipeline::accept_composition(&db, "e1", &c, &window, "decision", &[]).unwrap());
+    let response: String =
+        db.0.query_row(
+            "SELECT response FROM attempts WHERE stage='validation'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&response).unwrap()["error"],
+        "missing decision maker"
+    );
+    assert!(db.graph().unwrap().records.is_empty());
+    c.decision_maker = Some("user".into());
+    assert!(pipeline::accept_composition(&db, "e2", &c, &window, "decision", &[]).unwrap());
+}
