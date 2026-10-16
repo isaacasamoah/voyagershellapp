@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Voyager · Knowledge</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font:
+        14px/1.5 system-ui,
+        sans-serif;
+      background: #0c1119;
+      color: #e4eaf2;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      height: 100dvh;
+      overflow: hidden;
+    }
+    button,
+    input {
+      font: inherit;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+      background: #18212e;
+      border: 1px solid #344154;
+      border-radius: 7px;
+      padding: 7px 12px;
+    }
+    button:hover {
+      border-color: #99b3cf;
+      background: #202d3d;
+    }
+    :focus-visible {
+      outline: 2px solid #91e6d0;
+      outline-offset: 4px;
+    }
+    [hidden] {
+      display: none !important;
+    }
+    header {
+      height: 66px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      border-bottom: 1px solid #222e3e;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 550;
+      margin: 0;
+    }
+    #health {
+      font:
+        11px ui-monospace,
+        monospace;
+      color: #9aabc0;
+    }
+    #search {
+      margin-left: auto;
+      width: min(260px, 40vw);
+      border: 1px solid #344154;
+      border-radius: 7px;
+      background: #111925;
+      padding: 8px 12px;
+    }
+    main {
+      height: calc(100dvh - 66px);
+      display: flex;
+    }
+    #canvas {
+      position: relative;
+      min-width: 0;
+      flex: 1;
+      background-image: radial-gradient(#26313f 0.7px, transparent 0.7px);
+      background-size: 24px 24px;
+    }
+    #graph {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      user-select: none;
+    }
+    #graph.panning {
+      cursor: grabbing;
+    }
+    .node {
+      cursor: pointer;
+    }
+    .node .body {
+      fill: #141d29;
+      stroke: #4b5d76;
+      stroke-width: 1.2;
+    }
+    .node .label {
+      fill: #e4eaf2;
+      font:
+        13px system-ui,
+        sans-serif;
+    }
+    .node .kind {
+      font:
+        10px ui-monospace,
+        monospace;
+      letter-spacing: 1px;
+    }
+    .node.topic .body {
+      stroke: #9477cc;
+      fill: #211c30;
+    }
+    .node.decision .body {
+      stroke: #558d81;
+    }
+    .node.discovery .body {
+      stroke: #677cb5;
+    }
+    .node.selected .body,
+    .node:hover .body,
+    .node:focus .body {
+      stroke-width: 2.5;
+    }
+    .node.muted,
+    .edge.muted {
+      opacity: 0.25;
+    }
+    .node.superseded .body {
+      stroke-dasharray: 5 4;
+    }
+    .edge {
+      cursor: pointer;
+    }
+    .edge .hit {
+      stroke: transparent;
+      stroke-width: 18;
+      fill: none;
+    }
+    .edge .line {
+      fill: none;
+      stroke: #53627b;
+      stroke-width: 1.5;
+    }
+    .edge .edge-label {
+      fill: #a8b8ce;
+      font:
+        10px ui-monospace,
+        monospace;
+      paint-order: stroke;
+      stroke: #0c1119;
+      stroke-width: 5px;
+      stroke-linejoin: round;
+    }
+    .edge.selected .line,
+    .edge:hover .line,
+    .edge:focus .line {
+      stroke-width: 3;
+    }
+    #controls {
+      position: absolute;
+      bottom: 22px;
+      left: 22px;
+      display: flex;
+      gap: 6px;
+    }
+    #legend {
+      position: absolute;
+      bottom: 25px;
+      right: 22px;
+      display: flex;
+      gap: 14px;
+      font:
+        11px ui-monospace,
+        monospace;
+      color: #9aabc0;
+      pointer-events: none;
+    }
+    #legend span::before {
+      content: "●";
+      margin-right: 6px;
+    }
+    .topic-color {
+      color: #c2a2ff;
+    }
+    .decision-color {
+      color: #91e6d0;
+    }
+    .discovery-color {
+      color: #a7baff;
+    }
+    #empty {
+      position: absolute;
+      top: 45%;
+      width: 100%;
+      text-align: center;
+      color: #91a1b8;
+      pointer-events: none;
+    }
+    #detail {
+      width: 380px;
+      max-width: 43vw;
+      flex-shrink: 0;
+      border-left: 1px solid #293546;
+      background: #111925;
+      overflow: auto;
+      padding: 24px;
+    }
+    .detail-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    .badge {
+      font:
+        11px ui-monospace,
+        monospace;
+      color: #a8b8ce;
+    }
+    h2 {
+      font-size: 18px;
+      line-height: 1.5;
+      font-weight: 500;
+      margin: 0 0 18px;
+      overflow-wrap: anywhere;
+    }
+    h3 {
+      font-size: 12px;
+      font-weight: 500;
+      color: #9eafc6;
+      margin: 24px 0 10px;
+    }
+    p {
+      margin: 0 0 14px;
+      overflow-wrap: anywhere;
+    }
+    .link {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin: 7px 0;
+      background: transparent;
+      font-size: 13px;
+    }
+    small {
+      color: #97a8bf;
+    }
+    blockquote {
+      margin: 12px 0;
+      padding: 0 0 0 14px;
+      border-left: 2px solid #526980;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    details {
+      border-top: 1px solid #293546;
+      padding: 12px 0 0;
+      margin-top: 16px;
+    }
+    summary {
+      cursor: pointer;
+      color: #b6c5d9;
+      font-size: 12px;
+    }
+    details[open] > summary {
+      margin-bottom: 14px;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font:
+        11px/1.6 ui-monospace,
+        monospace;
+      color: #b8c7db;
+    }
+    dl {
+      margin: 0;
+      font-size: 12px;
+    }
+    dt {
+      color: #8fa2bc;
+      margin-top: 12px;
+    }
+    dd {
+      margin: 3px 0;
+      overflow-wrap: anywhere;
+    }
+    .error {
+      color: #ffa696 !important;
+    }
+    @media (max-width: 700px) {
+      header {
+        padding: 0 14px;
+        gap: 10px;
+      }
+      #detail {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        height: 48dvh;
+        border-top: 1px solid #344154;
+        z-index: 2;
+        padding: 18px;
+      }
+      #legend {
+        display: none;
+      }
+      body.inspecting main {
+        padding-bottom: 48dvh;
+      }
+    }
+  </style>
+  <header>
+    <h1>Knowledge</h1>
+    <span id="health" role="status"></span
+    ><input
+      id="search"
+      type="search"
+      aria-label="Find knowledge"
+      placeholder="Find knowledge…"
+    />
+  </header>
+  <main>
+    <section id="canvas" aria-label="Knowledge graph">
+      <svg
+        id="graph"
+        aria-label="Topics and knowledge"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <marker
+            id="arrow"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#a1afc5" />
+          </marker>
+        </defs>
+        <g id="world"></g>
+      </svg>
+      <div id="empty" hidden></div>
+      <div id="controls">
+        <button id="zoom-in" aria-label="Zoom in">+</button
+        ><button id="zoom-out" aria-label="Zoom out">−</button
+        ><button id="fit">Fit</button>
+      </div>
+      <div id="legend">
+        <span class="topic-color">Topic</span
+        ><span class="decision-color">Decision</span
+        ><span class="discovery-color">Discovery</span>
+      </div>
+    </section>
+    <aside id="detail" aria-label="Selected knowledge" hidden></aside>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const ns = "http://www.w3.org/2000/svg";
+    let snapshot,
+      signature = "",
+      selection = null,
+      expanded = new Set(),
+      initialized = false;
+    let nodes = [],
+      edges = [],
+      positions = new Map(),
+      camera = { x: 0, y: 0, scale: 1 },
+      gesture = null;
+    const colors = {
+      topic: "#c2a2ff",
+      decision: "#91e6d0",
+      discovery: "#a7baff",
+      contradicts: "#ffac99",
+      challenges: "#ffac99",
+      supports: "#91e6d0",
+    };
+    const el = (tag, text, cls) => {
+      const n = document.createElement(tag);
+      if (text !== undefined) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    };
+    const svgEl = (tag, attrs = {}) => {
+      const n = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const label = (value) =>
+      value.name || value.composition?.statement || value.id;
+    const clip = (text, max = 70) =>
+      text.length > max ? text.slice(0, max - 1) + "…" : text;
+    const button = (text, action, cls = "link") => {
+      const b = el("button", text, cls);
+      b.onclick = action;
+      return b;
+    };
+    function details(title, content) {
+      const d = el("details");
+      d.append(el("summary", title), content);
+      return d;
+    }
+    function metadata(value) {
+      return details("Metadata", el("pre", JSON.stringify(value, null, 2)));
+    }
+    function fields(entries) {
+      const d = el("dl");
+      for (const [key, value] of entries) {
+        if (value === null || value === undefined) continue;
+        d.append(el("dt", key), el("dd", String(value)));
+      }
+      return d;
+    }
+    function linkRecord(id, prefix = "") {
+      const r = snapshot.graph.records.find((r) => r.id === id);
+      return r
+        ? button(prefix + clip(label(r), 110), () =>
+            select({ type: "record", id }),
+          )
+        : el("p", prefix + id);
+    }
+    function showDetail() {
+      const panel = $("detail");
+      panel.replaceChildren();
+      panel.hidden = !selection;
+      document.body.classList.toggle("inspecting", !!selection);
+      if (!selection) return;
+      const g = snapshot.graph;
+      const pool =
+        selection.type === "topic"
+          ? g.topics
+          : selection.type === "record"
+            ? g.records
+            : edges;
+      const value = pool.find((r) => r.id === selection.id);
+      if (!value) {
+        selection = null;
+        showDetail();
+        return;
+      }
+      const top = el("div", undefined, "detail-top");
+      const badge = el(
+        "span",
+        selection.type === "record"
+          ? value.kind + " · " + value.status
+          : selection.type === "topic"
+            ? "Topic"
+            : "Relationship",
+        "badge",
+      );
+      badge.style.color = colors[value.kind || selection.type] || "#b6c5d9";
+      const close = button("×", () => select(null), "");
+      close.setAttribute("aria-label", "Close details");
+      top.append(badge, close);
+      panel.append(top);
+      if (selection.type === "topic") {
+        panel.append(el("h2", value.name), el("p", value.description));
+        const records = g.records.filter((r) => r.topics.includes(value.id));
+        panel.append(
+          button(
+            (expanded.has(value.id) ? "Collapse" : "Expand") +
+              " · " +
+              records.length +
+              " items",
+            () => {
+              expanded.has(value.id)
+                ? expanded.delete(value.id)
+                : expanded.add(value.id);
+              draw();
+              showDetail();
+              fit();
+            },
+          ),
+        );
+        const items = el("div");
+        for (const r of records) items.append(linkRecord(r.id));
+        panel.append(details("Knowledge · " + records.length, items));
+        const subscribers = g.assignments.filter((a) =>
+          a.topics.includes(value.id),
+        );
+        const subs = el("div");
+        for (const a of subscribers) {
+          subs.append(
+            el("p", a.brief),
+            fields([
+              ["Session", a.session_id],
+              ["Ticket", a.ticket],
+              ["Delivery", a.delivery ? a.delivery_mode : "Preview only"],
+            ]),
+            metadata(a),
+          );
+        }
+        panel.append(
+          details("Subscribers · " + subscribers.length, subs),
+          metadata(value),
+        );
+      } else if (selection.type === "record") {
+        panel.append(
+          el("h2", value.composition.statement || "Unresolved candidate"),
+        );
+        for (const id of value.topics) {
+          const t = g.topics.find((t) => t.id === id);
+          if (t)
+            panel.append(button(t.name, () => select({ type: "topic", id })));
+        }
+        const relations = g.relations.filter(
+          (r) => r.from === value.id || r.to === value.id,
+        );
+        if (relations.length) {
+          panel.append(el("h3", "Relationships"));
+          for (const r of relations) {
+            const target = g.records.find(
+              (k) => k.id === (r.from === value.id ? r.to : r.from),
+            );
+            panel.append(
+              button(
+                (r.from === value.id ? "→ " : "← ") +
+                  r.kind +
+                  (r.resolution ? " · resolved" : "") +
+                  " · " +
+                  clip(target ? label(target) : r.to, 60),
+                () => select({ type: "edge", id: r.id }),
+              ),
+            );
+          }
+        }
+        const evidence = el("div");
+        if (value.composition.explanation)
+          evidence.append(el("p", value.composition.explanation));
+        for (const e of value.composition.evidence) {
+          evidence.append(el("small", e.stance), el("blockquote", e.quote));
+          const source = snapshot.events.find(
+            (s) =>
+              s.event.event_id === e.event_id &&
+              s.event.session_id === value.session_id,
+          );
+          const body = el("div");
+          body.append(
+            fields([
+              ["Event", e.event_id],
+              ["Session", value.session_id],
+            ]),
+          );
+          body.append(
+            el(
+              "pre",
+              source
+                ? source.event.text
+                : "Source outside the latest " +
+                    snapshot.limits.events_shown +
+                    " events. The cited quote is retained above.",
+            ),
+          );
+          evidence.append(details("Source", body));
+        }
+        panel.append(
+          details("Evidence · " + value.composition.evidence.length, evidence),
+        );
+        const packets = g.notifications.filter(
+          (n) =>
+            n.record_ids.includes(value.id) ||
+            relations.some((r) => n.relation_ids.includes(r.id)),
+        );
+        panel.append(packetDetails(packets));
+        const calls = snapshot.attempts.filter((a) => {
+          try {
+            const state = a.request.state || JSON.parse(a.request.input);
+            const source =
+              state.newest_event ||
+              state.candidate?.newest_event ||
+              state.source?.newest_event ||
+              state.new ||
+              state.evidence?.find((e) => e.event_id === value.trigger);
+            return (
+              a.event === value.trigger &&
+              source?.session_id === value.session_id
+            );
+          } catch {
+            return false;
+          }
+        });
+        const trace = el("div");
+        trace.append(
+          el(
+            "small",
+            "From the latest " + snapshot.limits.attempts_shown + " calls",
+          ),
+        );
+        for (const c of calls)
+          trace.append(
+            details(
+              c.stage + " · " + (c.elapsed_ms / 1000).toFixed(2) + "s",
+              el(
+                "pre",
+                JSON.stringify(
+                  { request: c.request, response: c.response },
+                  null,
+                  2,
+                ),
+              ),
+            ),
+          );
+        panel.append(
+          details("Model calls · " + calls.length, trace),
+          metadata(value),
+        );
+      } else {
+        panel.append(
+          el(
+            "h2",
+            value.kind === "membership" ? "Topic membership" : value.kind,
+          ),
+        );
+        if (value.kind === "membership") {
+          const t = g.topics.find((t) => t.id === value.from);
+          if (t)
+            panel.append(
+              button(t.name, () => select({ type: "topic", id: t.id })),
+            );
+          panel.append(linkRecord(value.to));
+        } else {
+          panel.append(
+            linkRecord(value.from, "From · "),
+            linkRecord(value.to, "To · "),
+          );
+          panel.append(
+            fields([
+              ["Jev score", value.probability],
+              [
+                "State",
+                value.resolution
+                  ? "Resolved"
+                  : value.kind === "contradicts"
+                    ? "Open"
+                    : "Recorded",
+              ],
+              ["Responsible agent", value.resolver],
+              [
+                "Human review",
+                value.requires_user ? "Required" : "Not required",
+              ],
+            ]),
+          );
+          if (value.resolution)
+            panel.append(
+              details(
+                "Resolution",
+                el("pre", JSON.stringify(value.resolution, null, 2)),
+              ),
+            );
+          panel.append(
+            packetDetails(
+              g.notifications.filter((n) => n.relation_ids.includes(value.id)),
+            ),
+          );
+        }
+        panel.append(metadata(value));
+      }
+    }
+    function packetDetails(packets) {
+      const content = el("div");
+      for (const p of packets) {
+        const body = el("div");
+        body.append(
+          fields([
+            ["Recipient", p.recipient],
+            ["Reason", p.reasons.join(" · ")],
+            ["State", p.state],
+          ]),
+          el("pre", p.message),
+          metadata(p),
+        );
+        content.append(details(p.state + " · " + p.reasons.join(" · "), body));
+      }
+      return details("Subscriber updates · " + packets.length, content);
+    }
+    function select(value) {
+      selection = value;
+      if (value?.type === "edge") {
+        $("search").value = "";
+        const edge = snapshot.graph.relations.find((r) => r.id === value.id);
+        for (const record of snapshot.graph.records.filter(
+          (r) => r.id === edge?.from || r.id === edge?.to,
+        )) {
+          for (const topic of record.topics) expanded.add(topic);
+        }
+      }
+      if (value?.type === "topic") expanded.add(value.id);
+      if (value?.type === "record") {
+        const record = snapshot.graph.records.find((r) => r.id === value.id);
+        for (const topic of record?.topics || []) expanded.add(topic);
+      }
+      draw();
+      showDetail();
+      requestAnimationFrame(() => {
+        fit();
+        if (value)
+          $("detail").querySelector("button")?.focus({ preventScroll: true });
+      });
+    }
+    function wrap(text, max = 27) {
+      const words = text.split(/\s+/),
+        lines = [""];
+      for (const word of words) {
+        const i = lines.length - 1;
+        if ((lines[i] + " " + word).trim().length > max && lines[i])
+          lines.push(word);
+        else lines[i] += (lines[i] ? " " : "") + word;
+      }
+      return [clip(lines[0], max), clip(lines.slice(1).join(" "), max)];
+    }
+    function buildGraph() {
+      const g = snapshot.graph,
+        q = $("search").value.trim().toLowerCase();
+      const matches = (r) => JSON.stringify(r).toLowerCase().includes(q);
+      let records = g.records.filter((r) =>
+        q
+          ? matches(r) ||
+            r.topics.some((id) =>
+              g.topics.some((t) => t.id === id && matches(t)),
+            )
+          : !r.topics.length || r.topics.some((id) => expanded.has(id)),
+      );
+      const topics = g.topics.filter(
+        (t) => !q || matches(t) || records.some((r) => r.topics.includes(t.id)),
+      );
+      nodes = [
+        ...topics.map((t) => ({ ...t, nodeType: "topic", kind: "topic" })),
+        ...records.map((r) => ({ ...r, nodeType: "record" })),
+      ];
+      const ids = new Set(nodes.map((n) => n.id));
+      edges = g.relations
+        .filter((r) => ids.has(r.from) && ids.has(r.to))
+        .map((r) => ({ ...r }));
+      for (const r of records)
+        for (const id of r.topics)
+          if (ids.has(id))
+            edges.push({
+              id: "membership:" + id + ":" + r.id,
+              from: id,
+              to: r.id,
+              kind: "membership",
+            });
+      for (const [i, t] of topics.entries())
+        if (!positions.has(t.id))
+          positions.set(t.id, { x: (i % 3) * 800, y: Math.floor(i / 3) * 600 });
+      for (const [i, r] of records.entries())
+        if (!positions.has(r.id)) {
+          const t = positions.get(r.topics[0]) || { x: 0, y: 0 };
+          const siblings = records.filter((k) => k.topics[0] === r.topics[0]),
+            index = siblings.indexOf(r),
+            a = (2 * Math.PI * index) / Math.max(3, siblings.length);
+          positions.set(r.id, {
+            x: t.x + 340 * Math.cos(a),
+            y: t.y + 240 * Math.sin(a) + i * 0.1,
+          });
+        }
+      return ids;
+    }
+    function layout() {
+      const moving = nodes.map((n) => ({
+        ...positions.get(n.id),
+        id: n.id,
+        vx: 0,
+        vy: 0,
+      }));
+      const map = new Map(moving.map((n) => [n.id, n]));
+      for (let step = 0; step < 140; step++) {
+        for (const n of moving) {
+          n.vx = 0;
+          n.vy = 0;
+        }
+        for (let i = 0; i < moving.length; i++)
+          for (let j = i + 1; j < moving.length; j++) {
+            const a = moving[i],
+              b = moving[j],
+              dx = b.x - a.x || 0.1,
+              dy = b.y - a.y || 0.1;
+            const d = Math.max(1, Math.hypot(dx, dy)),
+              overlap = Math.abs(dx) < 270 && Math.abs(dy) < 130;
+            const force = overlap ? 12 : Math.min(2, 5000 / (d * d));
+            a.vx -= (dx / d) * force;
+            a.vy -= (dy / d) * force;
+            b.vx += (dx / d) * force;
+            b.vy += (dy / d) * force;
+          }
+        for (const e of edges) {
+          const a = map.get(e.from),
+            b = map.get(e.to);
+          const dx = b.x - a.x,
+            dy = b.y - a.y,
+            d = Math.max(1, Math.hypot(dx, dy)),
+            f = (d - 330) * 0.01;
+          a.vx += (dx / d) * f;
+          a.vy += (dy / d) * f;
+          b.vx -= (dx / d) * f;
+          b.vy -= (dy / d) * f;
+        }
+        for (const n of moving) {
+          n.x += Math.max(-12, Math.min(12, n.vx));
+          n.y += Math.max(-12, Math.min(12, n.vy));
+        }
+      }
+      for (const n of moving) positions.set(n.id, { x: n.x, y: n.y });
+    }
+    let visibleKey = "";
+    function draw() {
+      if (!snapshot) return;
+      buildGraph();
+      const key = nodes.map((n) => n.id).join("|");
+      if (key !== visibleKey) {
+        layout();
+        visibleKey = key;
+      }
+      const world = $("world");
+      world.replaceChildren();
+      const neighbors = new Set();
+      if (selection) {
+        neighbors.add(selection.id);
+        for (const e of edges)
+          if (
+            e.from === selection.id ||
+            e.to === selection.id ||
+            e.id === selection.id
+          ) {
+            neighbors.add(e.from);
+            neighbors.add(e.to);
+            neighbors.add(e.id);
+          }
+      }
+      for (const edge of edges) {
+        const a = positions.get(edge.from),
+          b = positions.get(edge.to),
+          dx = b.x - a.x,
+          dy = b.y - a.y;
+        const boundary = Math.min(
+          112 / Math.max(0.01, Math.abs(dx)),
+          42 / Math.max(0.01, Math.abs(dy)),
+          0.45,
+        );
+        const path = `M ${a.x + dx * boundary} ${a.y + dy * boundary} L ${b.x - dx * boundary} ${b.y - dy * boundary}`;
+        const group = svgEl("g", {
+          class:
+            "edge" +
+            (selection?.id === edge.id
+              ? " selected"
+              : selection && !neighbors.has(edge.id)
+                ? " muted"
+                : ""),
+          tabindex: "0",
+          role: "button",
+          "aria-label":
+            edge.kind +
+            " · " +
+            clip(label(nodes.find((n) => n.id === edge.from))) +
+            " → " +
+            clip(label(nodes.find((n) => n.id === edge.to))),
+          "data-edge-id": edge.id,
+        });
+        group.append(svgEl("path", { d: path, class: "hit" }));
+        const line = svgEl("path", { d: path, class: "line" });
+        if (colors[edge.kind]) line.style.stroke = colors[edge.kind];
+        if (edge.kind !== "membership")
+          line.setAttribute("marker-end", "url(#arrow)");
+        if (edge.resolution) line.setAttribute("stroke-dasharray", "5 4");
+        group.append(line);
+        if (edge.kind !== "membership") {
+          const t = svgEl("text", {
+            x: (a.x + b.x) / 2,
+            y: (a.y + b.y) / 2 - 9,
+            "text-anchor": "middle",
+            class: "edge-label",
+          });
+          t.textContent = edge.kind;
+          group.append(t);
+        }
+        group.onclick = (e) => {
+          e.stopPropagation();
+          select({ type: "edge", id: edge.id });
+        };
+        group.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            select({ type: "edge", id: edge.id });
+          }
+        };
+        world.append(group);
+      }
+      for (const node of nodes) {
+        const p = positions.get(node.id),
+          group = svgEl("g", {
+            transform: `translate(${p.x},${p.y})`,
+            class:
+              "node " +
+              node.kind +
+              " " +
+              node.status +
+              (selection?.id === node.id
+                ? " selected"
+                : selection && !neighbors.has(node.id)
+                  ? " muted"
+                  : ""),
+            tabindex: "0",
+            role: "button",
+            "aria-label": node.kind + " · " + label(node),
+            "data-node-id": node.id,
+          });
+        const title = svgEl("title");
+        title.textContent = label(node);
+        group.append(
+          title,
+          svgEl("rect", {
+            x: -112,
+            y: -42,
+            width: 224,
+            height: 84,
+            rx: node.kind === "topic" ? 22 : 9,
+            class: "body",
+          }),
+        );
+        const kind = svgEl("text", {
+          x: -94,
+          y: -22,
+          class: "kind",
+          fill: colors[node.kind],
+        });
+        kind.textContent =
+          node.kind === "topic"
+            ? "TOPIC · " +
+              snapshot.graph.records.filter((r) => r.topics.includes(node.id))
+                .length +
+              " " +
+              (expanded.has(node.id) ? "−" : "+")
+            : node.kind.toUpperCase();
+        group.append(kind);
+        const lines = wrap(label(node));
+        lines.forEach((line, i) => {
+          const t = svgEl("text", { x: -94, y: 2 + i * 19, class: "label" });
+          t.textContent = line;
+          group.append(t);
+        });
+        group.onclick = (e) => {
+          e.stopPropagation();
+          select({ type: node.nodeType, id: node.id });
+        };
+        group.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            select({ type: node.nodeType, id: node.id });
+          }
+        };
+        world.append(group);
+      }
+      $("empty").hidden = nodes.length > 0;
+      $("empty").textContent = $("search").value
+        ? "No matching knowledge"
+        : "No knowledge yet";
+      transform();
+    }
+    function transform() {
+      $("world").setAttribute(
+        "transform",
+        `translate(${camera.x},${camera.y}) scale(${camera.scale})`,
+      );
+    }
+    function fit() {
+      if (!nodes.length) return;
+      const rect = $("graph").getBoundingClientRect(),
+        values = nodes.map((n) => positions.get(n.id));
+      const minX = Math.min(...values.map((p) => p.x)) - 150,
+        maxX = Math.max(...values.map((p) => p.x)) + 150,
+        minY = Math.min(...values.map((p) => p.y)) - 90,
+        maxY = Math.max(...values.map((p) => p.y)) + 90;
+      camera.scale = Math.max(
+        0.08,
+        Math.min(
+          1.4,
+          (rect.width - 60) / (maxX - minX),
+          (rect.height - 110) / (maxY - minY),
+        ),
+      );
+      camera.x = rect.width / 2 - ((minX + maxX) / 2) * camera.scale;
+      camera.y = (rect.height - 30) / 2 - ((minY + maxY) / 2) * camera.scale;
+      transform();
+    }
+    function zoom(factor, x, y) {
+      const r = $("graph").getBoundingClientRect();
+      x ??= r.width / 2;
+      y ??= r.height / 2;
+      const next = Math.max(0.08, Math.min(3, camera.scale * factor)),
+        ratio = next / camera.scale;
+      camera.x = x - (x - camera.x) * ratio;
+      camera.y = y - (y - camera.y) * ratio;
+      camera.scale = next;
+      transform();
+    }
+    $("graph").onwheel = (e) => {
+      e.preventDefault();
+      const r = $("graph").getBoundingClientRect();
+      zoom(Math.exp(-e.deltaY * 0.001), e.clientX - r.left, e.clientY - r.top);
+    };
+    $("graph").onpointerdown = (e) => {
+      if (e.button !== 0 || e.target.closest(".edge")) return;
+      const group = e.target.closest(".node"),
+        id = group?.dataset.nodeId;
+      gesture = {
+        id,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: false,
+      };
+      $("graph").setPointerCapture(e.pointerId);
+      $("graph").classList.add("panning");
+    };
+    $("graph").onpointermove = (e) => {
+      if (!gesture) return;
+      if (
+        Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY) > 4
+      )
+        gesture.moved = true;
+      const dx = e.clientX - gesture.lastX,
+        dy = e.clientY - gesture.lastY;
+      gesture.lastX = e.clientX;
+      gesture.lastY = e.clientY;
+      if (gesture.id && gesture.moved) {
+        const p = positions.get(gesture.id);
+        p.x += dx / camera.scale;
+        p.y += dy / camera.scale;
+        draw();
+      } else if (!gesture.id) {
+        camera.x += dx;
+        camera.y += dy;
+        transform();
+      }
+    };
+    $("graph").onpointerup = (e) => {
+      if (!gesture) return;
+      const g = gesture;
+      gesture = null;
+      $("graph").classList.remove("panning");
+      $("graph").releasePointerCapture(e.pointerId);
+      if (!g.moved) {
+        const n = nodes.find((n) => n.id === g.id);
+        select(n ? { type: n.nodeType, id: n.id } : null);
+      }
+    };
+    $("graph").onpointercancel = () => {
+      gesture = null;
+      $("graph").classList.remove("panning");
+    };
+    $("zoom-in").onclick = () => zoom(1.25);
+    $("zoom-out").onclick = () => zoom(0.8);
+    $("fit").onclick = fit;
+    $("search").oninput = () => {
+      selection = null;
+      showDetail();
+      draw();
+      fit();
+    };
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && selection) {
+        const old = selection;
+        select(null);
+        requestAnimationFrame(() =>
+          [...$("world").querySelectorAll("[tabindex]")]
+            .find((n) => (n.dataset.nodeId || n.dataset.edgeId) === old.id)
+            ?.focus({ preventScroll: true }),
+        );
+      }
+    });
+    new ResizeObserver(() => fit()).observe($("canvas"));
+    async function update() {
+      try {
+        const response = await fetch("api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("Unavailable · " + response.status);
+        const next = await response.json(),
+          nextSignature = JSON.stringify(next.graph);
+        snapshot = next;
+        $("health").textContent = next.worker.state;
+        $("health").classList.remove("error");
+        const error =
+          next.worker.last_job?.result?.error ||
+          next.worker.last_job?.pipeline_error;
+        $("health").title = error || "Revision " + next.graph.revision;
+        if (error) {
+          $("health").textContent = "Error";
+          $("health").classList.add("error");
+        }
+        if (!initialized) {
+          for (const t of next.graph.topics)
+            if (next.graph.records.length <= 12) expanded.add(t.id);
+          initialized = true;
+        }
+        if (signature !== nextSignature && !gesture) {
+          signature = nextSignature;
+          draw();
+          if (selection) {
+            const open = [...$("detail").querySelectorAll("details")]
+                .filter((d) => d.open)
+                .map((d) => d.querySelector("summary").textContent),
+              scroll = $("detail").scrollTop;
+            showDetail();
+            for (const d of $("detail").querySelectorAll("details"))
+              d.open = open.includes(d.querySelector("summary").textContent);
+            $("detail").scrollTop = scroll;
+          } else fit();
+        }
+      } catch (error) {
+        $("health").textContent = "Disconnected";
+        $("health").title = error.message;
+        $("health").classList.add("error");
+      }
+      setTimeout(update, 1500);
+    }
+    update();
+  </script>
+</html>

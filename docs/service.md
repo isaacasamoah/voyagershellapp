@@ -36,7 +36,7 @@ target/debug/voyager --state "$VOYAGER_STATE" send SESSION_ID request-001 \
   "Please use no tools and change no files. Reply with: Voyager connected."
 ```
 
-The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. Sending to an already-active thread is refused. Native input can race that check, so the returned native turn ID is authoritative; a send is not promised to create an independent task.
+The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. Sending to an already-active thread is refused by default. Explicit `send SESSION_ID REQUEST_ID MESSAGE --steer` uses `turn/steer` with the active turn ID instead; it does not cancel the turn. Native input can race that check, so the returned native turn ID is authoritative; a send is not promised to create an independent task.
 
 `serve` stays in the foreground unless your process manager launches it in the background. `start` instead runs it independently, and the Electron app uses that operation. No OS service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
 
@@ -59,7 +59,8 @@ independently owned native server as before.
 | `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
 | `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |
 | `shell-attach SESSION_ID` | Attach this terminal to the managed Bash byte transport |
-| `send SESSION_ID REQUEST_ID MESSAGE` | Record the request and send text; acceptance is separate from observed completion |
+| `send SESSION_ID REQUEST_ID MESSAGE [--steer]` | Send when idle, or explicitly steer an active turn; acceptance is separate from completion |
+| `collab status\|pause\|run\|assign\|import\|resolve [JSON_FILE]` | Control the opt-in [collaboration trial](collaboration-trial.md); mutations return queued job receipts |
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
 | `watch --pretty [CURSOR]` | Readable You/Agent messages and lifecycle lines, with terminal control characters escaped |
@@ -85,7 +86,7 @@ Reusing a request ID with the same inputs returns the prior submission record. C
 
 ## What is recorded
 
-The service uses the [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server) over a WebSocket on a Unix socket. It checks that a thread is loaded before subscribing with `thread/resume` and `excludeTurns`, without configuration overrides. It sends text using `turn/start`. A thread disappearing between the loaded check and subscription remains an upstream race; there is no atomic attach-only operation established by this prototype.
+The service uses the [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server) over a WebSocket on a Unix socket. It checks that a thread is loaded before subscribing with `thread/resume` and `excludeTurns`, without configuration overrides. It sends text using `turn/start`, or explicit active-turn steering using `turn/steer`. A thread disappearing between the loaded check and subscription remains an upstream race; there is no atomic attach-only operation established by this prototype.
 
 The `conversation-v1` capture policy allows:
 
