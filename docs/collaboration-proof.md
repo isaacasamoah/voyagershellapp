@@ -15,8 +15,8 @@ or a five-agent collaboration improvement.
 | Direct active-turn steering | A real Codex agent received an update during a bounded wait. The returned turn ID matched the original turn, and its final reply incorporated the supplied test marker. |
 | Automatic packet delivery | Jev subscribed a real test agent. The outbox delivered one grouped evidence packet into its existing active turn. Its response named the notification ID, explicitly used the inline receiving skill and compared the evidence. |
 | Live source adapter | Follow mode captured actual completed native messages and gaps. The accepted outbox packet was absent from extracted source rows; the agent response remained available. |
-| Native terminal window | Both test runtimes started, but native window opening failed in this environment. Native event and response proof succeeded; no successful window-opening proof is claimed. |
-| Inspector | Graph, source, subscribers and actual model-call views opened in Chrome. Private source text was rendered as text, with evidence inspection. |
+| Native terminal window | The original trial daemon lacked the desktop session environment. Restarting with the session manager's display/authentication environment repaired opening through the Voyager CLI. A new real Codex viewer was visually inspected; background and reopen retained its runtime PID, session and native thread. The test instance was then stopped. |
+| Inspector | The interface is a full-page graph with progressive topic, record and edge inspection. Evidence, source events, subscriber packets and metadata are revealed on selection. Private source text is rendered as text. |
 
 The initial conversation trial plus relevance retests used 24 provider calls,
 27,471 input tokens and 2,426 output tokens; summed HTTP time was 40.8 seconds.
@@ -32,7 +32,7 @@ private inspector access, and the existing service/disconnect tests. The separat
 ignored native lifecycle/desktop suite is not included in the normal test count.
 
 Still unproved: extraction recall on a labelled corpus, portable adapters beyond
-Codex, live conflict resolution by an agent under load, reliable window opening in
-this environment, and five-worker quality/latency/cost comparisons. Serial model
+Codex, live conflict resolution by an agent under load, other desktop environments,
+and five-worker quality/latency/cost comparisons. Serial model
 calls are a deliberately measurable prototype bottleneck. Several new items of
 the same kind in one event are surfaced as `needs_split`, not silently merged.

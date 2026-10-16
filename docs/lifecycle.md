@@ -60,6 +60,19 @@ Voyager launches dedicated Ghostty XWayland clients with
 work. Global settings and external terminals are untouched. See
 [Ghostty's configuration](https://ghostty.org/docs/config/reference#confirm-close-surface).
 
+The service inherits its desktop environment when it starts. Launch it from the
+desktop session with that session's `DISPLAY`, `XAUTHORITY`, `XDG_RUNTIME_DIR` and
+`DBUS_SESSION_BUS_ADDRESS`. A headless automation shell may omit these even when
+a desktop is running. Setting them on a later CLI call does not change an already
+running daemon. Do not guess another user's display or copy unrelated environment
+variables. Restart a disposable service from the correct session; shutdown refuses
+while it owns live work.
+
+Before spawning Ghostty, the service checks its X11 connection. An unavailable
+desktop returns `desktop_unavailable` with the underlying error and leaves the
+runtime running, without spawning an unidentified viewer. `--background` remains
+available without a desktop. Ghostty diagnostics go to the service's private log.
+
 ## Capture cutoff
 
 Removal commits its cutoff and `session.removed` event in one transaction; failed

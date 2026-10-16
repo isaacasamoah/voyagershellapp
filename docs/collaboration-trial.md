@@ -44,10 +44,16 @@ voyager=./target/debug/voyager
 "$voyager" --state "$trial" collab status
 ```
 
-Open the returned `url`. It is a private, loopback-only, read-only inspector with
-Graph, Source, Subscribers and Calls views. Click a record or relationship to
-inspect evidence, provenance and responsibility. Requests, responses, token usage
-and elapsed milliseconds are retained. Currency cost is not estimated.
+Open the returned `url`. It is a private, loopback-only, read-only knowledge graph.
+Select a topic to expand or collapse its knowledge. Select a record or edge to
+reveal its contents, then expand evidence, subscriber updates or metadata as
+needed. Evidence opens the cited source; record details also expose associated
+model requests and responses from the latest 30 calls. The graph includes all
+topics and expands small trials initially. Larger trials start with topics;
+search finds knowledge across collapsed topics. Drag nodes or the background,
+zoom, and use Fit to restore the view. Nodes and edges support keyboard selection.
+Provider token usage and elapsed milliseconds are retained; currency cost is not
+estimated.
 
 Commands return a **queued job receipt**; `collab status` shows the current job
 and outcome. Assignment and import run in FIFO order. A paused worker performs no

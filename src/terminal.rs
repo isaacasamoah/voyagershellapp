@@ -18,12 +18,13 @@ fn ghostty(cwd: &Path, title: &str) -> Command {
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::inherit())
         .process_group(0);
     command
 }
 
 pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
+    desktop()?;
     let cwd = session["cwd"]
         .as_str()
         .context("missing instance directory")?;
@@ -44,12 +45,21 @@ pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
         .spawn()
         .context("open native Ghostty client")
 }
+
+fn desktop() -> Result<(x11rb::rust_connection::RustConnection, usize)> {
+    x11rb::connect(None).map_err(|error| {
+        anyhow::anyhow!(
+            "desktop_unavailable: cannot connect to DISPLAY={:?}: {error}; start the Voyager service from the desktop session with its DISPLAY and XAUTHORITY environment, or create with --background",
+            std::env::var_os("DISPLAY")
+        )
+    })
+}
 pub fn window(pid: u32) -> Result<Option<u32>> {
     use x11rb::{
         connection::Connection,
         protocol::xproto::{AtomEnum, ConnectionExt},
     };
-    let (conn, screen) = x11rb::connect(None).context("connect to desktop")?;
+    let (conn, screen) = desktop()?;
     let root = conn.setup().roots[screen].root;
     let atom = |name: &[u8]| -> Result<u32> { Ok(conn.intern_atom(false, name)?.reply()?.atom) };
     let clients = conn
@@ -87,7 +97,7 @@ fn request(pid: u32, name: &[u8]) -> Result<u32> {
         protocol::xproto::{ClientMessageEvent, ConnectionExt, EventMask},
     };
     let window = window(pid)?.context("outcome_unknown: terminal window is not identified")?;
-    let (conn, screen) = x11rb::connect(None)?;
+    let (conn, screen) = desktop()?;
     let root = conn.setup().roots[screen].root;
     let atom = conn.intern_atom(false, name)?.reply()?.atom;
     conn.send_event(
@@ -120,6 +130,6 @@ pub fn close(pid: u32) -> Result<u32> {
 
 pub fn exists(window: u32) -> Result<bool> {
     use x11rb::protocol::xproto::ConnectionExt;
-    let (conn, _) = x11rb::connect(None)?;
+    let (conn, _) = desktop()?;
     Ok(conn.get_window_attributes(window)?.reply().is_ok())
 }

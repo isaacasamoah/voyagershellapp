@@ -195,6 +195,7 @@ impl Fixture {
         self.service = Some(
             Command::new(env!("CARGO_BIN_EXE_voyager"))
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
+                .env("DISPLAY", "voyager-invalid-display")
                 .env(
                     "VOYAGER_CODEX_BIN",
                     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),
@@ -250,6 +251,32 @@ impl Fixture {
         wait(|| child.try_wait().unwrap().is_some());
         self.service.take();
     }
+}
+
+#[test]
+fn unavailable_desktop_keeps_runtime_and_refuses_viewer_before_spawn() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","kind":"shell","request_id":"headless-create","name":"Headless proof","cwd":f.dir}));
+    assert_eq!(created["state"], "partial");
+    assert_eq!(created["runtime"], "running");
+    assert_eq!(created["window"], "closed");
+    assert!(created["pid"].is_null());
+    assert!(
+        created["error"]
+            .as_str()
+            .unwrap()
+            .contains("desktop_unavailable")
+    );
+    assert!(created["error"].as_str().unwrap().contains("XAUTHORITY"));
+    let session = created["session_id"].clone();
+    let opened = f.call(json!({"op":"open","session_id":session,"terminal":"ghostty"}));
+    assert_eq!(opened["state"], "partial");
+    assert_eq!(opened["runtime"], "running");
+    assert!(opened["pid"].is_null());
+    let stopped = f.call(json!({"op":"stop-instance","session_id":session}));
+    assert_eq!(stopped["state"], "completed");
+    assert_eq!(stopped["runtime"], "stopped");
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
