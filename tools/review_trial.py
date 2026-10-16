@@ -280,7 +280,7 @@ def native_settings(thread):
     return None
 
 
-def run(root, label):
+def run(root, label, require_presentation=False):
     manifest = load(root)
     check(root)
     if manifest["rehearsal"] != "passed":
@@ -312,20 +312,22 @@ def run(root, label):
         )
     directory = root / label
     wrapper = directory / "codex-pinned"
+    settings = [
+        "-c",
+        'model="' + manifest["model"] + '"',
+        "-c",
+        'model_reasoning_effort="' + manifest["effort"] + '"',
+        "-c",
+        "check_for_update_on_startup=false",
+    ]
     wrapper.write_text(
-        "#!/usr/bin/env python3\nimport os, sys\nos.execv("
+        "#!/usr/bin/env python3\nimport os, sys\na = sys.argv[1:]\ns = "
+        + repr(settings)
+        + "\nos.execv("
         + repr(manifest["codex"])
-        + ", "
-        + repr(
-            [
-                manifest["codex"],
-                "-c",
-                'model="' + manifest["model"] + '"',
-                "-c",
-                'model_reasoning_effort="' + manifest["effort"] + '"',
-            ]
-        )
-        + " + sys.argv[1:])\n"
+        + ", ["
+        + repr(manifest["codex"])
+        + "] + (a + s if a and a[0] == 'app-server' else s + a))\n"
     )
     wrapper.chmod(0o700)
     arm["phase"] = "starting"
@@ -440,6 +442,19 @@ def run(root, label):
                 directory / "graph-run-receipt.json",
                 cli(manifest, arm, "collab", "run", config),
             )
+        if require_presentation:
+            arm["phase"] = "presentation"
+            save(root / "manifest.json", manifest)
+            ready = directory / "presentation-ready.json"
+            deadline = time.monotonic() + 300
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(1)
+            if not ready.exists():
+                raise RuntimeError(
+                    "Presentation was not confirmed before setup deadline"
+                )
+            arm["presentation"] = json.loads(ready.read_text())
+        manifest["state"] = "running"
         arm["started_at"] = time.time()
         arm["phase"] = "running"
         save(root / "manifest.json", manifest)
@@ -559,6 +574,7 @@ def main():
         command.add_argument("root", type=Path)
         if name == "run":
             command.add_argument("arm", choices=["A", "B"])
+            command.add_argument("--require-presentation", action="store_true")
         if name == "rehearsal":
             command.add_argument("evidence", type=Path)
     args = parser.parse_args()
@@ -568,7 +584,7 @@ def main():
     elif args.action == "check":
         check(args.root)
     elif args.action == "run":
-        run(args.root, args.arm)
+        run(args.root, args.arm, args.require_presentation)
     elif args.action == "rehearsal":
         evidence = json.loads(args.evidence.read_text())
         required = (

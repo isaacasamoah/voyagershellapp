@@ -56,6 +56,27 @@ pub fn validate_composition(
     Ok(())
 }
 
+pub fn accept_composition(
+    db: &Db,
+    event: &str,
+    c: &Composition,
+    window: &[SourceEvent],
+    kind: &str,
+    topics: &[Topic],
+) -> Result<bool> {
+    if let Err(error) = validate_composition(c, window, kind, topics) {
+        db.attempt(
+            event,
+            "validation",
+            &json!({"kind":kind,"composition":c}),
+            &json!({"rejected":true,"error":error.to_string()}),
+            0,
+        )?;
+        return Ok(false);
+    }
+    Ok(c.assessment == "supported")
+}
+
 fn topic_matches(
     db: &Db,
     models: &Models,
@@ -151,8 +172,14 @@ pub fn process(
             &graph.topics,
         )?;
         let composition=models.compose(db,&event.event_id,json!({"kind":kind,"source":state,"matched_topic_ids":matched,"existing_topics":graph.topics}))?;
-        validate_composition(&composition, &window, kind, &graph.topics)?;
-        if composition.assessment != "supported" {
+        if !accept_composition(
+            db,
+            &event.event_id,
+            &composition,
+            &window,
+            kind,
+            &graph.topics,
+        )? {
             continue;
         }
         let mut topics = matched.clone();
