@@ -51,6 +51,11 @@ and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that work
 
 ## Checks
 
+This experiment branch also contains a browser-based
+[collaboration visual proposal](docs/collaboration-experiment.md). It illustrates
+the extraction flow and a five-worker comparison using example data; no model
+calls, worker orchestration or collaboration service are implemented by it.
+
 On Linux, install Rust, a C linker and Python 3.11+. Then:
 
 ```sh

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'"
+    />
+    <title>Voyager · Collaboration experiment</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="preview.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class="brand" href="#view=harness" aria-label="Voyager collaboration experiment"
+          ><span class="brand-mark">✳</span> VOYAGER<span class="brand-sub">
+            / collaboration lab</span
+          ></a
+        >
+        <span class="draft"><i></i> Interactive proposal · example data</span>
+      </header>
+      <nav aria-label="Visual specifications">
+        <button class="tab selected" data-view="harness" aria-pressed="true">
+          <span>01</span> How knowledge moves
+        </button>
+        <button class="tab" data-view="teams" aria-pressed="false">
+          <span>02</span> How we test collaboration
+        </button>
+        <span class="nav-note">Experiment branch · no model calls or workers</span>
+      </nav>
+      <section id="harness" aria-labelledby="harness-title">
+        <div class="heading-row">
+          <div>
+            <p class="eyebrow">THE HARNESS</p>
+            <h1 id="harness-title">A conversation becomes shared knowledge.</h1>
+          </div>
+          <label class="scenario-label"
+            >Example<select id="scenario">
+              <option value="decision">A decision changes</option>
+              <option value="discovery">A discovery challenges a finding</option>
+              <option value="quiet">An acknowledgement adds nothing</option>
+            </select></label
+          >
+        </div>
+        <div class="canvas harness-canvas">
+          <div class="canvas-top">
+            <span><i class="dot mint"></i> Completed events only</span>
+            <div class="window-control" role="group" aria-label="Proposed context window">
+              <span>Rolling window</span><button data-window="2k">2k</button
+              ><button class="selected" data-window="4k" aria-pressed="true">4k</button
+              ><button data-window="8k">8k</button>
+            </div>
+          </div>
+          <svg
+            id="flow"
+            viewBox="0 0 1340 530"
+            role="group"
+            aria-label="Interactive harness diagram. Select a stage to see its input and output."
+          ></svg>
+          <div class="transport">
+            <button id="play">▶ Play example</button><button id="step">Step →</button
+            ><button id="reset" class="quiet-button">↺ Reset</button
+            ><span id="step-status" role="status"
+              >Select a stage, or play the illustrated sequence.</span
+            ><span class="simulation-label">Illustration, not a recorded run</span>
+          </div>
+        </div>
+        <aside class="inspector" aria-live="polite">
+          <div>
+            <span class="eyebrow" id="detail-kicker">01 / SOURCE</span>
+            <h2 id="detail-title">Read the event in context</h2>
+            <p id="detail-description"></p>
+          </div>
+          <div class="detail-column">
+            <span class="eyebrow">WHAT GOES IN</span>
+            <p id="detail-input"></p>
+          </div>
+          <div class="detail-column">
+            <span class="eyebrow">WHAT COMES OUT</span>
+            <p id="detail-output"></p>
+          </div>
+        </aside>
+        <footer class="view-note">
+          Jev makes typed judgments. Sol writes evidence-linked statements. The harness stores,
+          routes and records explicit resolutions.
+        </footer>
+      </section>
+      <section id="teams" hidden aria-labelledby="teams-title">
+        <div class="heading-row">
+          <div>
+            <p class="eyebrow">THE EXPERIMENT</p>
+            <h1 id="teams-title">Same task. Five workers. What changes?</h1>
+          </div>
+          <button id="preview-update">▶ Preview a shared update</button>
+        </div>
+        <div class="task-strip">
+          <span class="task-icon">⌘</span><strong>Build a reliable export flow</strong
+          ><span>Example task · two independent runs · fresh workspace + sessions in each</span>
+        </div>
+        <div class="comparison">
+          <article class="arm arm-on">
+            <div class="arm-heading">
+              <div>
+                <span class="eyebrow">RUN A</span>
+                <h2>Collaboration on <span class="on-tag">+ shared updates</span></h2>
+              </div>
+              <span class="unrun">Not run</span>
+            </div>
+            <svg
+              id="team-on"
+              viewBox="0 0 660 340"
+              role="group"
+              aria-label="Five workers with a collaboration harness. Select a worker to inspect its proposed inbox."
+            ></svg>
+            <p class="arm-caption">Source events → Jev + Sol → graph → relevant recipients</p>
+          </article>
+          <article class="arm arm-off">
+            <div class="arm-heading">
+              <div>
+                <span class="eyebrow">RUN B</span>
+                <h2>Collaboration off <span class="off-tag">baseline</span></h2>
+              </div>
+              <span class="unrun">Not run</span>
+            </div>
+            <svg
+              id="team-off"
+              viewBox="0 0 660 340"
+              role="group"
+              aria-label="Five workers with the same ordinary orchestration but without added collaboration updates."
+            ></svg>
+            <p class="arm-caption">
+              Same task instructions and ordinary communication. No added graph feed.
+            </p>
+          </article>
+        </div>
+        <div class="inspection-grid">
+          <article class="graph-panel">
+            <div class="panel-title">
+              <span class="eyebrow">SHARED KNOWLEDGE / RUN A</span
+              ><span class="fixture-tag">Example</span>
+            </div>
+            <svg
+              id="knowledge-graph"
+              viewBox="0 0 640 260"
+              role="group"
+              aria-label="Example export decisions and their contradiction. Select a node or connection."
+            ></svg>
+          </article>
+          <article class="inbox-panel">
+            <div class="panel-title">
+              <span class="eyebrow" id="inbox-title">INBOX PREVIEW / API WORKER</span
+              ><span class="fixture-tag">Would send</span>
+            </div>
+            <h3 id="inbox-heading">Choose a worker to inspect delivery.</h3>
+            <p id="inbox-text">
+              Preview an update to see the packet and why this worker would receive it.
+            </p>
+            <div id="recipient-reasons" class="reasons"></div>
+            <div id="resolution-actions" hidden>
+              <button data-outcome="adopt">Adopt new decision</button
+              ><button data-outcome="retain">Keep earlier decision</button
+              ><button data-outcome="scope">Different conditions</button>
+            </div>
+            <p id="inbox-footnote" class="muted">
+              Five worker identities are illustrative. Nothing is sent to a live session.
+            </p>
+          </article>
+        </div>
+        <div class="evaluation">
+          <div><span class="eyebrow">COMPARE OUTCOMES</span><strong>Did sharing help?</strong></div>
+          <div><span>Task correctness</span><b>— / —</b></div>
+          <div><span>Rework</span><b>— / —</b></div>
+          <div><span>Time + total cost</span><b>— / —</b></div>
+          <div><span>Human interruptions</span><b>— / —</b></div>
+          <span class="pending">Measured after real trials</span>
+        </div>
+        <footer class="view-note">
+          Same models, tools, brief and work-agent budget. Count harness costs separately. Compare
+          blind against the same checks; repeat before drawing conclusions.
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>
