@@ -1,0 +1,8 @@
+{
+  "session_id": "synthetic-export-team",
+  "brief": "Design the export API request behavior and compare whether it should complete synchronously or return a background-job identifier.",
+  "ticket": "SYNTHETIC-EXPORT-1",
+  "supervisor": null,
+  "delivery": false,
+  "delivery_mode": "idle"
+}

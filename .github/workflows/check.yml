@@ -25,4 +25,5 @@ jobs:
         run: |
           npm ci
           npm run format:check
+          npx prettier --check ../src/collaboration/inspector.html ../examples/collaboration/*.json
           npm test

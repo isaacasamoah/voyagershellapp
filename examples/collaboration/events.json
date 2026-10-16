@@ -1,0 +1,26 @@
+[
+  {
+    "event_id": "fixture-1",
+    "session_id": "synthetic-export-team",
+    "role": "user",
+    "text": "Decision for the export API: every export request, including large exports, must run synchronously and return the completed download. Do not return a job identifier or queue the export. This applies to the upcoming release."
+  },
+  {
+    "event_id": "fixture-2",
+    "session_id": "synthetic-export-team",
+    "role": "assistant",
+    "text": "In the export benchmark I observed that 50,000-row exports take 42 seconds, while the gateway terminates requests after 30 seconds. Small 100-row exports finish in 0.2 seconds. These measurements are from the release configuration."
+  },
+  {
+    "event_id": "fixture-3",
+    "session_id": "synthetic-export-team",
+    "role": "assistant",
+    "text": "I have decided that the upcoming release must queue every export request and immediately return a job identifier. The export endpoint will never wait for the completed download. This conflicts with the synchronous requirement; I need the user to confirm whether to change that requirement."
+  },
+  {
+    "event_id": "fixture-4",
+    "session_id": "synthetic-export-team",
+    "role": "user",
+    "text": "Thanks."
+  }
+]

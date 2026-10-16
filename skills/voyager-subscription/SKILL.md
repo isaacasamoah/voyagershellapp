@@ -35,13 +35,17 @@ response using the supplied IDs and expected graph revision:
   "voyager_resolution": {
     "notification_id": "supplied notification ID",
     "conflict_id": "supplied conflict ID",
-    "expected_revision": "supplied revision",
+    "expected_revision": 42,
     "decision_ids": ["supplied decision ID", "supplied decision ID"],
     "outcome": "adopt_new",
     "rationale": "Explain the evidence and conditions supporting this choice."
   }
 }
 ```
+
+Replace `42` with the numeric `graph_revision` in the packet. If a relationship
+has `requires_user: true`, ask the user and return `needs_input`; do not choose
+on their behalf. A user records the final resolution through the trial CLI.
 
 Other outcomes are `retain_existing`, `different_conditions` and `needs_input`.
 For `different_conditions`, state each decision's applicable conditions in the

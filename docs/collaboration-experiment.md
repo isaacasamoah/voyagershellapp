@@ -3,7 +3,8 @@
 This branch contains an interactive design surface for a possible Voyager
 collaboration feature. It uses authored example data. It does not call Jev or
 OpenAI, capture conversation, start workers, send messages, or compare real
-task results. Normal Voyager service and desktop behavior is unchanged.
+task results. The separate [live trial](collaboration-trial.md) now implements the Rust pipeline.
+This page describes the earlier authored visual proposal only.
 
 Open `desktop/src/ui/collaboration/index.html` in a browser, or serve that
 directory on loopback:
@@ -25,7 +26,7 @@ after detection; it should not proceed to composition. Changing the window
 changes the proposed input label only, not measured model behavior. All metrics
 remain unmeasured. Click the captain in the collaboration arm to try resolutions.
 
-The future feature belongs in Voyager: Rust owns source cursors, model calls,
+The implemented trial follows this boundary: Rust owns source cursors, model calls,
 graph state, routing and resolution; Electron presents the experiment. Provider
 keys remain in the existing agent-secrets mechanism, never the renderer. The
 first actual run should replay one verified conversation before following live
@@ -73,10 +74,10 @@ The small trial supplies the full catalogue within a visible limit. Incomplete
 candidate coverage is not evidence for a new topic. Catalogue revision, supplied
 topic IDs, Jev judgments and Sol output stay attached to the call trace. Later
 retrieval and topic merging need their own evaluation; semantic matching is not
-a guarantee that duplicates never occur. There is no implemented registry yet.
+a guarantee that duplicates never occur. The live trial uses a bounded, single-writer registry.
 
 Several distinct findings in one
-window still need an agreed localization policy before the real harness is built.
+window still need a localization policy; the live trial marks them `needs_split`.
 Both comparison arms retain ordinary orchestration. Use fresh workspaces and
 sessions, the same task checks and work-agent budget, and disclose harness costs.
 Do not assume the arm with collaboration will win.
@@ -85,7 +86,7 @@ The [subscription delivery contract](subscription-notifications.md) defines dire
 native conversation messages headed **VoyagerShell subscription notification** and
 the accompanying [receiving skill](../skills/voyager-subscription/SKILL.md). Expand
 the transcript preview in the comparison view to inspect an example packet. This
-is a draft format and skill, not a working outbox or native integration. Preferences
+preview is illustrative; the live trial has an outbox and Codex integration. Preferences
 and subscription approval remain deferred.
 
 ## Observed in this prototype
@@ -97,5 +98,5 @@ comparison metrics unmeasured. Keyboard selection of the Tests worker showed one
 packet with two subscription reasons. These checks establish mockup behavior,
 not extraction quality, real routing, native Electron integration or agent gains.
 
-The existing nine desktop tests and desktop formatting check passed. No Rust
-source changed, so the Rust runtime checks were not rerun for this visual slice.
+The existing nine desktop tests and desktop formatting check passed. That visual slice changed no Rust source. Current Rust validation is recorded in
+the live trial proof notes.

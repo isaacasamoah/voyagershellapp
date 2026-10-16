@@ -30,16 +30,18 @@ is our starting point, and we’d love to build toward it with other developers.
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
-- Agent messages can start a turn only while the target is idle. Active-turn
-  steering is not implemented.
+- Agent messages wait for idle by default. Explicit `send ... --steer` appends
+  an update to an active native turn without cancelling it.
+- This experiment branch includes an opt-in [collaboration trial](docs/collaboration-trial.md):
+  real Jev/Sol extraction, evidence-linked knowledge, subscriptions and a live inspector.
 
 The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
-Captain/crew authority, supervisor priority, automatic native voice, knowledge
-extraction and shared graphs are later work. Voyager is an experimental prototype.
+Enforced captain/crew permissions, urgency-based delivery policy, automatic native
+voice and shared multi-user graphs remain future work. Voyager is an experimental prototype.
 
 ## Try it
 
@@ -53,8 +55,9 @@ and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that work
 
 This experiment branch also contains a browser-based
 [collaboration visual proposal](docs/collaboration-experiment.md). It illustrates
-the extraction flow and a five-worker comparison using example data; no model
-calls, worker orchestration or collaboration service are implemented by it.
+the extraction flow and a proposed five-worker comparison using example data.
+The separate [live trial](docs/collaboration-trial.md) runs the real service pipeline;
+the five-worker comparison has not been performed.
 
 On Linux, install Rust, a C linker and Python 3.11+. Then:
 

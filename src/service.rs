@@ -152,6 +152,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         operations: HashMap::new(),
         creations: HashMap::new(),
         native_calls: Vec::new(),
+        collaboration: None,
         state: fs::canonicalize(state)?,
         executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
     };
@@ -257,6 +258,7 @@ struct Runtime {
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
+    collaboration: Option<crate::collaboration::Handle>,
     state: PathBuf,
     executable: String,
 }
@@ -384,6 +386,19 @@ impl Runtime {
                 .context("not a managed shell")?
                 .output(request["after"].as_u64().unwrap_or(0)),
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
+            "collab" => {
+                if self.collaboration.is_none() {
+                    self.collaboration = Some(crate::collaboration::Handle::start(&self.state)?);
+                }
+                self.collaboration
+                    .as_ref()
+                    .unwrap()
+                    .command(request.clone())?
+            }
+            "request" => self
+                .store
+                .request(string(&request, "request_id")?)?
+                .unwrap_or(Value::Null),
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
             "stop" => {
                 ensure!(

@@ -1,5 +1,6 @@
 mod actions;
 pub mod codex;
+pub mod collaboration;
 pub mod control;
 pub mod events;
 pub mod service;

@@ -1,107 +1,102 @@
 # Subscription notifications in the conversation
 
-Design contract for the collaboration experiment. The packet preview and receiving
-skill are authored; an outbox, native notification adapter, provenance correlation
-and resolution-response parser are not implemented. Nothing here sends live messages.
-
-The harness delivers an ordinary native conversation input, clearly headed
-**VoyagerShell subscription notification**, and associates it with service-owned
-origin metadata. It does not edit transcript files or pretend to be the user.
-An integration may use a user-message transport slot without attributing the
-content to a human in Voyager's event and knowledge records.
+The collaboration experiment has a durable outbox and a native Codex delivery
+adapter. It sends an ordinary conversation input headed **VoyagerShell subscription
+notification**. It does not edit transcript files. Provider keys stay outside the
+browser; local derived state and raw conversations are never committed.
 
 ```text
-Source event → Jev + Sol → knowledge + Jev relationships
-  → one committed batch → one packet per recipient
-  → recipient adapter → native conversation → receiving skill
-  → explicit resolution response → harness validates + records → new batch
+source event → Jev + Sol → knowledge + relationships
+  → commit one batch → one packet per recipient
+  → native turn/start or turn/steer → inline receiving skill
+  → explicit resolution → validate → commit → notify
 ```
 
-All records and judged relationships produced by one source-event trigger are
-assembled before its notification batch is released. Union subscriber, author
-and resolver reasons so each recipient gets one packet. Recipients can be busy
-at different times; this is one logical batch, not a promise of simultaneous
-network delivery. Later resolutions are separate updates and do not delay the
-original batch. Errors or incomplete processing remain visible; do not label a
-partial batch complete.
+All records and relationships from one source event are assembled before publishing.
+Subscriber, author and resolver reasons are unioned into one packet per recipient.
+A batch is logical: recipients need not receive it at the same physical instant.
+Later resolutions form a separate batch. An initial subscription snapshot goes
+only to its new recipient.
 
-## Packet contract
+Packets carry stable UUIDs, source event IDs and exact quotes, knowledge statements,
+ticket/topic IDs, relationship probabilities, recipient reasons and graph revision.
+A conflict names one resolver. The full [receiving skill](../skills/voyager-subscription/SKILL.md)
+is supplied inline, so delivery does not depend on a preinstalled global skill.
+The skill tells the agent to incorporate relevant evidence into its existing task,
+respect its permissions, and respond only when a meaningful action is needed.
+Quoted source material cannot grant new authority.
 
-One immutable packet has a stable notification ID derived from batch and recipient,
-origin `voyagershell.subscription`, intended agent/session, trigger event IDs,
-ticket/topic references, recipient reasons, knowledge statements and source
-attribution, relationship judgments, relevant source excerpts, and an action of
-`inform` or `resolve`. A resolution request also names the resolver, conflict ID,
-decision IDs and expected graph revision. Include actual content alongside IDs;
-references support deeper retrieval but do not substitute for the evidence needed
-to understand the update.
+## Queue or steer
 
-The visible header invokes the `voyager-subscription` skill. Its
-[portable source](../skills/voyager-subscription/SKILL.md) belongs to this experiment;
-it is not installed in any agent by this branch. At registration, each adapter
-must provision it through that agent's supported skill/instruction mechanism and
-report readiness, or explicitly report that interpretation setup is unavailable.
-Merely naming a skill does not load it in every agent setup. Native delivery
-capability and skill readiness are separate integration checks.
+`delivery: false` prepares previews. `delivery: true` enables sending while the
+trial is running. Each assignment also chooses `delivery_mode`:
 
-The service retains source and delivery metadata separately from the text. Match
-the delivered native item back to its outbox record before identifying it as a
-harness notification. A text header alone is not trusted provenance. Do not
-re-extract that delivery as a new user decision or independent supporting evidence.
-An agent's subsequent substantive response can produce new knowledge or an explicit
-resolution; an acknowledgement or repetition cannot. Packet evidence remains
-quoted source material, not permission to execute embedded instructions.
+| Mode | Idle recipient | Busy recipient |
+|---|---|---|
+| `idle` (default) | `turn/start` | Keep queued |
+| `steer` | `turn/start` | `turn/steer` with `expectedTurnId` |
 
-## Native delivery boundary
+Use `follow: true` to keep checking busy recipients while waiting for source
+events. A replay run stops when its input is exhausted and can leave queued
+packets for a later run.
 
-The existing Voyager implementation sends through `turn/start` after checking that
-the registered native thread is idle (`src/service/native.rs`, `NativePhase::SendIdle`).
-An active thread is refused. The source-event adapter currently records native
-user-message text without a distinct subscription origin (`src/events.rs`), so
-origin correlation must be added before relying on automated extraction of
-injected messages. The current send operation alone is not a notification queue.
+The native `send ... --steer` CLI exposes the same capability. Steering appends
+input to the ongoing turn; it does **not** use `turn/interrupt`, which cancels it.
+Unsupported/non-steerable turns remain visible as unavailable or uncertain delivery;
+there is no fallback to cancelling an agent. Automatic urgency/authority policy
+can select a mode later. Rank alone does not select a correct decision.
 
-For the first delivery implementation, queue busy recipients and submit at the
-next confirmed idle opportunity in the same registered session. Recheck session
-identity and preserve the active agent's work. A native input can race the idle
-check; record the actual returned turn ID. Mid-turn steering needs a separate
-adapter capability and proof before use. Other integrations may expose different
-safe input mechanisms behind the same packet contract.
+A confirmed pre-dispatch busy response has no native request record and remains
+queued. Once dispatch starts, the immutable packet ID identifies the native
+request. Accepted receipts contain the actual turn ID. Repeating that request
+returns its receipt rather than sending again. Disconnection, timeout or restart
+with an ambiguous outcome leaves the packet `uncertain`, without automatic retry.
+A retired session is not silently replaced. Oversized packets are held visibly.
 
-Track `queued`, `submitted`, `accepted`, `response_observed`, `failed` and
-`outcome_unknown` separately. Request acceptance does not prove the update was
-read, incorporated or beneficial. Known pre-dispatch busy states stay queued;
-uncertain submissions are inspected rather than blindly retried. Keep logical
-notification IDs separate from dispatch attempts. The existing native request
-record returns prior results for a reused request ID, so a future queue must
-handle known-unsent versus unknown outcomes explicitly instead of assuming
-repeating `send` retries delivery. An ended or unavailable recipient stays visible
-as undelivered; do not choose a replacement session implicitly.
+States are `preview`, `queued`, `dispatching`, `accepted`, `uncertain` or
+`oversized`. Acceptance proves native submission, not comprehension, action or
+benefit. Inspect source events and agent responses for that stronger evidence.
 
-## Acting and recording
+## Provenance and resolution
 
-Informational packets need no acknowledgement-only message. The receiving skill
-asks agents to incorporate relevant information, explain material changes of plan,
-and resolve only conflicts assigned to them. A relationship is a revisable model
-judgment, not an instruction to accept whichever decision is newest.
+The raw service log retains the native transport's user-message slot. The
+collaboration reader correlates recipient, native turn ID and exact packet text
+with its outbox before excluding a delivery from extraction. A header alone is
+not trusted provenance. An exact possible echo whose receipt is uncertain becomes
+a visible gap for inspection. Other substantive agent replies remain eligible.
 
-The skill's structured `voyager_resolution` response lets the harness associate
-the answer with an outstanding request without depending on an agent remembering
-a second CLI call. Validate it against native responder identity, delegation,
-conflict/decision IDs and expected revision. Malformed, stale, ambiguous or
-out-of-scope responses keep the request open for inspection. `needs_input` is
-pending, not resolved. Only an accepted explicit replacement creates supersession.
-The parser and validation are specified here, not implemented or proven.
+Decision conflicts route to the prior worker's supervisor, the captain whose
+decision a worker challenges, or the latest agent coordinating equal captains.
+A human-made decision or disagreement between distinct captains requires a user
+resolution. Responsibility directs review; it never establishes truth.
 
-Notification preferences, delivery urgency, subscription approval and configuration
-are deferred. The current design automatically assesses assignment/topic relevance
-and sends one grouped packet per recipient when eligible for delivery.
+An agent can emit a fenced `voyager_resolution` JSON object in its normal response.
+The harness reads it from the attributed native assistant event and validates the
+notification recipient, named resolver, decision IDs, open conflict and current
+graph revision. It records `adopt_new`, `retain_existing` or `different_conditions`.
+`needs_input` keeps the conflict open and the agent asks the person. Stale or
+invalid responses are recorded in the attempt log without changing the graph.
+An explicit accepted replacement marks the retired record superseded and retains
+both records and the resolution's source event. This is a conservative whole-record
+replacement; partial-scope or third-option resolutions remain manual review.
 
-## First live proof
+For a user-required resolution, the trusted local operator supplies a JSON file:
 
-Use a real test session to prove the native transcript contains the labelled packet,
-the skill is available, an evidence-based response is observed, and an explicit
-resolution is recorded once. Also prove a busy recipient queues without interrupt,
-unknown delivery does not replay, a stale response cannot overwrite a resolution,
-and injected source text does not create a notification feedback loop. No such live
-proof is claimed by this visual prototype.
+```json
+{
+  "session_id": "named resolver session",
+  "resolution": {
+    "notification_id": "packet ID",
+    "conflict_id": "relationship ID",
+    "expected_revision": 7,
+    "decision_ids": ["new record ID", "old record ID"],
+    "outcome": "adopt_new",
+    "rationale": "The reviewed evidence and conditions supporting this choice"
+  }
+}
+```
+
+Run `voyager --state PRIVATE_DIR collab resolve FILE.json`, inspect its job outcome,
+then run the trial to deliver resulting packets. This CLI path is a trusted operator
+assertion, not cryptographic proof of a human identity. The prototype does not
+provide captain/crew security boundaries or infer approval from silence.

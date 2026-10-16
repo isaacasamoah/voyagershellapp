@@ -13,6 +13,8 @@ Operations:
 - create codex|shell REQUEST_ID NAME ABSOLUTE_DIRECTORY: starts, registers, captures and opens by default. Use --background for no window.
 - open SESSION_ID ghostty: opens its native interface; does not dock.
 - send SESSION_ID REQUEST_ID MESSAGE: starts a turn in an idle Codex instance.
+  Add --steer only when authorized to deliver during active work. It uses the
+  current turn ID and preserves the ongoing turn; it is not cancellation.
 - launch PARENT_SESSION REQUEST_ID DIRECTORY PROMPT: creates a Codex worker
   and submits one initial task, then opens a native window. Use --background for no window. Inspect initial_request; accepted is not completed.
 - shell-exec SESSION_ID REQUEST_ID COMMAND: submits one line to the SAME Bash

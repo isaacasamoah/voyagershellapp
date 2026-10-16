@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Voyager · Collaboration trial</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font:
+        15px/1.5 ui-monospace,
+        SFMono-Regular,
+        monospace;
+      background: #0c101b;
+      color: #edf1ff;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 32px;
+      max-width: 1800px;
+      margin: auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0;
+      color: #8df0df;
+    }
+    h2 {
+      font-size: 17px;
+      margin: 0 0 16px;
+    }
+    p {
+      color: #b4bfd7;
+    }
+    nav {
+      display: flex;
+      gap: 8px;
+      margin: 28px 0;
+      flex-wrap: wrap;
+    }
+    button {
+      font: inherit;
+      cursor: pointer;
+      color: inherit;
+      background: #172239;
+      border: 1px solid #344564;
+      padding: 10px 16px;
+      border-radius: 7px;
+    }
+    button[aria-selected="true"] {
+      border-color: #8df0df;
+      color: #8df0df;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+      gap: 24px;
+    }
+    .card {
+      background: #131b2c;
+      border: 1px solid #293650;
+      border-radius: 9px;
+      padding: 20px;
+      margin-bottom: 15px;
+      overflow-wrap: anywhere;
+    }
+    .muted {
+      color: #99a7c5;
+    }
+    .pill {
+      border: 1px solid #465678;
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-right: 8px;
+      font-size: 12px;
+    }
+    .decision {
+      color: #8df0df;
+    }
+    .discovery {
+      color: #c7adff;
+    }
+    .contradicts,
+    .challenges,
+    .error {
+      color: #ffb39f;
+    }
+    .supports {
+      color: #9ae5bd;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font:
+        12px/1.6 ui-monospace,
+        monospace;
+      max-height: 480px;
+      overflow: auto;
+    }
+    details {
+      margin-top: 12px;
+    }
+    summary {
+      cursor: pointer;
+      color: #8df0df;
+    }
+    .graph {
+      width: 100%;
+      height: 420px;
+      display: block;
+      border: 1px solid #293650;
+      border-radius: 9px;
+      background: #101726;
+      margin-bottom: 20px;
+    }
+    .graph text {
+      font:
+        12px ui-monospace,
+        monospace;
+      fill: #edf1ff;
+    }
+    .graph .node {
+      cursor: pointer;
+    }
+    .metric {
+      font-size: 24px;
+      color: #8df0df;
+    }
+    .metrics {
+      display: flex;
+      gap: 26px;
+      flex-wrap: wrap;
+      margin: 20px 0;
+    }
+    .notice {
+      border-left: 3px solid #c7adff;
+      padding-left: 15px;
+    }
+    .empty {
+      padding: 24px;
+      color: #99a7c5;
+      border: 1px dashed #344564;
+    }
+    a {
+      color: #8df0df;
+    }
+    #health {
+      max-width: 440px;
+      text-align: right;
+    }
+    #detail {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+    }
+    code {
+      color: #8df0df;
+    }
+    @media (max-width: 850px) {
+      body {
+        padding: 16px;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      header {
+        display: block;
+      }
+      #health {
+        text-align: left;
+      }
+      .graph {
+        height: 300px;
+      }
+      #detail {
+        position: static;
+      }
+    }
+  </style>
+  <header>
+    <div>
+      <div class="muted">VOYAGER / EXPERIMENT</div>
+      <h1>Knowledge in motion</h1>
+      <p>Source → Jev → Sol → topics & relationships → subscribers</p>
+    </div>
+    <div id="health">Connecting to the local service…</div>
+  </header>
+  <div class="notice">
+    Live inspector · model judgments are provisional. Delivery receipts prove
+    acceptance, not that an agent acted. Controls run through the local
+    <code>voyager collab</code> CLI.
+  </div>
+  <div id="metrics" class="metrics"></div>
+  <nav id="tabs"></nav>
+  <main class="layout">
+    <section id="view"></section>
+    <aside id="detail" class="card">
+      <h2>Inspect the evidence</h2>
+      <p>
+        Select a knowledge item or relationship. Exact source quotes and model
+        requests stay available.
+      </p>
+    </aside>
+  </main>
+  <script>
+    let snapshot = null,
+      tab = "Graph",
+      selected = null;
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, text, cls) => {
+      const n = document.createElement(tag);
+      if (text !== undefined) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    };
+    const short = (s) => (s.length > 48 ? s.slice(0, 45) + "…" : s);
+    function jsonDetails(title, value) {
+      const d = el("details");
+      d.append(el("summary", title), el("pre", JSON.stringify(value, null, 2)));
+      return d;
+    }
+    function inspect(value) {
+      selected = value.id || null;
+      $("detail").replaceChildren(
+        el("h2", "Evidence & attribution"),
+        el("pre", JSON.stringify(value, null, 2)),
+      );
+    }
+    function card(title, text, kind, value) {
+      const c = el("article", undefined, "card");
+      c.append(
+        el("span", kind, "pill " + kind),
+        el("h2", title),
+        el("p", text),
+      );
+      if (value) {
+        const b = el("button", "Inspect");
+        b.onclick = () => inspect(value);
+        c.append(b);
+      }
+      return c;
+    }
+    function drawGraph(g) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 900 430");
+      svg.classList.add("graph");
+      const defs = document.createElementNS(svg.namespaceURI, "defs");
+      for (const [id, color] of [
+        ["support", "#8df0df"],
+        ["challenge", "#ff9e91"],
+      ]) {
+        const m = document.createElementNS(svg.namespaceURI, "marker");
+        m.setAttribute("id", id);
+        m.setAttribute("viewBox", "0 0 10 10");
+        m.setAttribute("refX", "12");
+        m.setAttribute("refY", "5");
+        m.setAttribute("markerWidth", "5");
+        m.setAttribute("markerHeight", "5");
+        m.setAttribute("orient", "auto");
+        const p = document.createElementNS(svg.namespaceURI, "path");
+        p.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+        p.setAttribute("fill", color);
+        m.append(p);
+        defs.append(m);
+      }
+      svg.append(defs);
+      const ns = (name, attrs) => {
+        const n = document.createElementNS(svg.namespaceURI, name);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        svg.append(n);
+        return n;
+      };
+      const topics = g.topics.slice(0, 12),
+        records = g.records.slice(-24);
+      const pos = new Map();
+      topics.forEach((t, i) =>
+        pos.set(t.id, {
+          x: 160,
+          y: 35 + (i * 360) / Math.max(1, topics.length - 1),
+        }),
+      );
+      records.forEach((r, i) =>
+        pos.set(r.id, {
+          x: 480 + (i % 2) * 240,
+          y: 30 + Math.floor(i / 2) * 32,
+        }),
+      );
+      for (const r of records)
+        for (const t of r.topics) {
+          const a = pos.get(t),
+            b = pos.get(r.id);
+          if (a && b)
+            ns("line", {
+              x1: a.x,
+              y1: a.y,
+              x2: b.x,
+              y2: b.y,
+              stroke: "#425270",
+            });
+        }
+      for (const r of g.relations) {
+        const a = pos.get(r.from),
+          b = pos.get(r.to);
+        if (a && b) {
+          const line = ns("line", {
+            x1: a.x,
+            y1: a.y,
+            x2: b.x,
+            y2: b.y,
+            stroke: r.kind === "supports" ? "#8df0df" : "#ff9e91",
+            "stroke-width": 2,
+            "marker-end":
+              r.kind === "supports" ? "url(#support)" : "url(#challenge)",
+          });
+          line.onclick = () => inspect(r);
+        }
+      }
+      for (const item of [...topics, ...records]) {
+        const p = pos.get(item.id);
+        const circle = ns("circle", {
+          cx: p.x,
+          cy: p.y,
+          r: item.name ? 9 : 6,
+          fill: item.name
+            ? "#c7adff"
+            : item.kind === "decision"
+              ? "#8df0df"
+              : "#aebaff",
+          class: "node",
+        });
+        circle.setAttribute("tabindex", "0");
+        circle.setAttribute("role", "button");
+        circle.setAttribute(
+          "aria-label",
+          item.name || item.composition.statement,
+        );
+        circle.onclick = () => inspect(item);
+        circle.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inspect(item);
+          }
+        };
+        const label = ns("text", { x: p.x + 14, y: p.y + 4, class: "node" });
+        label.textContent = short(
+          item.name || item.composition.statement || item.id,
+        ).slice(0, p.x > 650 ? 22 : 30);
+        label.onclick = () => inspect(item);
+      }
+      return svg;
+    }
+    function render() {
+      if (!snapshot) return;
+      const g = snapshot.graph,
+        w = snapshot.worker;
+      $("health").replaceChildren(
+        el("strong", w.state),
+        el(
+          "div",
+          "Revision " +
+            g.revision +
+            " · " +
+            (w.remaining || 0) +
+            " events remaining",
+          "muted",
+        ),
+      );
+      if (w.processing)
+        $("health").append(
+          el("div", "Processing " + short(w.processing.event_id), "muted"),
+        );
+      if (w.last_job?.result?.error || w.last_job?.pipeline_error)
+        $("health").append(
+          el(
+            "div",
+            w.last_job.result?.error || w.last_job.pipeline_error,
+            "error",
+          ),
+        );
+      $("metrics").replaceChildren(
+        ...[
+          ["Topics", g.topics.length],
+          ["Knowledge", g.records.length],
+          [
+            "Open conflicts",
+            g.relations.filter((r) => r.kind === "contradicts" && !r.resolution)
+              .length,
+          ],
+          ["Packets", g.notifications.length],
+        ].map(([label, n]) => {
+          const d = el("div");
+          d.append(el("div", String(n), "metric"), el("div", label, "muted"));
+          return d;
+        }),
+      );
+      $("tabs").replaceChildren(
+        ...["Graph", "Source", "Subscribers", "Calls"].map((name) => {
+          const b = el("button", name);
+          b.setAttribute("aria-selected", String(tab === name));
+          b.onclick = () => {
+            tab = name;
+            render();
+          };
+          return b;
+        }),
+      );
+      const view = $("view");
+      view.replaceChildren();
+      if (tab === "Graph") {
+        view.append(
+          drawGraph(g),
+          el(
+            "p",
+            "Purple: topics · aqua: decisions · blue: discoveries · red: challenge / possible contradiction. Graph shows up to 12 topics and 24 recent records.",
+          ),
+        );
+        for (const r of [...g.records].reverse()) {
+          const c = card(
+            r.composition.statement || "Pending candidate",
+            r.status +
+              " · " +
+              (r.ticket || "Unticketed") +
+              " · " +
+              r.session_id,
+            r.kind,
+            r,
+          );
+          for (const edge of g.relations.filter(
+            (e) => e.from === r.id || e.to === r.id,
+          )) {
+            const b = el(
+              "button",
+              edge.kind +
+                (edge.resolution ? " · resolved" : "") +
+                " → " +
+                short(edge.to),
+              edge.kind,
+            );
+            b.onclick = () => inspect(edge);
+            c.append(b);
+          }
+          view.append(c);
+        }
+      }
+      if (tab === "Source") {
+        view.append(el("h2", "Completed source events · latest 100"));
+        for (const e of snapshot.events) {
+          const c = card(
+            e.event.role + " · " + e.event.event_id,
+            e.event.text,
+            e.status,
+            e,
+          );
+          if (e.error) c.append(el("p", e.error, "error"));
+          view.append(c);
+        }
+      }
+      if (tab === "Subscribers") {
+        for (const a of g.assignments)
+          view.append(
+            card(
+              a.session_id,
+              a.brief +
+                " · " +
+                a.topics.length +
+                " topics · " +
+                (a.delivery ? a.delivery_mode + " delivery" : "preview only"),
+              "assignment",
+              a,
+            ),
+          );
+        for (const n of [...g.notifications].reverse()) {
+          const c = card(n.recipient, n.reasons.join(" · "), n.state, n);
+          c.append(jsonDetails("Packet and native receipt", n));
+          view.append(c);
+        }
+      }
+      if (tab === "Calls") {
+        view.append(
+          el("h2", "Actual provider requests · latest 30"),
+          el(
+            "p",
+            "Elapsed time includes the HTTP request. Provider token usage is retained in each response; currency cost is not estimated.",
+          ),
+        );
+        for (const a of snapshot.attempts) {
+          const c = card(
+            a.stage,
+            (a.elapsed_ms / 1000).toFixed(2) + "s · " + a.event,
+            "request",
+            a,
+          );
+          c.append(
+            jsonDetails("Request", a.request),
+            jsonDetails("Response", a.response),
+          );
+          view.append(c);
+        }
+      }
+      if (!view.childElementCount)
+        view.append(
+          el(
+            "div",
+            "No results yet. Assign a session, import source events and run the trial.",
+            "empty",
+          ),
+        );
+    }
+    async function update() {
+      try {
+        const r = await fetch("api/state", { cache: "no-store" });
+        if (!r.ok) throw new Error("Inspector unavailable: " + r.status);
+        snapshot = await r.json();
+        const open = [...document.querySelectorAll("#view details")].filter(
+          (n) => n.open,
+        ).length;
+        if (!open) render();
+      } catch (e) {
+        $("health").textContent = e.message;
+      }
+      setTimeout(update, 1500);
+    }
+    update();
+  </script>
+</html>

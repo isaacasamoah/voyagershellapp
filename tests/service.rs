@@ -116,8 +116,19 @@ impl Fixture {
                                 let p=&request["params"];
                                 let result=match request["method"].as_str().unwrap() {
                                     "initialize" => json!({"userAgent":"fixture"}),
-                                    "thread/loaded/list" => json!({"data":["live-thread","other-thread"],"nextCursor":null}),
-                                    "thread/read" => json!({"thread":metadata(p["threadId"].as_str().unwrap())}),
+                                    "thread/loaded/list" => json!({"data":["live-thread","other-thread","busy-thread"],"nextCursor":null}),
+                                    "thread/read" => {
+                                        let mut t=metadata(p["threadId"].as_str().unwrap());
+                                        if p["threadId"]=="busy-thread" { t["status"]=json!({"type":"active"});t["turns"]=json!([{"id":"active-turn","status":"inProgress"}]); }
+                                        json!({"thread":t})
+                                    },
+                                    "turn/steer" => {
+                                        assert_eq!(p["threadId"],"busy-thread");
+                                        assert_eq!(p["expectedTurnId"],"active-turn");
+                                        assert_eq!(p["input"][0]["text"],"Subscription changed");
+                                        let mut c=count.lock().unwrap(); *c+=1;
+                                        json!({"turnId":"active-turn"})
+                                    },
                                     "thread/resume" => {
                                         assert_eq!(p["excludeTurns"],true);
                                         assert_eq!(p.as_object().unwrap().len(),2);
@@ -363,7 +374,7 @@ fn register_converse_isolate_restart_and_leave_native_owner_running() {
     f.halt();
     assert_eq!(
         Codex::connect(&f.socket).unwrap().loaded().unwrap(),
-        vec!["live-thread", "other-thread"]
+        vec!["live-thread", "other-thread", "busy-thread"]
     );
     f.start();
     assert_ne!(f.call(json!({"op":"status"}))["instance"], instance);
@@ -1141,4 +1152,76 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     );
     drop(db);
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn busy_delivery_is_unsent_until_explicit_steering_and_never_replayed() {
+    let mut f = Fixture::new();
+    f.start();
+    let session = f.call(json!({"op":"register","thread_id":"busy-thread"}))["session_id"].clone();
+    let request = json!({"op":"send","session_id":session,"request_id":"busy-send","message":"Subscription changed"});
+    assert!(
+        client(&f.dir, request.clone())
+            .unwrap_err()
+            .to_string()
+            .starts_with("busy:")
+    );
+    assert!(
+        f.call(json!({"op":"request","request_id":"busy-send"}))
+            .is_null()
+    );
+    let mut steering = request;
+    steering["delivery_mode"] = json!("steer");
+    let accepted = f.call(steering.clone());
+    assert_eq!(accepted["state"], "accepted");
+    assert_eq!(accepted["native_turn_id"], "active-turn");
+    assert_eq!(f.call(steering), accepted);
+    assert_eq!(*f.sends.lock().unwrap(), 1);
+}
+
+#[test]
+fn collaboration_control_and_private_inspector_work_without_model_keys() {
+    let mut f = Fixture::new();
+    f.start();
+    let receipt = f.call(json!({"op":"collab","action":"status"}));
+    let url = receipt["url"].as_str().unwrap();
+    let http = reqwest::blocking::Client::new();
+    let initial: Value = http
+        .get(format!("{url}api/state"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(initial["graph"]["records"], json!([]));
+    assert_eq!(
+        http.get(format!("{url}api/state"))
+            .header("Host", "evil.example")
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        http.get(format!("{url}api/state"))
+            .send()
+            .unwrap()
+            .headers()["cache-control"],
+        "no-store"
+    );
+    let assignment =
+        json!({"session_id":"replay","brief":"Build exports","ticket":"T-1","supervisor":null});
+    let job = f.call(json!({"op":"collab","action":"assign","data":assignment}));
+    assert_eq!(job["state"], "queued");
+    wait(|| {
+        f.call(json!({"op":"collab","action":"status"}))["worker"]["last_job"]["id"]
+            == job["job_id"]
+    });
+    let snapshot: Value = http
+        .get(format!("{url}api/state"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(snapshot["graph"]["assignments"][0]["session_id"], "replay");
+    assert_eq!(snapshot["graph"]["assignments"][0]["delivery_mode"], "idle");
 }

@@ -35,6 +35,27 @@ fn main() -> Result<()> {
     {
         bail!("--control is only supported by send, launch, shell-exec and stop-instance");
     }
+    if args.first().is_some_and(|s| s == "collab") {
+        anyhow::ensure!(
+            (2..=3).contains(&args.len()),
+            "usage: collab status|pause|run|assign|import|resolve [JSON_FILE]"
+        );
+        let data = if let Some(path) = args.get(2) {
+            let bytes = std::fs::read(path)?;
+            anyhow::ensure!(
+                bytes.len() < 60000,
+                "split input into files below 60000 bytes"
+            );
+            serde_json::from_slice::<serde_json::Value>(&bytes)?
+        } else {
+            serde_json::Value::Null
+        };
+        println!(
+            "{}",
+            service::client(&state, json!({"op":"collab","action":args[1],"data":data}))?
+        );
+        return Ok(());
+    }
     let arity = match args.first().map(String::as_str) {
         Some("create" | "launch") => 5,
         Some("open") => 3,
@@ -153,6 +174,9 @@ fn main() -> Result<()> {
                 .collect::<Result<Vec<_>>>()?;
             return Err(Command::new(executable).args(args).exec().into());
         }
+        [op, session, id, message, flag] if op == "send" && flag == "--steer" => {
+            json!({"op":op,"session_id":session,"request_id":id,"message":message,"delivery_mode":"steer"})
+        }
         [op] if op == "events" => json!({"op":op,"after":0}),
         [op, cursor] if op == "events" => json!({"op":op,"after":cursor.parse::<i64>()?}),
         [op] if op == "watch" => return watch(&state, 0, false),
@@ -166,7 +190,7 @@ fn main() -> Result<()> {
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
             create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] | open SESSION_ID ghostty [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
-            send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
+            collab status|pause|run|assign|import|resolve [JSON_FILE] | send SESSION_ID REQUEST_ID MESSAGE [--steer] | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             undock GENERATION (--control is supported by send, launch, shell-exec and stop-instance)"

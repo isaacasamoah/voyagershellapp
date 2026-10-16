@@ -95,6 +95,8 @@ impl Runtime {
                 }
             }
             "send" => {
+                let mode = input["delivery_mode"].as_str().unwrap_or("idle");
+                ensure!(["idle", "steer"].contains(&mode), "invalid delivery mode");
                 let session = string(&input, "session_id")?;
                 let id = string(&input, "request_id")?;
                 let message = string(&input, "message")?;
@@ -124,9 +126,8 @@ impl Runtime {
                     .to_owned();
                 let request = self.connection(session)?.begin_rpc(
                     "thread/read",
-                    json!({"threadId":native,"includeTurns":false}),
+                    json!({"threadId":native,"includeTurns":mode=="steer"}),
                 )?;
-                self.store.begin_request(id, session, message)?;
                 NativePhase::SendIdle { request }
             }
             _ => bail!("unsupported native action"),
@@ -291,9 +292,10 @@ impl Runtime {
                 let Some(reply) = self.connection(session)?.poll_rpc(*request)? else {
                     return Ok(None);
                 };
+                let active = reply["thread"]["status"]["type"] != "idle";
                 ensure!(
-                    reply["thread"]["status"]["type"] == "idle",
-                    "busy: leave the current native work alone"
+                    !active || call.input["delivery_mode"] == "steer",
+                    "busy: delivery waits for idle"
                 );
                 self.check_control(&call.input)?;
                 self.store.require_registered(session)?;
@@ -301,7 +303,32 @@ impl Runtime {
                     .as_str()
                     .context("native identity missing")?
                     .to_owned();
-                let request=self.connection(session)?.begin_rpc("turn/start",json!({"threadId":native,"clientUserMessageId":call.input["request_id"],"input":[{"type":"text","text":call.input["message"]}]}))?;
+                let (method, params) = if active {
+                    let turns = reply["thread"]["turns"]
+                        .as_array()
+                        .context("busy: active turn unavailable")?;
+                    let turn = turns
+                        .iter()
+                        .rev()
+                        .find(|t| t["status"] == "inProgress")
+                        .and_then(|t| t["id"].as_str())
+                        .context("busy: no steerable turn")?;
+                    (
+                        "turn/steer",
+                        json!({"threadId":native,"expectedTurnId":turn,"input":[{"type":"text","text":call.input["message"]}]}),
+                    )
+                } else {
+                    (
+                        "turn/start",
+                        json!({"threadId":native,"clientUserMessageId":call.input["request_id"],"input":[{"type":"text","text":call.input["message"]}]}),
+                    )
+                };
+                self.store.begin_request(
+                    string(&call.input, "request_id")?,
+                    session,
+                    string(&call.input, "message")?,
+                )?;
+                let request = self.connection(session)?.begin_rpc(method, params)?;
                 call.phase = NativePhase::SendTurn { request };
             }
             NativePhase::SendTurn { request } => {
@@ -311,6 +338,7 @@ impl Runtime {
                 };
                 let turn = reply["turn"]["id"]
                     .as_str()
+                    .or_else(|| reply["turnId"].as_str())
                     .context("outcome_unknown: no native turn identity")?;
                 let id = string(&call.input, "request_id")?;
                 self.store.accepted(id, turn)?;
