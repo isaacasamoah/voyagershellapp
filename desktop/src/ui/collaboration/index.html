@@ -82,6 +82,64 @@
             <p id="detail-output"></p>
           </div>
         </aside>
+        <details class="topic-rule" id="topic-rule">
+          <summary>
+            Topic + relationship rule · establish knowledge → settle topics → Jev checks links →
+            notify
+          </summary>
+          <ol class="topic-steps">
+            <li>
+              <strong>1 · Jev matches</strong>
+              <p>Existing topic IDs, names and scopes. Several matches, no match, or uncertain.</p>
+            </li>
+            <li>
+              <strong>2 · Sol composes</strong>
+              <p>
+                On no-match, Sol also sees the catalogue. Suggest existing IDs or propose a new
+                subject. Evidence does not support the knowledge? Keep the attempt for inspection;
+                do not publish it or create a topic from it.
+              </p>
+            </li>
+            <li>
+              <strong>3 · Jev rechecks</strong>
+              <p>
+                Only for a new proposal or disputed match: same subject and scope as an existing
+                topic? Ambiguous match → keep a visible pending candidate, with the reason. Do not
+                guess a match or create a topic; reassess when more context or review is available.
+              </p>
+            </li>
+            <li>
+              <strong>4 · Harness settles topic IDs</strong>
+              <p>
+                Reuse or create atomically. If the catalogue changed since the last topic check, ask
+                Jev about additions or changed definitions before retrying. This saves the topic,
+                not the final knowledge update.
+              </p>
+            </li>
+            <li>
+              <strong>5 · Jev judges relationships</strong>
+              <p>
+                Compare knowledge statements, conditions and evidence. Decisions may contradict;
+                discoveries may support or challenge. Shared topics alone do not establish a link.
+              </p>
+            </li>
+            <li>
+              <strong>6 · Harness records + routes</strong>
+              <p>
+                Save knowledge and judged links. Send topic updates; use the links to notify
+                affected authors and responsible resolvers. One packet per recipient, with the
+                reason.
+              </p>
+            </li>
+          </ol>
+          <p class="topic-rule-note">
+            Agreed existing matches skip step 3. A name match alone is insufficient. This small
+            trial supplies the full catalogue; an incomplete catalogue cannot justify creating a
+            topic. Pending candidates do not pause other agent work. No relationship is also a valid
+            outcome; normal topic updates can still be sent. Supersession requires an explicit
+            resolution.
+          </p>
+        </details>
         <footer class="view-note">
           Jev makes typed judgments. Sol writes evidence-linked statements. The harness stores,
           routes and records explicit resolutions.
@@ -168,6 +226,16 @@
             </p>
           </article>
         </div>
+        <details class="topic-rule" id="delivery-preview" hidden>
+          <summary>
+            Transcript message · VoyagerShell subscription notification · illustrative only
+          </summary>
+          <p class="topic-rule-note">
+            Harness injects this packet into the recipient's conversation. The voyager-subscription
+            skill interprets it. Live delivery and skill provisioning are not implemented.
+          </p>
+          <pre id="subscription-message"></pre>
+        </details>
         <div class="evaluation">
           <div><span class="eyebrow">COMPARE OUTCOMES</span><strong>Did sharing help?</strong></div>
           <div><span>Task correctness</span><b>— / —</b></div>

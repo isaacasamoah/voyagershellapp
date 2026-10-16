@@ -38,11 +38,55 @@ without automatically selecting a winner. Topic subscribers and directly involve
 actors receive one update with all applicable reasons. Five workers in a drawing
 do not demonstrate five running agents or successful delivery.
 
-Existing topic selection precedes composition. Several distinct findings in one
+Existing topic selection precedes composition. The expandable **Topic + relationship rule** in
+the harness diagram records this current contract:
+
+1. Jev checks membership against a versioned catalogue of topic IDs, names and
+   scope descriptions. Multiple matches and no-match are legitimate outcomes;
+   uncertainty remains distinct.
+2. Sol receives provisional matches. On no-match it also receives the existing
+   catalogue, so it can suggest existing IDs for reassessment or propose a new
+   subject name and scope. Unsupported means the sources do not support recording
+   this knowledge: keep the attempt for inspection, but publish no knowledge or
+   topic from it. This does not stop processing later events.
+3. A proposed new topic or disputed match goes to Jev for semantic checking before
+   comparing knowledge records. Agreed existing matches skip this extra call.
+   Distinct conclusions can share a subject; similar names alone do not prove
+   equivalence. An uncertain topic match stays visible as a pending candidate with
+   its reason, for reassessment with more context or review. This is not a finding
+   that the knowledge is false, and does not pause other agent work.
+4. The harness reuses an ID or creates a topic, checking catalogue revision at
+   the atomic write. A changed revision requires checking additions or changed
+   definitions before retrying. Model calls do not hold a database transaction.
+   The revision is from the last topic check, not necessarily source-event time.
+   This step settles topic IDs; it does not publish the final knowledge update.
+5. Jev compares the new knowledge statement with related existing statements,
+   applicable conditions and evidence. It judges possible decision contradictions
+   or discovery support/challenges. Shared topic IDs alone cannot establish links.
+6. The harness stores knowledge and judged links, then routes normal topic updates
+   and relationship-specific notices to affected authors and responsible resolvers.
+   One recipient gets one packet with all reasons. A valid record without a special
+   relationship can still generate a topic update. Supersession requires an
+   explicit resolution, not an automatic Jev judgment.
+
+The small trial supplies the full catalogue within a visible limit. Incomplete
+candidate coverage is not evidence for a new topic. Catalogue revision, supplied
+topic IDs, Jev judgments and Sol output stay attached to the call trace. Later
+retrieval and topic merging need their own evaluation; semantic matching is not
+a guarantee that duplicates never occur. There is no implemented registry yet.
+
+Several distinct findings in one
 window still need an agreed localization policy before the real harness is built.
 Both comparison arms retain ordinary orchestration. Use fresh workspaces and
 sessions, the same task checks and work-agent budget, and disclose harness costs.
 Do not assume the arm with collaboration will win.
+
+The [subscription delivery contract](subscription-notifications.md) defines direct
+native conversation messages headed **VoyagerShell subscription notification** and
+the accompanying [receiving skill](../skills/voyager-subscription/SKILL.md). Expand
+the transcript preview in the comparison view to inspect an example packet. This
+is a draft format and skill, not a working outbox or native integration. Preferences
+and subscription approval remain deferred.
 
 ## Observed in this prototype
 

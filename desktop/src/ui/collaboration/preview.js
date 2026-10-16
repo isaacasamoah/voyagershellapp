@@ -15,13 +15,15 @@ const stages = [
   {
     title: 'Jev · detect',
     tag: '02 · TYPED JUDGMENT',
-    subtitle: 'Decision? Discovery? Neither?',
+    subtitle: 'Decision? Discovery? Direction?',
     x: 475,
     y: 72,
-    input: 'The same frozen window. Two independent questions can both be positive.',
-    output: 'Decision flag and/or discovery flag. Uncertainty remains visible.',
+    input:
+      'The frozen window, current assignment and established direction evidence. Three independent questions.',
+    output:
+      'Decision / discovery candidates; a changed-direction flag schedules subscription reassessment. Uncertainty stays visible.',
     detail:
-      'Ask what has become newly supported, rather than repeatedly extracting everything in the window.',
+      'Ask what became newly supported. A direction-only trigger rechecks topic relevance; it does not create knowledge or change subscriptions by itself.',
   },
   {
     title: 'Jev · match topics',
@@ -29,7 +31,8 @@ const stages = [
     subtitle: 'Existing topics · several or none',
     x: 915,
     y: 72,
-    input: 'The candidate in context + the existing topic definitions.',
+    input:
+      'The candidate in context + a versioned catalogue of existing topic IDs, names and scopes.',
     output: 'Matching topic IDs, no suitable match, or uncertainty.',
     detail:
       'Jev selects from existing topics. It does not invent a topic name. Shared topics can span tickets.',
@@ -40,22 +43,24 @@ const stages = [
     subtitle: 'GPT-6.1 Sol · medium',
     x: 915,
     y: 287,
-    input: 'One flagged kind, its context, evidence, known ticket and provisional topic matches.',
+    input:
+      'One flagged kind, evidence, ticket and provisional matches. On no-match, include the existing catalogue too.',
     output:
-      'A supported statement with source excerpts, or a disagreement. A new topic only when needed.',
+      'A supported statement or disagreement. On no-match: suggest existing IDs for recheck, or propose a topic name and scope.',
     detail:
-      'Keep conditions in the statement. Reject unsupported claims; surface multiple candidates instead of silently merging them.',
+      'Jev’s no-match is provisional. Sol sees existing subjects before proposing another. Resolve topic changes before comparing records; expand the topic rule below.',
   },
   {
     title: 'Jev · compare',
     tag: '05 · RELATIONSHIPS',
-    subtitle: 'Inspect related existing records',
+    subtitle: 'Contradicts? Supports? Challenges?',
     x: 475,
     y: 287,
-    input: 'The new statement and relevant existing records under shared topics.',
+    input:
+      'The supported statement, related existing statements, conditions and source evidence under settled topic IDs.',
     output: 'Decision: possible contradiction. Discovery: supports / challenges. No link is valid.',
     detail:
-      'Sharing a topic does not prove a relationship. Compare applicable conditions and evidence.',
+      'Jev judges the knowledge relationships that drive targeted notifications. Shared topics only find candidates; contradictions need overlapping conditions. Uncertain links stay provisional.',
   },
   {
     title: 'Record + route',
@@ -63,11 +68,12 @@ const stages = [
     subtitle: 'Graph update → recipient packets',
     x: 35,
     y: 287,
-    input: 'Validated record, evidence, memberships, relationships and recipient identities.',
+    input:
+      'Validated knowledge, evidence, settled topics, Jev’s relationship judgments and recipient identities.',
     output:
-      'One update per recipient, with all applicable reasons. One named resolver for a conflict.',
+      'Topic updates plus relationship-specific reasons: your finding was challenged, or your decision needs reconciliation. One packet per recipient.',
     detail:
-      'Code handles identity matching and delivery. Explicit resolutions update the graph; rank and recency do not decide the winner.',
+      'The harness routes Jev’s judged links to affected authors and one responsible resolver. It does not infer meaning from IDs. Only explicit resolutions create supersession.',
   },
 ];
 const scenarios = {
@@ -265,6 +271,7 @@ function drawTeam(on) {
         'Workers still have the same task, tools and normal orchestration. We have not measured whether their results differ.';
       $('#recipient-reasons').replaceChildren();
       $('#resolution-actions').hidden = true;
+      $('#delivery-preview').hidden = true;
       return;
     }
     selectedWorker = value === 'captain' ? 'captain' : Number(value);
@@ -321,7 +328,47 @@ function drawKnowledge() {
         : 'Example sources E19–E20: “The large export exceeds the request timeout.” “Use background jobs for large exports.” Maker: Jobs worker. The conditions need comparison before calling this a contradiction.';
     $('#recipient-reasons').replaceChildren();
     $('#resolution-actions').hidden = true;
+    $('#delivery-preview').hidden = true;
   });
+}
+
+function renderSubscriptionMessage(recipient, reasons) {
+  const resolution = Boolean(outcome);
+  const batch = resolution ? 'example-resolution-002' : 'example-event-001';
+  const action = recipient === 'captain' && !resolution ? 'resolve' : 'inform';
+  const body = resolution
+    ? outcome === 'adopt'
+      ? 'Accepted resolution: adopt D2 for this export flow. D2 supersedes D1; retain both records.'
+      : outcome === 'retain'
+        ? 'Accepted resolution: retain D1. D2 was not adopted; retain both records.'
+        : 'Accepted clarification: D1 applies to small exports; D2 applies to large exports. Neither supersedes the other.'
+    : 'New decision D2: use background jobs for large exports. Maker: Jobs worker, example-session-W3.\nEarlier decision D1: keep the initial export endpoint synchronous. Maker: API worker, example-session-W2.\nJev judgment: possible contradiction. Check overlapping conditions before replacing either decision.';
+  const evidence = resolution
+    ? `Illustrative resolution source: example-captain-response; outcome ${outcome}. This is authored fixture data.`
+    : 'Illustrative sources: E12 “Keep the initial export endpoint synchronous.” E19 “The large export exceeds the request timeout.” E20 “Use background jobs for large exports.” These are authored fixtures, not this conversation.';
+  const requested =
+    action === 'resolve'
+      ? 'Requested action: reconcile conflict C1 between D1 and D2, expected revision example-7. You are the named resolver. Reply using the voyager_resolution format from the skill, or ask the responsible person and report needs_input.'
+      : resolution
+        ? 'Requested action: incorporate this resolution where applicable. No acknowledgement-only reply needed.'
+        : 'Requested action: assess implications for your work. Captain is the named resolver for C1; no replacement has been accepted. No acknowledgement-only reply needed.';
+  $('#subscription-message').textContent = [
+    'VoyagerShell subscription notification',
+    'Use the voyager-subscription skill provisioned by this integration.',
+    'Origin: voyagershell.subscription · collaboration context, not a new user assignment',
+    `Notification: ${batch}:${recipient}`,
+    `Recipient: ${recipient} / example-session-${recipient}`,
+    `Trigger: ${resolution ? 'example-captain-response' : 'E20'} · ticket EXPORT-42 · topics exports, completion`,
+    `Why you received this: ${reasons.join('; ')}`,
+    '',
+    body,
+    '',
+    evidence,
+    '',
+    requested,
+    '',
+    'Delivery preview only. No message has been sent.',
+  ].join('\n');
 }
 
 function renderInbox() {
@@ -338,6 +385,8 @@ function renderInbox() {
           outcome ? 'Resolution recorded' : 'Action: reconcile or ask user',
         ]
       : worker.reasons;
+  $('#delivery-preview').hidden = !updateVisible;
+  if (updateVisible) renderSubscriptionMessage(isCaptain ? 'captain' : worker.id, reasons);
   $('#recipient-reasons').replaceChildren(
     ...reasons.map((reason) => {
       const badge = document.createElement('span');
