@@ -189,6 +189,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     }
     let store = Store::open(&db_path)?;
     store.0.execute("UPDATE requests SET state='failed',error_code='service_restarted_before_dispatch' WHERE state='pending'", [])?;
+    store.reconcile_coordination()?;
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",

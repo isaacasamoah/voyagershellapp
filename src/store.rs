@@ -383,6 +383,65 @@ impl Store {
         Ok(())
     }
 
+    pub fn reconcile_coordination(&self) -> Result<()> {
+        let rows = {
+            let mut query = self.0.prepare("SELECT id,inputs,receipt FROM operations WHERE json_extract(inputs,'$.op') IN ('adjudicate','escalate') AND json_extract(receipt,'$.delivery')='recorded' AND json_type(receipt,'$.task_request_id')='text'")?;
+            query
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let transaction = self.0.unchecked_transaction()?;
+        for (id, inputs, receipt) in rows {
+            let inputs: Value = serde_json::from_str(&inputs)?;
+            let mut receipt: Value = serde_json::from_str(&receipt)?;
+            let task_id = receipt["task_request_id"]
+                .as_str()
+                .context("missing coordination task identity")?;
+            let task = self.request(task_id)?;
+            let (delivery, reason) = match task.as_ref() {
+                Some(task)
+                    if task["state"] == "accepted"
+                        && task["native_turn_id"]
+                            .as_str()
+                            .is_some_and(|id| !id.is_empty()) =>
+                {
+                    ("accepted", None)
+                }
+                Some(task) if task["state"] == "failed" => (
+                    "failed",
+                    Some(task["error_code"].as_str().unwrap_or("provider_failed")),
+                ),
+                Some(task) if task["state"] == "pending" && task["dispatch_mode"].is_null() => {
+                    ("failed", Some("service_restarted_before_dispatch"))
+                }
+                None => ("failed", Some("service_restarted_before_dispatch")),
+                Some(_) => ("uncertain", Some("service_restarted_delivery_unconfirmed")),
+            };
+            receipt["delivery"] = json!(delivery);
+            if let Some(reason) = reason {
+                receipt["error"] = json!(format!(
+                    "Native delivery {delivery}: {reason}; no automatic replay."
+                ));
+            } else {
+                receipt
+                    .as_object_mut()
+                    .context("invalid coordination receipt")?
+                    .remove("error");
+            }
+            self.local(receipt["session_id"].as_str().context("missing coordination sender")?, "coordination.delivery", json!({"request_id":id,"destination":receipt["destination"],"delivery":delivery,"actor":inputs["actor"],"reason":reason,"replay_available":false}))?;
+            receipt["native_request"] = json!(task);
+            self.save_operation(&id, &receipt)?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn events(&self, after: i64) -> Result<Value> {
         ensure!(after >= 0, "cursor must be nonnegative");
         let mut query = self.0.prepare("SELECT seq,event_id,session_id,e.kind,native_turn_id,source_key,occurred_ms,recorded_ms,payload,s.kind FROM events e JOIN sessions s ON s.id=e.session_id WHERE seq>?1 ORDER BY seq LIMIT 100")?;

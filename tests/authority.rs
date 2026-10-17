@@ -18,6 +18,9 @@ impl Service {
         let dir = std::env::temp_dir().join(format!("va-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir(&dir).unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        Self::start_at(dir)
+    }
+    fn start_at(dir: PathBuf) -> Self {
         let child = Command::new(env!("CARGO_BIN_EXE_voyager"))
             .env(
                 "VOYAGER_CODEX_BIN",
@@ -445,4 +448,192 @@ fn owner_dock_cli_holds_one_connection_and_bound_callers_cannot_claim_it() {
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("forbidden"));
     assert!(s.owner(json!({"op":"status"}))["control"].is_null());
+}
+
+#[test]
+fn restart_reconciles_coordination_without_replay_or_downgrading_saved_acknowledgements() {
+    let dir = std::env::temp_dir().join(format!("va-recover-{}", uuid::Uuid::new_v4().simple()));
+    fs::create_dir(&dir).unwrap();
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+    let path = dir.join("events.sqlite");
+    let store = voyager_shell::store::Store::open(&path).unwrap();
+    let sender = store
+        .register("fixture", &json!({"id":"sender","cwd":"/fixture"}))
+        .unwrap();
+    let supervisor = store
+        .register("fixture", &json!({"id":"supervisor","cwd":"/fixture"}))
+        .unwrap();
+    store
+        .0
+        .execute(
+            "UPDATE sessions SET rank='captain' WHERE id=?1",
+            [&supervisor],
+        )
+        .unwrap();
+    store
+        .0
+        .execute(
+            "UPDATE sessions SET supervisor_id=?2 WHERE id=?1",
+            rusqlite::params![sender, supervisor],
+        )
+        .unwrap();
+    for (id, op, delivery, state, turn, expected) in [
+        ("missing", "escalate", "recorded", None, None, "failed"),
+        (
+            "pending",
+            "escalate",
+            "recorded",
+            Some("pending"),
+            None,
+            "failed",
+        ),
+        (
+            "requested",
+            "escalate",
+            "recorded",
+            Some("uncertain"),
+            None,
+            "uncertain",
+        ),
+        (
+            "acknowledged",
+            "escalate",
+            "recorded",
+            Some("accepted"),
+            Some("exact-turn"),
+            "accepted",
+        ),
+        (
+            "rejected",
+            "escalate",
+            "recorded",
+            Some("failed"),
+            None,
+            "failed",
+        ),
+        (
+            "decision",
+            "adjudicate",
+            "recorded",
+            Some("uncertain"),
+            None,
+            "uncertain",
+        ),
+        (
+            "final-accepted",
+            "escalate",
+            "accepted",
+            None,
+            None,
+            "accepted",
+        ),
+        (
+            "final-failed",
+            "escalate",
+            "failed",
+            Some("accepted"),
+            Some("exact-turn"),
+            "failed",
+        ),
+    ] {
+        let task = format!("task:{id}");
+        if let Some(state) = state {
+            store
+                .begin_request(&task, &supervisor, "Selected evidence")
+                .unwrap();
+            store.0.execute("UPDATE requests SET state=?2,native_turn_id=?3,dispatch_mode=CASE WHEN ?2='pending' THEN NULL ELSE 'steer' END,expected_turn_id='exact-turn',error_code=CASE WHEN ?2='failed' THEN 'provider_failed' ELSE NULL END WHERE id=?1",rusqlite::params![task,state,turn]).unwrap();
+        }
+        let receipt = json!({"request_id":id,"session_id":sender,"destination":supervisor,"state":"completed","delivery":delivery,"task_request_id":task,"message":"Selected evidence","expected_delivery":expected});
+        store
+            .begin_operation(
+                id,
+                &json!({"op":op,"actor":{"kind":"instance","session_id":sender}}),
+                &receipt,
+            )
+            .unwrap();
+    }
+    store.begin_operation("owner-question",&json!({"op":"escalate","actor":{"kind":"instance","session_id":sender}}),&json!({"request_id":"owner-question","session_id":sender,"destination":null,"state":"completed","delivery":"recorded","message":"Owner question"})).unwrap();
+    drop(store);
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    let mut service = Service::start_at(dir);
+    for id in [
+        "missing",
+        "pending",
+        "requested",
+        "acknowledged",
+        "rejected",
+        "decision",
+        "final-accepted",
+        "final-failed",
+    ] {
+        let receipt = service.owner(json!({"op":"operation","request_id":id}));
+        assert_eq!(
+            receipt["delivery"], receipt["expected_delivery"],
+            "{id}: {receipt}"
+        );
+        assert_eq!(receipt["state"], "completed");
+        if ["missing", "pending", "requested", "rejected", "decision"].contains(&id) {
+            assert!(
+                receipt["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("no automatic replay")
+            );
+        }
+    }
+    let accepted = service.owner(json!({"op":"operation","request_id":"acknowledged"}));
+    assert_eq!(accepted["native_request"]["native_turn_id"], "exact-turn");
+    assert!(accepted.get("error").is_none());
+    assert_eq!(
+        service.owner(json!({"op":"operation","request_id":"owner-question"}))["delivery"],
+        "recorded"
+    );
+    let questions = service.owner(json!({"op":"escalations"}));
+    for id in ["missing", "pending", "requested", "rejected"] {
+        assert!(
+            questions
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|q| q["request_id"] == id && q["destination"] == supervisor)
+        );
+    }
+    assert!(
+        !questions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|q| q["request_id"] == "acknowledged")
+    );
+    service.owner(json!({"op":"stop"}));
+    service.child.wait().unwrap();
+    let store = voyager_shell::store::Store::open(&path).unwrap();
+    let events_before: i64 = store
+        .0
+        .query_row(
+            "SELECT count(*) FROM events WHERE kind='coordination.delivery'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(events_before, 6);
+    store.reconcile_coordination().unwrap();
+    assert_eq!(
+        store
+            .0
+            .query_row(
+                "SELECT count(*) FROM events WHERE kind='coordination.delivery'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        events_before
+    );
+    assert_eq!(
+        store
+            .0
+            .query_row("SELECT count(*) FROM requests", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        6
+    );
 }

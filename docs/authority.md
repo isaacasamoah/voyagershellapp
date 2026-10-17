@@ -102,8 +102,11 @@ supervisor credential.
 Schema version two preserves version-one events, native identities and lifecycle
 receipts. Existing Codex registrations migrate to Crew with no guessed supervisor.
 Restart clears credentials and control; it does not recover old process ownership
-or resubmit work. Use a fresh prototype state when trying this branch, or back up
-a closed service before an explicit upgrade.
+or resubmit work. Unfinished coordination delivery is reconciled from saved native
+requests: known loss becomes failed, an unconfirmed dispatch becomes uncertain,
+and a saved acknowledgement remains accepted. No message is replayed. Use a fresh
+prototype state when trying this branch, or back up a closed service before an
+explicit upgrade.
 
 Native voice handoff and explicit human interruption are subsequent increments.
 The existing voice preference still reports its actual disabled/unsupported state.
