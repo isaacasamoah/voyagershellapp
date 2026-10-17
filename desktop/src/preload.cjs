@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld(
     stopInstance: (id, request) => ipcRenderer.invoke('stop-instance', id, request),
     removeInstance: (id, request, stop) => ipcRenderer.invoke('remove-instance', id, request, stop),
     registerInstance: (id, request) => ipcRenderer.invoke('register-instance', id, request),
+    rankInstance: (id, rank, request) => ipcRenderer.invoke('rank-instance', id, rank, request),
+    superviseInstance: (id, supervisor, request) =>
+      ipcRenderer.invoke('supervise-instance', id, supervisor, request),
+    adjudicateEscalation: (id, escalation, decision, message, request) =>
+      ipcRenderer.invoke('adjudicate-escalation', id, escalation, decision, message, request),
     quit: () => ipcRenderer.invoke('quit-ui'),
     onDockSound: (callback) => {
       ipcRenderer.on('dock-sound', (_event, action) => callback(action));

@@ -918,7 +918,11 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     let delayed = json!({"op":"shell-exec","session_id":session,"request_id":"delayed","command":"sleep 0.3; printf survived > proof.txt"});
     let accepted = f.call(delayed.clone());
     assert_eq!(f.call(delayed), accepted); // Never replay the same command.
-    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"busy","command":"echo wrong"})).is_err());
+    assert!(client(
+        &f.dir,
+        json!({"op":"shell-exec","session_id":session,"request_id":"busy","command":"echo wrong"})
+    )
+    .is_err());
     drop(terminal);
     wait(|| f.dir.join("child/proof.txt").exists());
     wait(ready);
@@ -980,7 +984,11 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     f.call(json!({"op":"stop-instance","session_id":session}));
     thread::sleep(Duration::from_millis(350));
     assert!(!f.dir.join("child/should-not-complete").exists());
-    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})).is_err());
+    assert!(client(
+        &f.dir,
+        json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})
+    )
+    .is_err());
     f.halt();
 }
 
@@ -1141,4 +1149,33 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     );
     drop(db);
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn owned_worker_steering_reuses_the_exact_turn_and_request_identity() {
+    let mut f = Fixture::new();
+    f.start();
+    let parent = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let created = f.call(json!({"op":"launch","open":false,"parent_id":parent,"request_id":"steering-worker","cwd":f.dir,"prompt":"keep working"}));
+    let session = created["session_id"].clone();
+    let turn = created["initial_request"]["native_turn_id"].clone();
+    let input = json!({"op":"send","session_id":session,"request_id":"steer-same-turn","message":"keep the current work and incorporate this"});
+    let accepted = f.call(input.clone());
+    assert_eq!(accepted["state"], "accepted");
+    assert_eq!(accepted["native_turn_id"], turn);
+    assert_eq!(accepted["dispatch_mode"], "steer");
+    assert_eq!(accepted["expected_turn_id"], turn);
+    assert_eq!(f.call(input), accepted);
+    assert!(client(&f.dir, json!({"op":"send","session_id":session,"request_id":"steer-same-turn","message":"different"})).is_err());
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["session_id"] == session && e["type"] == "turn.completed")
+    });
+    let idle = f.call(json!({"op":"send","session_id":session,"request_id":"start-after-completion","message":"new work"}));
+    assert_eq!(idle["dispatch_mode"], "start");
+    assert_ne!(idle["native_turn_id"], turn);
+    f.call(json!({"op":"stop-instance","session_id":session}));
 }

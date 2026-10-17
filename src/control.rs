@@ -1,4 +1,3 @@
-//! One live desktop attachment. The socket owns the attachment, never the agent.
 use crate::store::Store;
 use anyhow::{Context, Result, ensure};
 use nix::{
@@ -153,8 +152,6 @@ impl Control {
     }
 
     pub fn voice(&self) -> Value {
-        // Thread realtime APIs have not proved control of a native client's microphone.
-        // Report this capability gap instead of starting a second audio interface.
         json!({"follows_dock":self.voice_follows_dock,"state":if self.voice_follows_dock {"unsupported"} else {"disabled"},"reason":if self.voice_follows_dock {Some("native_client_voice_control_unproved")} else {None}})
     }
 
@@ -167,7 +164,7 @@ impl Control {
             .active
             .as_ref()
             .filter(|a| a.attachment.generation == generation)
-            .context("control attachment is no longer current")?;
+            .context("stale_control: control attachment is no longer current")?;
         Ok(&active.attachment.session)
     }
 
@@ -212,7 +209,6 @@ impl Control {
                 json!({"attachment":attachment.value(),"active":active,"voice":self.voice()}),
             );
         }
-        // The release and new claim form one transaction: readers never see two masters.
         let tx = store.0.unchecked_transaction()?;
         if let Some(old) = &self.active {
             Self::release_event(store, &old.attachment.value(), "switched")?;

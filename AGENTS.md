@@ -27,3 +27,9 @@ Lifecycle operations are owned by `src/service/lifecycle.rs`; native requests by
 Read [the lifecycle contract](docs/lifecycle.md) before changing either boundary.
 Keep changed code comment-free, including doc comments and explanatory docstrings.
 Put mechanisms, invariants and design reasons in the owning context document.
+
+Rank and direct-assignment policy belongs in `src/authority.rs`. Runtime identity,
+coordination and capability presentation belong in `src/service/authority_ops.rs`.
+The CLI and Electron expose those service decisions; they do not grant rights.
+Read `docs/authority.md` before changing that boundary. Native voice and explicit
+preemptive override remain separate from rank and ordinary steering.

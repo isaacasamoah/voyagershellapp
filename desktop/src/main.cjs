@@ -5,6 +5,8 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
+const { authorityActions } = require('./authority.cjs');
+const { visibleEscalations } = require('./ui/authority.js');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
@@ -39,6 +41,8 @@ let avatarWin,
   dragging = null,
   binding = null;
 let sessions = [],
+  escalations = [],
+  escalationError = null,
   selected = null,
   windows = [],
   records = [];
@@ -49,6 +53,7 @@ let service = null,
 let busy = false;
 let creating = false;
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
+const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let controlConnection = null;
 let layer = '';
@@ -181,7 +186,7 @@ function sendState() {
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(
-      ({ id, name, kind, cwd, ownership, capture, worker_state, removed_ms }) => ({
+      ({
         id,
         name,
         kind,
@@ -190,9 +195,24 @@ function sendState() {
         capture,
         worker_state,
         removed_ms,
+        rank,
+        supervisor_id,
+      }) => ({
+        id,
+        name,
+        kind,
+        cwd,
+        ownership,
+        capture,
+        worker_state,
+        removed_ms,
+        rank,
+        supervisor_id,
       }),
     ),
     service,
+    escalations,
+    escalationError,
     serviceError,
     platformError,
     dockError,
@@ -215,14 +235,25 @@ function placePanel() {
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
-  const height = Math.min(
-    area.height,
-    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
-  );
+  const height = Math.min(area.height, panelHeight());
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
   setBoundsIfChanged(panelWin, { x, y, width, height });
   setBoundsIfChanged(avatarWin, { x: x + 100, y: y + 36 });
+}
+function panelHeight() {
+  return (
+    288 +
+    Math.max(1, sessions.length) * 56 +
+    (creating ? 390 : 0) +
+    (visibleEscalations(escalations).length || escalationError ? 220 : 0)
+  );
+}
+function resizePanel() {
+  panelWin.setSize(
+    320,
+    Math.min(screen.getDisplayMatching(panelWin.getBounds()).workArea.height, panelHeight()),
+  );
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
@@ -478,6 +509,12 @@ async function refresh() {
     ]);
     service = nextService;
     sessions = nextSessions;
+    try {
+      escalations = await rpc('escalations');
+      escalationError = null;
+    } catch {
+      escalationError = 'Questions could not be loaded.';
+    }
     serviceError = null;
     if (!selected)
       selected = sessions.find((s) => s.ownership === 'managed')?.id ?? sessions[0]?.id ?? null;
@@ -529,7 +566,10 @@ async function refresh() {
     }
   }
   busy = false;
-  if (expanded && seated && !dragging) placePanel();
+  if (expanded && !dragging) {
+    if (seated) placePanel();
+    else resizePanel();
+  }
   sendState();
 }
 function createWindow(width, height) {
@@ -596,14 +636,7 @@ app.whenReady().then(async () => {
   handle('create-form', [panelWin], (open) => {
     creating = open === true;
     if (seated) placePanel();
-    else
-      panelWin.setSize(
-        320,
-        Math.min(
-          screen.getDisplayMatching(panelWin.getBounds()).workArea.height,
-          288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
-        ),
-      );
+    else resizePanel();
   });
   handle('choose-directory', [panelWin], async () => {
     const result = await dialog.showOpenDialog(panelWin, { properties: ['openDirectory'] });
@@ -641,6 +674,24 @@ app.whenReady().then(async () => {
   });
   handle('register-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'register-instance'),
+  );
+  async function authorityAction(call) {
+    try {
+      return await call();
+    } finally {
+      await refresh();
+    }
+  }
+  handle('rank-instance', [panelWin], (id, rank, request) =>
+    authorityAction(() => authorityActionsForInstance.rank(id, rank, request)),
+  );
+  handle('supervise-instance', [panelWin], (id, supervisor, request) =>
+    authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
+  );
+  handle('adjudicate-escalation', [panelWin], (id, escalation, decision, message, request) =>
+    authorityAction(() =>
+      authorityActionsForInstance.adjudicate(id, escalation, decision, message, request),
+    ),
   );
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
@@ -740,17 +791,20 @@ app.whenReady().then(async () => {
   if (
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
+    process.argv.includes('--proof-authority') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-lifecycle')
-        ? '../test/lifecycle-proof.cjs'
-        : process.argv.includes('--proof-control')
-          ? '../test/control-proof.cjs'
-          : process.argv.includes('--proof-registration')
-            ? '../test/registration-proof.cjs'
-            : '../test/live-proof.cjs',
+      process.argv.includes('--proof-authority')
+        ? '../test/authority-proof.cjs'
+        : process.argv.includes('--proof-lifecycle')
+          ? '../test/lifecycle-proof.cjs'
+          : process.argv.includes('--proof-control')
+            ? '../test/control-proof.cjs'
+            : process.argv.includes('--proof-registration')
+              ? '../test/registration-proof.cjs'
+              : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -782,13 +836,15 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-lifecycle')
-            ? 'lifecycle-proof.json'
-            : process.argv.includes('--proof-control')
-              ? 'control-proof.json'
-              : process.argv.includes('--proof-registration')
-                ? 'registration-proof.json'
-                : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-authority')
+            ? 'authority-proof.json'
+            : process.argv.includes('--proof-lifecycle')
+              ? 'lifecycle-proof.json'
+              : process.argv.includes('--proof-control')
+                ? 'control-proof.json'
+                : process.argv.includes('--proof-registration')
+                  ? 'registration-proof.json'
+                  : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(

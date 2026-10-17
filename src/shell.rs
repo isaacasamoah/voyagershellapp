@@ -108,6 +108,11 @@ impl Shell {
             .env("TERM", "xterm-256color")
             .env("VOYAGER_STATE", state)
             .env("VOYAGER_BIN", std::env::current_exe()?)
+            .env("VOYAGER_CALLER", "instance")
+            .env(
+                "VOYAGER_SESSION_CONTEXT",
+                crate::authority::Credentials::locator(state, launch),
+            )
             .stdin(Stdio::from(pty.slave.try_clone()?))
             .stdout(Stdio::from(pty.slave.try_clone()?))
             .stderr(Stdio::from(pty.slave));

@@ -42,3 +42,42 @@ test('a lost reply keeps its request identity and never starts an untracked repl
   assert.deepEqual(await create(input), { session: 'same-instance' });
   assert.equal(ids[0], ids[1]);
 });
+test('Codex always defaults to Crew while Bash has no rank', async () => {
+  const calls = [];
+  const create = instanceCreator(async (...args) => {
+    calls.push(args);
+    return { state: 'completed', session_id: 'created' };
+  });
+  await create({ kind: 'codex', name: 'First', cwd: '/project', rank: 'admiral' });
+  await create({ kind: 'codex', name: 'Next', cwd: '/project' });
+  await create({ kind: 'shell', name: 'Shell', cwd: '/project', rank: 'captain' });
+  assert.deepEqual(calls[0].slice(5), ['--rank', 'admiral']);
+  assert.deepEqual(calls[1].slice(5), ['--rank', 'crew']);
+  assert.deepEqual(calls[2].slice(5), []);
+});
+test('invalid rank refuses before a service call', async () => {
+  let calls = 0;
+  const create = instanceCreator(async () => calls++);
+  await assert.rejects(
+    create({ kind: 'codex', name: 'Wrong', cwd: '/project', rank: 'owner' }),
+    /rank/,
+  );
+  assert.equal(calls, 0);
+});
+test('creation retry identity includes rank and assignment', async () => {
+  const calls = [];
+  const create = instanceCreator(async (...args) => {
+    if (args[0] === 'operation') throw Error('Unavailable');
+    calls.push(args);
+    throw Error('Lost reply');
+  });
+  const input = { kind: 'codex', name: 'Worker', cwd: '/project' };
+  await assert.rejects(create(input));
+  await assert.rejects(create(input));
+  await assert.rejects(create({ ...input, rank: 'captain' }));
+  await assert.rejects(create({ ...input, rank: 'captain', supervisor: 'commodore' }));
+  assert.equal(calls[0][2], calls[1][2]);
+  assert.notEqual(calls[1][2], calls[2][2]);
+  assert.notEqual(calls[2][2], calls[3][2]);
+  assert.deepEqual(calls[3].slice(5), ['--rank', 'captain', '--supervisor', 'commodore']);
+});

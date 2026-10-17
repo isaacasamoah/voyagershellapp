@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
+const { ranks } = require('./ui/authority.js');
 function instanceCreator(rpc) {
   let pending = null,
     busy = false;
@@ -7,11 +8,16 @@ function instanceCreator(rpc) {
     if (busy) throw Error('An instance is already being opened.');
     if (!input || !['codex', 'shell'].includes(input.kind)) throw Error('Choose an instance type.');
     const { kind, name, cwd } = input;
+    const rank = kind === 'codex' ? (input.rank ?? 'crew') : null;
+    const supervisor = input.supervisor ?? null;
+    if (kind === 'codex' && !ranks.includes(rank)) throw Error('Choose a rank.');
+    if (supervisor !== null && (typeof supervisor !== 'string' || !supervisor))
+      throw Error('Choose a supervisor.');
     if (typeof name !== 'string' || !name.trim() || Buffer.byteLength(name) > 100)
       throw Error('Enter a short name.');
     if (typeof cwd !== 'string' || !path.isAbsolute(cwd))
       throw Error('Choose an absolute folder path.');
-    const key = JSON.stringify([kind, name, cwd]);
+    const key = JSON.stringify([kind, name, cwd, rank, supervisor]);
     if (!pending || pending.key !== key) pending = { key, id: randomUUID(), session: null };
     busy = true;
     try {
@@ -25,7 +31,9 @@ function instanceCreator(rpc) {
         );
       } else {
         try {
-          const receipt = await rpc('create', kind, pending.id, name, cwd);
+          const flags = rank ? ['--rank', rank] : [];
+          if (supervisor) flags.push('--supervisor', supervisor);
+          const receipt = await rpc('create', kind, pending.id, name, cwd, ...flags);
           if (receipt.state !== 'completed' || !receipt.session_id)
             throw Error('This instance did not start. Check the service log.');
           pending.session = receipt.session_id;
