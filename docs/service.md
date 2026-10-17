@@ -42,6 +42,12 @@ The message goes to the existing agent. No model, instructions, credentials or p
 
 ## Commands
 
+Existing native work uses `inspect-window WINDOW_ID` and `adopt WINDOW_ID REQUEST_ID`.
+The avatar calls these operations itself. Adoption retains the verified runtime;
+registration alone does not. See [the native adoption contract](native-adoption.md)
+for platform and integration requirements.
+
+
 To start without an existing native server, use `serve` with no socket argument.
 Then [create a named instance](instances.md). `serve CODEX_SOCKET` connects to an
 independently owned native server as before.

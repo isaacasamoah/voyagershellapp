@@ -9,6 +9,7 @@ See the [CLI reference](service.md#commands) for command syntax.
 | Action | Runtime | Native window | Registration |
 | --- | --- | --- | --- |
 | Create / launch | Starts an owned instance | Opens by default; `--background` skips it | Starts capture |
+| Adopt | Retains the existing runtime | Keeps the original viewer | Starts future capture |
 | Open | Keeps the same runtime | Focuses or reopens its viewer | Unchanged |
 | Background | Keeps working | Closes the owned viewer | Capture continues |
 | Stop | Stops the owned runtime | Closes its viewer; `--runtime-only` skips explicit close | Retained |
@@ -39,8 +40,11 @@ runtime. Restart marks unfinished actions uncertain and never restores ownership
 
 ## Window and process ownership
 
-A live `Child` establishes process ownership; stored PIDs do not. External
-registrations may be removed, but owned open/background/stop actions refuse them.
+Launched instances retain live child handles. Adopted instances retain verified
+pidfds, the existing PTY and a confirmed native shutdown handoff. Stored PIDs
+alone do not establish lifecycle control. External registration without that
+handoff remains distinct and cannot use owned lifecycle actions. See
+[native adoption](native-adoption.md) for its integration requirements and limits.
 The daemon refuses shutdown while any owned runtime is live, including removed
 instances.
 
@@ -48,7 +52,7 @@ Stop signals the exact owned runtime, observes exit, and may escalate within its
 process group after two seconds. Bash receives HUP so it can forward it to jobs;
 independently disowned or escaped processes are outside this contract.
 
-Each viewer has its own child and the exact mapped X11 window ID. Mapping requires
+Each viewer has a retained child or adopted process handle and its exact X11 window ID. Mapping requires
 one window belonging to the live child; ambiguous or unidentified windows fail.
 Focus uses `_NET_ACTIVE_WINDOW` and confirms the request, not keyboard focus.
 Close uses `_NET_CLOSE_WINDOW`; completion means that mapped window is gone.
@@ -57,7 +61,8 @@ without restarting the runtime; an unidentified opening is not guessed away.
 
 Voyager launches dedicated Ghostty XWayland clients with
 `--confirm-close-surface=false`. Closing that viewer detaches from service-owned
-work. Global settings and external terminals are untouched. See
+work. Global settings are untouched. Adopted Ghostty windows keep their existing
+configuration; the adapter confirms their own close dialog after handoff. See
 [Ghostty's configuration](https://ghostty.org/docs/config/reference#confirm-close-surface).
 
 ## Capture cutoff
@@ -68,7 +73,11 @@ generation. Late or queued content cannot resume recording after removal.
 Administrative lifecycle events may still describe stopped or removed work.
 
 Codex re-registration creates a fresh observation connection without importing
-snapshot turns. Bash requires a clean idle prompt with no pending command,
+snapshot turns. An adopted empty Codex conversation may instead read future
+records from its exact native transcript; see [the adapter](../integrations/codex/README.md).
+Stopping an adopted Codex instance uses a separate native request connection,
+so removal or failure of its capture source cannot cancel the stop operation.
+Bash requires a clean idle prompt with no pending command,
 partial input or incomplete hook frame. Its removed-period buffer is discarded.
 Opening a window never implicitly registers it.
 

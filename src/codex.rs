@@ -164,7 +164,7 @@ impl Codex {
         let reply = self.rpc("thread/read", json!({"threadId":id,"includeTurns":false}))?;
         let t = reply.get("thread").context("missing thread")?;
         Ok(
-            json!({"id":t["id"],"sessionId":t["sessionId"],"cwd":t["cwd"],"status":t["status"],"source":t["source"]}),
+            json!({"id":t["id"],"sessionId":t["sessionId"],"cwd":t["cwd"],"status":t["status"],"source":t["source"],"path":t["path"]}),
         )
     }
 }

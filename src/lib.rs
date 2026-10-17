@@ -1,10 +1,14 @@
 mod actions;
+pub mod adoption;
 pub mod codex;
 pub mod control;
 pub mod events;
+pub mod native_instance;
+pub mod native_status;
 pub mod service;
 pub mod shell;
 pub mod shell_transport;
 pub mod store;
 pub mod terminal;
+pub mod transcript;
 pub mod worker;

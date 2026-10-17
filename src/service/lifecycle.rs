@@ -1,4 +1,5 @@
-use super::{Runtime, Terminal, string};
+use super::Capture;
+use super::{Runtime, Terminal, TerminalProcess, string};
 use crate::{
     actions::{self, Action, PendingOperation, Phase},
     codex::Codex,
@@ -63,6 +64,7 @@ impl Runtime {
         } else {
             let parent = string(request, "parent_id")?;
             self.ensure_connected(parent)?;
+            self.verify_adopted(parent)?;
             let prompt = string(request, "prompt")?;
             ensure!(
                 prompt.len() <= events::TEXT_LIMIT,
@@ -223,7 +225,9 @@ impl Runtime {
                 "external_owner: Voyager does not own this runtime or window"
             );
             ensure!(
-                self.workers.contains_key(session) || self.shells.contains_key(session),
+                self.workers.contains_key(session)
+                    || self.shells.contains_key(session)
+                    || self.adopted.contains_key(session),
                 "outcome_unknown: runtime ownership was lost; inspect before acting"
             );
         }
@@ -247,9 +251,13 @@ impl Runtime {
             "external"
         } else if self.workers.get(id).is_some_and(|w| w.alive)
             || self.shells.get(id).is_some_and(|s| s.alive)
+            || self.adopted.get(id).is_some_and(|n| n.alive)
         {
             "running"
-        } else if self.workers.contains_key(id) || self.shells.contains_key(id) {
+        } else if self.workers.contains_key(id)
+            || self.shells.contains_key(id)
+            || self.adopted.contains_key(id)
+        {
             "stopped"
         } else {
             "unknown"
@@ -261,7 +269,7 @@ impl Runtime {
                     window_state = "open";
                     break;
                 }
-                None if terminal.child.try_wait()?.is_none() => window_state = "unknown",
+                None if terminal.process.alive()? => window_state = "unknown",
                 _ => {}
             }
         }
@@ -339,8 +347,11 @@ impl Runtime {
         match std::mem::replace(&mut operation.phase, Phase::Start) {
             Phase::Start => match operation.action {
                 Action::Open => {
+                    if let Some(native) = self.adopted.get_mut(&id) {
+                        native.verify(&self.store)?;
+                    }
                     for terminal in self.terminals.iter_mut().rev().filter(|t| t.session == id) {
-                        if terminal.child.try_wait()?.is_some() {
+                        if !terminal.process.alive()? {
                             ensure!(
                                 terminal.window.map(terminal::exists).transpose()? != Some(true),
                                 "outcome_unknown: the previous terminal window is still closing"
@@ -353,12 +364,12 @@ impl Runtime {
                                 continue;
                             }
                             ensure!(
-                                terminal::window(terminal.child.id())? == Some(window),
+                                terminal::window(terminal.process.id())? == Some(window),
                                 "outcome_unknown: terminal window identity changed"
                             );
-                            terminal::focus(terminal.child.id())?;
+                            terminal::focus(terminal.process.id())?;
                             operation.receipt["window_id"] = json!(window);
-                            operation.receipt["pid"] = json!(terminal.child.id());
+                            operation.receipt["pid"] = json!(terminal.process.id());
                             operation.effect("open", "confirmed");
                             self.store.local(
                                 &id,
@@ -373,7 +384,7 @@ impl Runtime {
                     let pid = child.id();
                     self.terminals.push(Terminal {
                         session: id.clone(),
-                        child,
+                        process: TerminalProcess::Launched(child),
                         window: None,
                     });
                     operation.receipt["pid"] = json!(pid);
@@ -387,6 +398,12 @@ impl Runtime {
                     Ok(false)
                 }
                 Action::Background => {
+                    if let Some(native) = self.adopted.get(&id) {
+                        ensure!(
+                            native.handoff_error.is_none(),
+                            "native handoff failed; closing may stop the runtime"
+                        );
+                    }
                     operation.phase = Phase::Close;
                     Ok(false)
                 }
@@ -409,7 +426,23 @@ impl Runtime {
                         "instance.stop_requested",
                         json!({"request_id":operation.id}),
                     )?;
-                    if let Some(worker) = self.workers.get_mut(&id) {
+                    if let Some(native) = self.adopted.get_mut(&id) {
+                        native.verify(&self.store)?;
+                        if let Some(agent) = &native.agent {
+                            let mut connection = Codex::connect(&agent.frontend.server)?;
+                            agent.frontend.process.signal(nix::libc::SIGTERM)?;
+                            let thread = agent.thread.clone();
+                            let request = connection
+                                .begin_rpc("thread/archive", json!({"threadId":thread}))?;
+                            operation.effect("stop", "requested");
+                            operation.phase = Phase::AdoptedArchive {
+                                connection: Box::new(connection),
+                                request,
+                            };
+                            return Ok(false);
+                        }
+                        native.stop(false)?;
+                    } else if let Some(worker) = self.workers.get_mut(&id) {
                         worker.request_stop(false)?;
                     } else {
                         self.shells
@@ -429,6 +462,16 @@ impl Runtime {
                         self.store.generation(&id)?.is_none(),
                         "invalid_input: instance is already registered"
                     );
+                    if self.adopted.get(&id).is_some_and(|n| n.agent.is_none()) {
+                        let generation = self.store.session(&id)?["capture_generation"]
+                            .as_i64()
+                            .context("missing generation")?
+                            + 1;
+                        self.adopted.get_mut(&id).unwrap().reactivate(generation)?;
+                        self.store.reactivate(&id)?;
+                        operation.effect("register", "confirmed");
+                        return Ok(true);
+                    }
                     if let Some(shell) = self.shells.get_mut(&id) {
                         let next = self.store.session(&id)?["capture_generation"]
                             .as_i64()
@@ -461,9 +504,36 @@ impl Runtime {
                     }
                 }
             },
+            Phase::AdoptedArchive {
+                mut connection,
+                request,
+            } => {
+                if connection.poll_rpc(request)?.is_some() {
+                    self.adopted
+                        .get(&id)
+                        .context("adopted runtime missing")?
+                        .stop(false)?;
+                    operation.phase = Phase::WaitStop {
+                        force_at: Instant::now() + Duration::from_secs(2),
+                        forced: false,
+                    };
+                    self.store.local(
+                        &id,
+                        "native.thread_archived",
+                        json!({"history_retained":true,"shared_server_stopped":false}),
+                    )?;
+                } else {
+                    operation.phase = Phase::AdoptedArchive {
+                        connection,
+                        request,
+                    };
+                }
+                Ok(false)
+            }
             Phase::WaitStop { force_at, forced } => {
                 let alive = self.workers.get(&id).is_some_and(|w| w.alive)
-                    || self.shells.get(&id).is_some_and(|s| s.alive);
+                    || self.shells.get(&id).is_some_and(|s| s.alive)
+                    || self.adopted.get(&id).is_some_and(|n| n.alive);
                 if !alive {
                     if let Some(worker) = self.workers.get(&id) {
                         worker.stopped(&self.store)?;
@@ -485,6 +555,9 @@ impl Runtime {
                         if let Some(shell) = self.shells.get_mut(&id) {
                             shell.request_stop(true)?;
                         }
+                        if let Some(native) = self.adopted.get(&id) {
+                            native.stop(true)?;
+                        }
                     }
                     operation.phase = Phase::WaitStop {
                         force_at,
@@ -497,31 +570,64 @@ impl Runtime {
                 if let Some(terminal) = self.terminals.iter_mut().rev().find(|t| t.session == id) {
                     if let Some(window) = terminal.window {
                         if terminal::exists(window)? {
-                            if terminal.child.try_wait()?.is_none() {
+                            if terminal.process.alive()? {
                                 ensure!(
-                                    terminal::window(terminal.child.id())? == Some(window),
+                                    terminal::window(terminal.process.id())? == Some(window),
                                     "outcome_unknown: terminal window identity changed"
                                 );
-                                terminal::close(terminal.child.id())?;
+                                terminal::close(terminal.process.id())?;
                             }
                             operation.effect("close", "requested");
-                            operation.phase = Phase::WaitClose { window };
+                            let confirmation =
+                                if let TerminalProcess::Adopted(process) = &terminal.process {
+                                    Some(
+                                        std::process::Command::new("python3")
+                                            .arg("-c")
+                                            .arg(include_str!(
+                                                "../../integrations/ghostty/confirm_close.py"
+                                            ))
+                                            .args([
+                                                process.pid.to_string(),
+                                                process.start.to_string(),
+                                                std::process::id().to_string(),
+                                            ])
+                                            .stdin(std::process::Stdio::null())
+                                            .stdout(std::process::Stdio::null())
+                                            .spawn()
+                                            .context("start native close confirmation")?,
+                                    )
+                                } else {
+                                    None
+                                };
+                            operation.phase = Phase::WaitClose {
+                                window,
+                                confirmation,
+                            };
                             return Ok(false);
                         }
                     } else {
                         ensure!(
-                            terminal.child.try_wait()?.is_some(),
+                            !terminal.process.alive()?,
                             "outcome_unknown: terminal opening has not been identified"
                         );
                     }
                 }
                 self.finish_close(operation)
             }
-            Phase::WaitClose { window } => {
+            Phase::WaitClose {
+                window,
+                mut confirmation,
+            } => {
+                if let Some(child) = &mut confirmation {
+                    child.try_wait()?;
+                }
                 if !terminal::exists(window)? {
                     self.finish_close(operation)
                 } else {
-                    operation.phase = Phase::WaitClose { window };
+                    operation.phase = Phase::WaitClose {
+                        window,
+                        confirmation,
+                    };
                     Ok(false)
                 }
             }
@@ -532,13 +638,13 @@ impl Runtime {
                 let terminal = self
                     .terminals
                     .iter_mut()
-                    .find(|t| t.session == id && u64::from(t.child.id()) == pid)
+                    .find(|t| t.session == id && u64::from(t.process.id()) == pid)
                     .context("provider_failed: terminal exited before opening")?;
                 ensure!(
-                    terminal.child.try_wait()?.is_none(),
+                    terminal.process.alive()?,
                     "provider_failed: terminal exited before opening"
                 );
-                if let Some(window) = terminal::window(terminal.child.id())? {
+                if let Some(window) = terminal::window(terminal.process.id())? {
                     terminal.window = Some(window);
                     operation.receipt["window_id"] = json!(window);
                     operation.effect("open", "confirmed");
@@ -550,6 +656,9 @@ impl Runtime {
             }
             Phase::Remove => {
                 self.store.remove(&id)?;
+                if let Some(native) = self.adopted.get_mut(&id) {
+                    native.deregister();
+                }
                 if let Some(shell) = self.shells.get_mut(&id) {
                     shell.deregister();
                 }
@@ -634,6 +743,27 @@ impl Runtime {
                     .as_str()
                     .context("native identity missing")?
                     .to_owned();
+                if self.adopted.contains_key(&id) {
+                    let metadata = connection.metadata(&native)?;
+                    let generation = self.store.session(&id)?["capture_generation"]
+                        .as_i64()
+                        .context("capture generation missing")?
+                        + 1;
+                    let capture = Capture::adopt(connection, &metadata, generation)?;
+                    self.store.reactivate(&id)?;
+                    self.captures.insert(id.clone(), capture);
+                    self.adopted
+                        .get_mut(&id)
+                        .context("adopted runtime missing")?
+                        .reactivate(generation)?;
+                    self.store.local(
+                        &id,
+                        "capture.started",
+                        json!({"generation":generation,"history_imported":false}),
+                    )?;
+                    operation.effect("register", "confirmed");
+                    return Ok(true);
+                }
                 let request = connection.begin_rpc(
                     "thread/resume",
                     json!({"threadId":native,"excludeTurns":true}),
@@ -663,9 +793,13 @@ impl Runtime {
                         worker.connection = Some(*connection);
                         worker.generation = generation;
                     } else {
-                        self.captures.insert(id.clone(), (*connection, generation));
+                        self.captures
+                            .insert(id.clone(), Capture::notifications(*connection, generation));
                     }
                     self.store.local(&id,"capture.started",json!({"generation":generation,"history_imported":false,"source":"new_native_subscription"}))?;
+                    if let Some(native) = self.adopted.get_mut(&id) {
+                        native.reactivate(generation)?;
+                    }
                     operation.effect("register", "confirmed");
                     Ok(true)
                 } else {
@@ -687,6 +821,11 @@ impl Runtime {
             }
         }
         count += self.shells.values().filter(|s| s.connected()).count();
+        count += self
+            .adopted
+            .values()
+            .filter(|n| n.agent.is_none() && n.alive && n.capture)
+            .count();
         Ok(count)
     }
 

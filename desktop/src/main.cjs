@@ -89,6 +89,7 @@ async function identities() {
   }
   return result;
 }
+let discoveryErrors = new Map();
 async function discoverTerminals() {
   const endpoints = [];
   if (service?.codex_connected) {
@@ -102,15 +103,17 @@ async function discoverTerminals() {
   for (const session of sessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
   )) {
-    const info = await rpc('attach-info', session.id);
-    endpoints.push({
-      server: session.server,
-      executable: await fs.realpath(info.executable),
-      external: false,
-      kind: session.kind,
-      nativeId: session.native_thread_id,
-      args: info.args,
-    });
+    try {
+      const info = await rpc('attach-info', session.id);
+      endpoints.push({
+        server: session.server,
+        executable: await fs.realpath(info.executable),
+        external: false,
+        kind: info.kind || session.kind,
+        nativeId: session.native_thread_id,
+        args: info.args,
+      });
+    } catch {}
   }
   const found = [];
   for (const endpoint of endpoints) {
@@ -119,6 +122,19 @@ async function discoverTerminals() {
         const record = await identifyTerminal(pid, endpoint);
         if (record) found.push(record);
       } catch {}
+    }
+  }
+  discoveryErrors = new Map();
+  for (const window of windows) {
+    try {
+      const process = await processIdentity(window.pid);
+      if (process.executable !== '/usr/bin/ghostty') continue;
+      const record = await rpc('inspect-window', String(window.id));
+      const previous = found.findIndex((candidate) => candidate.pid === record.pid);
+      if (previous >= 0) found.splice(previous, 1);
+      found.push(record);
+    } catch (error) {
+      discoveryErrors.set(window.id, error.message);
     }
   }
   records = found;
@@ -398,10 +414,14 @@ async function dock(id) {
     await identities(),
   );
   if (target.error) {
-    undock(target.error);
+    undock(discoveryErrors.get(id)?.replace(/^unsupported: /, '') || target.error);
     return false;
   }
-  if (target.record.external) await rpc('register', target.record.nativeId);
+  if (target.record.adoptable) {
+    await rpc('adopt', String(id), randomUUID());
+    target.record = await rpc('inspect-window', String(id));
+    records = records.filter((record) => record.pid !== target.record.pid).concat(target.record);
+  } else if (target.record.external) await rpc('register', target.record.nativeId);
   sessions = await rpc('list', '--include-removed');
   windows = await inventory();
   const fresh = resolveWindow(
@@ -578,6 +598,7 @@ app.whenReady().then(async () => {
       try {
         return await fn(...args);
       } catch (error) {
+        console.error(`${name}: ${error.message}`);
         if (['begin-drag', 'end-drag', 'cancel-drag'].includes(name)) {
           dockError = 'Couldn’t connect to this terminal.';
           sendState();
@@ -738,19 +759,22 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-adoption') ||
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-lifecycle')
-        ? '../test/lifecycle-proof.cjs'
-        : process.argv.includes('--proof-control')
-          ? '../test/control-proof.cjs'
-          : process.argv.includes('--proof-registration')
-            ? '../test/registration-proof.cjs'
-            : '../test/live-proof.cjs',
+      process.argv.includes('--proof-adoption')
+        ? '../test/adoption-proof.cjs'
+        : process.argv.includes('--proof-lifecycle')
+          ? '../test/lifecycle-proof.cjs'
+          : process.argv.includes('--proof-control')
+            ? '../test/control-proof.cjs'
+            : process.argv.includes('--proof-registration')
+              ? '../test/registration-proof.cjs'
+              : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,

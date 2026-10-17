@@ -297,6 +297,7 @@ impl Runtime {
                 );
                 self.check_control(&call.input)?;
                 self.store.require_registered(session)?;
+                self.verify_adopted(session)?;
                 let native = self.store.session(session)?["native_thread_id"]
                     .as_str()
                     .context("native identity missing")?

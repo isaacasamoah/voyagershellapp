@@ -309,9 +309,7 @@ impl Shell {
                     socket: stream,
                     input: Vec::new(),
                 };
-                for chunk in self.output.chunks(4096) {
-                    viewer.send(json!({"output":chunk,"replay":true}))?;
-                }
+                viewer.output(&self.output)?;
                 self.viewer = Some(viewer);
             }
         }
@@ -379,7 +377,7 @@ impl Shell {
                         self.output_start += removed as u64;
                     }
                     if let Some(viewer) = &mut self.viewer {
-                        if viewer.send(json!({"output":&bytes[..n]})).is_err() {
+                        if viewer.output(&bytes[..n]).is_err() {
                             self.viewer = None;
                         }
                     }

@@ -33,6 +33,13 @@ impl Viewer {
         self.socket.write_all(&bytes)?;
         Ok(())
     }
+    pub fn output(&mut self, bytes: &[u8]) -> Result<()> {
+        for chunk in bytes.chunks(4096) {
+            self.send(json!({"output":chunk}))?;
+        }
+        Ok(())
+    }
+
     pub fn read(&mut self) -> Result<Vec<Value>> {
         let mut bytes = [0; 4096];
         match self.socket.read(&mut bytes) {
@@ -121,4 +128,36 @@ pub fn attach(socket: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_redraw_burst_keeps_transport_frames_bounded() -> Result<()> {
+        let (writer, reader) = UnixStream::pair()?;
+        let bytes = vec![255; 128 * 1024];
+        let expected = bytes.clone();
+        let send = std::thread::spawn(move || {
+            Viewer {
+                socket: writer,
+                input: Vec::new(),
+            }
+            .output(&bytes)
+        });
+        let mut peer = Viewer {
+            socket: reader,
+            input: Vec::new(),
+        };
+        let mut received = Vec::new();
+        while received.len() < expected.len() {
+            for value in peer.read()? {
+                received.extend(serde_json::from_value::<Vec<u8>>(value["output"].clone())?);
+            }
+        }
+        send.join().expect("writer thread")?;
+        assert_eq!(received, expected);
+        Ok(())
+    }
 }

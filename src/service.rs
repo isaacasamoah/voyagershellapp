@@ -33,6 +33,9 @@ use std::{
     time::Duration,
 };
 
+mod adopt;
+mod capture;
+use capture::Capture;
 mod lifecycle;
 mod native;
 use native::NativeCall;
@@ -148,6 +151,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         instance: uuid::Uuid::new_v4().to_string(),
         workers: HashMap::new(),
         shells: HashMap::new(),
+        adopted: HashMap::new(),
         terminals: Vec::new(),
         operations: HashMap::new(),
         creations: HashMap::new(),
@@ -174,6 +178,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                     runtime.observe()?;
                     if request["op"] == "dock" {
                         runtime.ensure_connected(string(&request, "session_id")?)?;
+                        runtime.verify_adopted(string(&request, "session_id")?)?;
                         let peer =
                             u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
                         return Ok(Some((
@@ -249,10 +254,11 @@ struct Runtime {
     codex: Option<Codex>,
     server: Option<String>,
     registered: HashMap<String, (String, i64)>,
-    captures: HashMap<String, (Codex, i64)>,
+    captures: HashMap<String, Capture>,
     instance: String,
     workers: HashMap<String, Worker>,
     shells: HashMap<String, Shell>,
+    adopted: HashMap<String, crate::native_instance::NativeInstance>,
     terminals: Vec<Terminal>,
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
@@ -263,8 +269,41 @@ struct Runtime {
 
 struct Terminal {
     session: String,
-    child: Child,
+    process: TerminalProcess,
     window: Option<u32>,
+}
+
+enum TerminalProcess {
+    Launched(Child),
+    Adopted(crate::adoption::Process),
+}
+
+impl TerminalProcess {
+    fn id(&self) -> u32 {
+        match self {
+            Self::Launched(child) => child.id(),
+            Self::Adopted(process) => process.pid,
+        }
+    }
+    fn alive(&self) -> Result<bool> {
+        match self {
+            Self::Launched(child) => {
+                use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid};
+                let result = waitid(
+                    Id::Pid(nix::unistd::Pid::from_raw(child.id() as i32)),
+                    WaitPidFlag::WEXITED | WaitPidFlag::WNOHANG | WaitPidFlag::WNOWAIT,
+                )?;
+                Ok(result == WaitStatus::StillAlive)
+            }
+            Self::Adopted(process) => process.alive(),
+        }
+    }
+    fn reap(&mut self) -> Result<()> {
+        if let Self::Launched(child) = self {
+            child.try_wait()?;
+        }
+        Ok(())
+    }
 }
 
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
@@ -311,6 +350,10 @@ impl Runtime {
         }
         let value = match string(&request, "op")? {
             "create" | "launch" => self.create_operation(&request)?,
+            "inspect-window" => self.inspect_window(u32::try_from(
+                request["window_id"].as_u64().context("missing window_id")?,
+            )?)?,
+            "adopt" => self.adopt(&request)?,
             "operation" => {
                 self.store
                     .operation(string(&request, "request_id")?)?
@@ -318,7 +361,7 @@ impl Runtime {
                     .1
             }
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive) || self.adopted.values().any(|n|n.alive && n.agent.is_some()),"owns_shells":self.shells.values().any(|s|s.alive) || self.adopted.values().any(|n|n.alive && n.agent.is_none()),"control":self.control.current(),"voice":self.control.voice()})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -357,7 +400,11 @@ impl Runtime {
                             .registered
                             .get(session["native_thread_id"].as_str().unwrap())
                             .is_some_and(|(id, _)| session["id"] == *id)
-                        || self.captures.contains_key(session["id"].as_str().unwrap());
+                        || self.captures.contains_key(session["id"].as_str().unwrap())
+                        || self
+                            .adopted
+                            .get(session["id"].as_str().unwrap())
+                            .is_some_and(|n| n.agent.is_none() && n.alive && n.capture);
                     session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
@@ -369,27 +416,44 @@ impl Runtime {
                 }
                 json!(sessions)
             }
-            "shell-exec" => self
-                .shells
-                .get_mut(string(&request, "session_id")?)
-                .context("not a managed shell")?
-                .submit(
-                    &self.store,
-                    string(&request, "request_id")?,
-                    string(&request, "command")?,
-                )?,
-            "shell-read" => self
-                .shells
-                .get(string(&request, "session_id")?)
-                .context("not a managed shell")?
-                .output(request["after"].as_u64().unwrap_or(0)),
+            "shell-exec" => {
+                let id = string(&request, "session_id")?;
+                if let Some(native) = self.adopted.get_mut(id) {
+                    native.submit(
+                        &self.store,
+                        string(&request, "request_id")?,
+                        string(&request, "command")?,
+                    )?
+                } else {
+                    self.shells
+                        .get_mut(id)
+                        .context("not a managed shell")?
+                        .submit(
+                            &self.store,
+                            string(&request, "request_id")?,
+                            string(&request, "command")?,
+                        )?
+                }
+            }
+            "shell-read" => {
+                let id = string(&request, "session_id")?;
+                if let Some(native) = self.adopted.get(id) {
+                    native.output(request["after"].as_u64().unwrap_or(0))
+                } else {
+                    self.shells
+                        .get(id)
+                        .context("not a managed shell")?
+                        .output(request["after"].as_u64().unwrap_or(0))
+                }
+            }
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
             "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
             "stop" => {
                 ensure!(
                     self.creations.is_empty()
                         && !self.workers.values().any(|w| w.alive)
-                        && !self.shells.values().any(|s| s.alive),
+                        && !self.shells.values().any(|s| s.alive)
+                        && !self.adopted.values().any(|n| n.alive),
                     "stop managed instances explicitly before stopping Voyager"
                 );
                 return Ok((json!({"stopping":true,"native_agents_stopped":false}), true));
@@ -401,6 +465,17 @@ impl Runtime {
 
     fn ensure_connected(&mut self, session: &str) -> Result<()> {
         self.store.require_registered(session)?;
+        if let Some(native) = self.adopted.get(session) {
+            ensure!(
+                native.alive && native.capture,
+                "adopted runtime is unavailable"
+            );
+            if let Some(agent) = &native.agent {
+                agent.frontend.verify()?;
+            } else {
+                return Ok(());
+            }
+        }
         if let Some(shell) = self.shells.get(session) {
             ensure!(shell.connected(), "shell is disconnected");
             return Ok(());
@@ -413,8 +488,8 @@ impl Runtime {
         if let Some(worker) = self.workers.get_mut(session) {
             return worker.client();
         }
-        if let Some((connection, _)) = self.captures.get_mut(session) {
-            return Ok(connection);
+        if let Some(capture) = self.captures.get_mut(session) {
+            return Ok(&mut capture.connection);
         }
         let native = self.store.native(
             session,
@@ -430,6 +505,9 @@ impl Runtime {
     }
 
     fn attachment(&self, id: &str) -> Result<Value> {
+        if let Some(native) = self.adopted.get(id) {
+            return native.attach(&self.state);
+        }
         if let Some(shell) = self.shells.get(id) {
             return shell.attach(&self.state);
         }
@@ -451,14 +529,21 @@ impl Runtime {
 
     fn observe(&mut self) -> Result<()> {
         for index in (0..self.terminals.len()).rev() {
-            if self.terminals[index].child.try_wait()?.is_some()
+            if !self.terminals[index].process.alive()?
                 && self.terminals[index]
                     .window
                     .map(terminal::exists)
                     .transpose()?
                     != Some(true)
             {
-                self.terminals.swap_remove(index).child.wait()?;
+                self.terminals.swap_remove(index).process.reap()?;
+            }
+        }
+        for (id, native) in &mut self.adopted {
+            native.observe(&self.store)?;
+            if !native.alive && self.captures.remove(id).is_some() {
+                self.store
+                    .local(id, "capture.stopped", json!({"reason":"runtime_stopped"}))?;
             }
         }
         for shell in self.shells.values_mut() {
@@ -468,31 +553,17 @@ impl Runtime {
             worker.observe(&self.store)?;
         }
         let mut disconnected = Vec::new();
-        for (session, (connection, generation)) in &mut self.captures {
-            let native = self.store.session(session)?["native_thread_id"]
-                .as_str()
-                .context("native identity missing")?
-                .to_owned();
-            let mut notes: Vec<_> = connection.pending.drain(..).collect();
-            match connection.read() {
-                Ok(Some(note)) => notes.push(note),
-                Ok(None) => (),
-                Err(_) => disconnected.push(session.clone()),
-            }
-            for note in notes {
-                if let Some(event) = events::normalize(&note) {
-                    if event.thread == native {
-                        self.store.record(session, *generation, event)?;
-                    }
-                }
+        for (session, capture) in &mut self.captures {
+            if let Err(error) = capture.observe(&self.store, session) {
+                disconnected.push((session.clone(), error.to_string()));
             }
         }
-        for session in disconnected {
+        for (session, reason) in disconnected {
             self.captures.remove(&session);
             self.store.local(
                 &session,
                 "capture.gap",
-                json!({"reason":"native_disconnected","replay_available":false}),
+                json!({"reason":reason,"replay_available":false}),
             )?;
         }
         let pending: Vec<_> = self
