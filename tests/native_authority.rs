@@ -1,5 +1,5 @@
-use anyhow::{Context, Result, ensure};
-use serde_json::{Value, json};
+use anyhow::{ensure, Context, Result};
+use serde_json::{json, Value};
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -125,7 +125,7 @@ fn native_captain_and_crew_use_their_bound_cli_identity() -> Result<()> {
         json!({"op":"supervise","session_id":crew,"supervisor_id":captain,"request_id":"assign-crew"}),
     )?;
     let message = format!(
-        "Use one native shell tool to run these commands directly, without Python. Do not read or print the session context file. First run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > capabilities.json. Then run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {crew} delegated-native 'Reply exactly CREW_NATIVE_42.' > delegated.json. Finally, if \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {peer} forbidden-native 'Reply exactly SHOULD_NOT_RUN.' > refused.json 2> refused.txt; then printf unexpected > permission-result; else printf refused > permission-result; fi. Reply with the actor session ID from capabilities and the two outcomes."
+        "Use one native shell tool to run these commands directly, without Python. Do not read or print the session context file. First run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > capabilities.json. Then run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {crew} delegated-native 'Reply exactly: CREW_NATIVE_42' > delegated.json. Finally, if \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {peer} forbidden-native 'Reply exactly SHOULD_NOT_RUN.' > refused.json 2> refused.txt; then printf unexpected > permission-result; else printf refused > permission-result; fi. Reply with the actor session ID from capabilities and the two outcomes."
     );
     let sent = service::client(
         &state,
@@ -154,7 +154,7 @@ fn native_captain_and_crew_use_their_bound_cli_identity() -> Result<()> {
     ensure!(
         events.iter().any(|e| e["session_id"] == crew
             && e["payload"]["role"] == "assistant"
-            && e["payload"]["text"] == "CREW_NATIVE_42."),
+            && e["payload"]["text"] == "CREW_NATIVE_42"),
         "crew marker missing"
     );
     ensure!(
@@ -164,7 +164,7 @@ fn native_captain_and_crew_use_their_bound_cli_identity() -> Result<()> {
     let denied = fs::read_to_string(state.join("captain/refused.txt"))?;
     ensure!(denied.contains("forbidden"), "expected authority refusal");
     let crew_message = format!(
-        "Run these commands directly through your native shell tool, without Python. Do not read or print the session context file. Run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > capabilities.json. Then if \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {peer} crew-forbidden-native 'Reply exactly SHOULD_NOT_RUN.' > refused.json 2> refused.txt; then printf unexpected > permission-result; else printf refused > permission-result; fi. Run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" escalate crew-question 'Can you confirm the next task?' > escalation.json. Reply exactly CREW_CHECKED_42."
+        "Run these commands directly through your native shell tool, without Python. Do not read or print the session context file. Run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > capabilities.json. Then if \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" send {peer} crew-forbidden-native 'Reply exactly SHOULD_NOT_RUN.' > refused.json 2> refused.txt; then printf unexpected > permission-result; else printf refused > permission-result; fi. Run \"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" escalate crew-question 'Can you confirm the next task?' > escalation.json. Reply exactly: CREW_CHECKED_42"
     );
     let sent = service::client(
         &state,
