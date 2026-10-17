@@ -1,6 +1,5 @@
-const groups = require('./ui/groups.js');
-function rectangles(sessions, bounds, mode = 'rank', minimum = { width: 1, height: 1 }) {
-  if (!['rank', 'grid'].includes(mode)) throw Error('Choose a layout.');
+const hierarchy = require('./ui/hierarchy.js');
+function rectangles(sessions, bounds, minimum = { width: 1, height: 1 }) {
   if (!sessions.length) return [];
   const maxColumns = Math.floor(bounds.width / minimum.width);
   if (maxColumns < 1) throw Error('This display is too narrow for a terminal.');
@@ -10,17 +9,14 @@ function rectangles(sessions, bounds, mode = 'rank', minimum = { width: 1, heigh
       items.slice(i * size, (i + 1) * size),
     );
   }
-  const rows =
-    mode === 'rank'
-      ? [...new Set(sessions.map((s) => s.rank))].flatMap((rank) =>
-          chunks(
-            sessions.filter((s) => s.rank === rank),
-            maxColumns,
-          ),
-        )
-      : chunks(sessions, Math.min(Math.ceil(Math.sqrt(sessions.length)), maxColumns));
+  const rows = [...new Set(sessions.map((s) => s.rank))].flatMap((rank) =>
+    chunks(
+      sessions.filter((s) => s.rank === rank),
+      maxColumns,
+    ),
+  );
   if (Math.floor(bounds.height / rows.length) < minimum.height)
-    throw Error('These windows do not fit. Try Even grid or a smaller group.');
+    throw Error('These vessels do not fit on this display. Try a smaller fleet.');
   return rows.flatMap((row, y) =>
     row.map((s, x) => ({
       session: s.id,
@@ -35,11 +31,11 @@ function rectangles(sessions, bounds, mode = 'rank', minimum = { width: 1, heigh
     })),
   );
 }
-function groupPlan(sessions, root, mode, bounds, minimum) {
-  const members = groups
-    .members(sessions, root)
-    .filter((s) => s.ownership === 'managed' && s.worker_state === 'running');
-  if (!members.length) throw Error('This group has no running instances.');
-  return rectangles(members, bounds, mode, minimum);
+function vesselPlan(sessions, ids, bounds, minimum) {
+  const members = hierarchy
+    .members(sessions)
+    .filter((s) => ids.includes(s.id) && s.ownership === 'managed' && s.worker_state === 'running');
+  if (!members.length) throw Error('No running vessels to surface.');
+  return rectangles(members, bounds, minimum);
 }
-module.exports = { rectangles, groupPlan };
+module.exports = { rectangles, vesselPlan };

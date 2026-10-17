@@ -155,9 +155,8 @@ body[data-connected='false'] #connection {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  overflow: auto;
   min-height: 44px;
-  flex: 1;
+  flex-shrink: 0;
 }
 .session {
   display: flex;
@@ -270,8 +269,6 @@ body[data-dock-error='true'] #indicator {
   display: grid;
   gap: 9px;
   -webkit-app-region: no-drag;
-  max-height: calc(100vh - 280px);
-  overflow: auto;
 }
 #create-form label {
   display: grid;
@@ -420,62 +417,114 @@ textarea {
   display: none;
 }
 
-.group-toolbar,
-.group-heading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  -webkit-app-region: no-drag;
-}
-.group-toolbar button,
-.group-heading button {
-  border: 0;
-  border-radius: 6px;
-  background: #ffffff40;
-  padding: 6px 8px;
-}
-.group-toolbar button {
-  flex-shrink: 0;
-}
-.group-toolbar select {
-  padding: 4px;
-  font-size: 10px;
-}
-.instance-group {
-  flex-shrink: 0;
+.rank-tree {
   min-width: 0;
+  flex-shrink: 0;
 }
-.group-show {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-}
-.group-members {
-  border-left: 1px solid #ffffff90;
-  margin: 5px 0 8px 8px;
-  padding-left: 6px;
-  display: grid;
-  gap: 5px;
+.rank-children {
+  margin-left: 8px;
+  border-left: 1px solid #ffffff70;
+  padding-left: 5px;
 }
 .instance-row {
   position: relative;
   align-items: stretch;
+  -webkit-app-region: no-drag;
 }
 .instance-row .session {
-  padding-right: 28px;
+  padding: 8px 28px;
 }
 .instance-menu {
   position: absolute;
   right: 2px;
   top: 2px;
 }
-
+.rank-toggle {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  padding: 6px;
+}
+#add-fleet {
+  align-self: flex-start;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+#fleet-form,
+.fleet-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+#fleet-form button {
+  border: 0;
+  background: #ffffff60;
+  border-radius: 5px;
+  padding: 5px;
+  font-size: 10px;
+}
+#fleets {
+  min-height: 0;
+}
+.fleet {
+  border: 1px solid #ffffff90;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  -webkit-app-region: no-drag;
+}
+.fleet-heading button {
+  border: 0;
+  background: transparent;
+  padding: 7px 9px;
+}
+.fleet-name {
+  flex: 1;
+  text-align: left;
+  font-size: 11px;
+}
+.fleet-remove {
+  opacity: 0;
+}
+.fleet:hover .fleet-remove,
+.fleet-remove:focus-visible {
+  opacity: 1;
+}
+.fleet-canvas {
+  min-height: 56px;
+}
+.fleet-empty {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  padding: 16px;
+  color: #435b6b;
+}
+[data-over='true'] {
+  outline: 1px dashed #528696;
+  outline-offset: -2px;
+}
 body[data-arranging='true'] .session,
-body[data-arranging='true'] .group-show,
-body[data-arranging='true'] #show-all {
+body[data-arranging='true'] .fleet-name {
   pointer-events: none;
   cursor: progress;
+}
+
+#panel-viewport {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+#panel-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#panel-flow > * {
+  flex-shrink: 0;
 }

@@ -1,4 +1,4 @@
-const groups = (() => {
+const hierarchy = (() => {
   const order = ['admiral', 'commodore', 'captain', 'crew'];
   const compare = (a, b) =>
     (a.rank ? order.indexOf(a.rank) : 4) - (b.rank ? order.indexOf(b.rank) : 4) ||
@@ -10,7 +10,7 @@ const groups = (() => {
   function members(sessions, root = null) {
     const rows = active(sessions);
     if (root === null) return rows.sort(compare);
-    if (!rows.some((s) => s.id === root)) throw Error('This group is no longer registered.');
+    if (!rows.some((s) => s.id === root)) throw Error('This vessel is no longer registered.');
     const ids = new Set([root]);
     for (let changed = true; changed;) {
       changed = false;
@@ -33,6 +33,15 @@ const groups = (() => {
       .filter((s) => s.supervisor_id === id)
       .sort(compare);
   }
-  return { members, roots, children };
+  function fleetOf(id, sessions, assignments) {
+    const seen = new Set();
+    while (id && !seen.has(id)) {
+      seen.add(id);
+      if (Object.hasOwn(assignments, id)) return assignments[id];
+      id = sessions.find((s) => s.id === id)?.supervisor_id;
+    }
+    return null;
+  }
+  return { members, roots, children, fleetOf };
 })();
-if (typeof module !== 'undefined') module.exports = groups;
+if (typeof module !== 'undefined') module.exports = hierarchy;

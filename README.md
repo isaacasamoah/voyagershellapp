@@ -23,9 +23,10 @@ is our starting point, and we’d love to build toward it with other developers.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
   Creation registers it and starts capture. Native windows open by default.
-- Click an instance card to surface its terminal on half a display and minimise
-  the others. Collapsible assignment groups and **Show all** arrange real windows
-  in a rank-ordered grid; see [window groups](docs/window-groups.md).
+- Click a Vessel card to surface its terminal on half a display and minimise
+  the others. Rank rows start collapsed; separate Fleets collect related vessels
+  through drag/drop. The panel and canvases size to their visible content.
+  See [Vessels and fleets](docs/fleets.md).
 - **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
 - Docking selects the human control attachment. Undocking or closing Electron

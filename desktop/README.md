@@ -161,14 +161,19 @@ then stops its own instances and service. It makes native model calls. Physical
 drag quality and sound remain a separate user check. The ignored Rust
 native_authority test separately checks native agent tool identity.
 
-## Window groups
+## Vessels and fleets
 
-[Window groups](../docs/window-groups.md) owns the layout contract and terms.
-`src/ui/groups.js` derives the assignment tree; `src/layout.cjs` calculates cells
-using native minimum sizes. The instance card surfaces a window; the top-right
-menu retains lifecycle actions. The Rust `window_layout` helper applies the
-identified presentation plan and checks observed geometry.
+[The panel contract](../docs/fleets.md) owns the terms and gestures.
+`src/ui/hierarchy.js` derives command branches; `src/fleets.cjs` persists local
+collections independently of authority. `src/layout.cjs` calculates rank rows
+using native minimum sizes. The card surfaces a Vessel and its top-right menu
+retains lifecycle actions. Fleet canvases accept dragged Vessel cards.
 
-`test/groups.test.cjs` covers group boundaries and layout. The opt-in
-`--proof-groups` mode drives the actual panel against existing native instances,
-without launching agents or submitting tasks.
+ResizeObserver measures the unconstrained panel flow. A separate viewport scrolls
+at the display limit; the main process clamps native bounds to that display.
+An empty canvas starts at one row and grows with its visible cards.
+
+`test/fleets.test.cjs` checks durable membership; `test/hierarchy.test.cjs` checks
+branches and cell geometry. `--proof-fleets` exercises programmatic drag/drop and
+native sizing on an existing hierarchy, without agent/model launches. Physical
+pointer testing remains separate.

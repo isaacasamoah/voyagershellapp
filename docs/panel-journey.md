@@ -82,7 +82,7 @@ made active first, then `open` for A changed the window manager's active-window
 property to A. Window IDs, shell PID, registration count and control state did
 not change; no duplicate client or runtime was created. A stopped instance's
 open was refused. This exercises the real backend/desktop operation. The arrow was subsequently replaced by the instance card; current behaviour
-is defined in [window groups](window-groups.md).
+is defined in [Vessels and fleets](fleets.md).
 
 The isolated service and both test terminals were explicitly stopped afterward.
 The current voice-test service was not restarted or upgraded. Formatting, the

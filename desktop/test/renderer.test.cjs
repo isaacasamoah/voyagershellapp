@@ -62,13 +62,13 @@ function renderer() {
   nodes.get('instance-kind').value = 'codex';
   nodes.get('instance-rank').value = 'crew';
   nodes.get('create-form').hidden = true;
+  nodes.get('fleet-form').hidden = true;
   const api = {
     onState: (callback) => {
       onState = callback;
     },
     onDockSound() {},
     ready() {},
-    createForm() {},
     createInstance: async (input) => {
       calls.push(input);
       return { session: 'created' };
@@ -82,7 +82,7 @@ function renderer() {
     crypto: { randomUUID },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/authority.js'), 'utf8'), context);
-  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/groups.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/hierarchy.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
@@ -136,7 +136,7 @@ test('a rejected rank change keeps the same request on an explicit retry', async
       },
     ],
   });
-  const row = ui.nodes.get('sessions').children[0];
+  const row = ui.nodes.get('sessions').children[0].children[0];
   const change = row
     .querySelectorAll('button')
     .find((button) => button.textContent === 'Change rank');
@@ -195,28 +195,22 @@ test('owner questions keep answer identity after a lost reply and retire from se
   assert.equal(ui.nodes.get('authority-feedback').textContent, 'Response delivered.');
 });
 
-test('panel groups collapse independently and instance cards surface without an arrow', async () => {
+test('rank rows start collapsed and expand without a duplicate group header', async () => {
   const ui = renderer();
   const requests = [];
-  ui.api.surfaceInstance = async (id) => requests.push(['surface', id]);
-  ui.api.showGroup = async (id, mode) => requests.push(['group', id, mode]);
+  ui.api.surfaceInstance = async (id) => requests.push(id);
   const base = { kind: 'codex', cwd: '/project', ownership: 'managed', worker_state: 'running' };
   const rows = [
     { ...base, id: 'captain', name: 'Captain', rank: 'captain' },
     { ...base, id: 'crew', name: 'Crew', rank: 'crew', supervisor_id: 'captain' },
   ];
   ui.update({ sessions: rows });
-  let group = ui.nodes.get('sessions').children[0];
-  const toggle = group.children[0].children[0];
-  toggle.onclick();
-  assert.equal(group.children[1].hidden, true);
-  ui.update({ sessions: rows, selected: 'crew' });
-  group = ui.nodes.get('sessions').children[0];
-  assert.equal(group.children[1].hidden, true);
-  await group.children[0].children[1].onclick();
-  assert.deepEqual(requests[0], ['group', 'captain', 'grid']);
-  const row = group.children[1].children[0];
-  await row.children[0].onclick();
-  assert.deepEqual(requests[1], ['surface', 'captain']);
-  assert.equal(row.children.length, 2);
+  let tree = ui.nodes.get('sessions').children[0];
+  assert.equal(tree.children[1].hidden, true);
+  tree.children[0].children[2].onclick();
+  tree = ui.nodes.get('sessions').children[0];
+  assert.equal(tree.children[1].hidden, false);
+  assert.equal(tree.children[0].children[0].children[0].children[0].textContent, 'Captain');
+  await tree.children[0].children[0].onclick();
+  assert.deepEqual(requests, ['captain']);
 });

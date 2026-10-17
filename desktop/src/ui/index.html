@@ -12,7 +12,7 @@
   </head>
   <body>
     <main>
-      <section id="panel" hidden aria-label="Voyager instances">
+      <section id="panel" hidden aria-label="Voyager vessels">
         <svg class="brand" viewBox="0 0 224 120" aria-hidden="true">
           <defs>
             <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -50,83 +50,94 @@
             </text>
           </g>
         </svg>
-        <div id="connection" role="status">Connecting…</div>
-        <div class="instances-heading">
-          <span>Instances</span
-          ><button id="add" aria-label="New instance" title="New instance">+</button>
-        </div>
-        <form id="create-form" hidden>
-          <label
-            >Type<select id="instance-kind">
-              <option value="codex">Codex</option>
-              <option value="shell">Terminal · Bash</option>
-            </select></label
-          >
-          <label id="rank-field"
-            >Rank<select id="instance-rank">
-              <option value="admiral">Admiral</option>
-              <option value="commodore">Commodore</option>
-              <option value="captain">Captain</option>
-              <option value="crew" selected>Crew</option>
-            </select></label
-          >
-          <label
-            ><span id="supervisor-label">Supervisor</span
-            ><select id="instance-supervisor">
-              <option value="">Unassigned</option>
-            </select></label
-          >
-          <label
-            >Name<input
-              id="instance-name"
-              maxlength="100"
-              required
-              placeholder="What are you working on?"
-          /></label>
-          <label
-            >Folder<span class="folder-field"
-              ><input id="instance-cwd" required /><button
-                id="choose-folder"
-                type="button"
-                aria-label="Choose folder"
+        <div id="panel-viewport">
+          <div id="panel-flow">
+            <div id="connection" role="status">Connecting…</div>
+            <div class="instances-heading">
+              <span>Vessels</span
+              ><button id="add" aria-label="New vessel" title="New vessel">+</button>
+            </div>
+            <form id="create-form" hidden>
+              <label
+                >Type<select id="instance-kind">
+                  <option value="codex">Codex</option>
+                  <option value="shell">Terminal · Bash</option>
+                </select></label
               >
-                …
-              </button></span
-            ></label
-          >
-          <p class="form-hint">Opens in Ghostty. Terminal commands are saved locally.</p>
-          <div class="form-actions">
-            <button id="cancel-create" type="button">Cancel</button
-            ><button id="create" type="submit">Create and open</button>
+              <label id="rank-field"
+                >Rank<select id="instance-rank">
+                  <option value="admiral">Admiral</option>
+                  <option value="commodore">Commodore</option>
+                  <option value="captain">Captain</option>
+                  <option value="crew" selected>Crew</option>
+                </select></label
+              >
+              <label
+                ><span id="supervisor-label">Supervisor</span
+                ><select id="instance-supervisor">
+                  <option value="">Unassigned</option>
+                </select></label
+              >
+              <label
+                >Name<input
+                  id="instance-name"
+                  maxlength="100"
+                  required
+                  placeholder="What are you working on?"
+              /></label>
+              <label
+                >Folder<span class="folder-field"
+                  ><input id="instance-cwd" required /><button
+                    id="choose-folder"
+                    type="button"
+                    aria-label="Choose folder"
+                  >
+                    …
+                  </button></span
+                ></label
+              >
+              <p class="form-hint">Opens in Ghostty. Terminal commands are saved locally.</p>
+              <div class="form-actions">
+                <button id="cancel-create" type="button">Cancel</button
+                ><button id="create" type="submit">Create and open</button>
+              </div>
+            </form>
+            <p id="instance-error" role="alert" hidden></p>
+            <p id="authority-feedback" role="status"></p>
+            <div id="sessions" aria-label="Your vessels"></div>
+            <button id="add-fleet" type="button">+ Add fleet</button>
+            <form id="fleet-form" hidden>
+              <input
+                id="fleet-name"
+                aria-label="Fleet name"
+                maxlength="100"
+                placeholder="Topic or shared goal"
+                required
+              />
+              <button type="submit">Create fleet</button>
+              <button id="cancel-fleet" type="button">Cancel</button>
+            </form>
+            <p id="fleet-error" role="alert" hidden></p>
+            <div id="fleets" aria-label="Your fleets"></div>
+            <section id="unregistered" hidden aria-label="Unregistered vessels">
+              <div class="instances-heading">Unregistered vessels</div>
+              <div id="unregistered-sessions"></div>
+            </section>
+            <section id="escalations" hidden aria-label="Questions for you">
+              <div class="instances-heading">Questions for you</div>
+              <p id="escalation-error" role="status" hidden></p>
+              <div id="escalation-list"></div>
+            </section>
+            <p id="tagline">Let’s Go Together</p>
           </div>
-        </form>
-        <p id="instance-error" role="alert" hidden></p>
-        <p id="authority-feedback" role="status"></p>
-        <div class="group-toolbar">
-          <button id="show-all">Show all</button>
-          <select id="group-layout" aria-label="Window layout">
-            <option value="grid">Even grid</option>
-            <option value="rank">By rank</option>
-          </select>
         </div>
-        <div id="sessions" aria-label="Your instances"></div>
-        <section id="unregistered" hidden aria-label="Unregistered instances">
-          <div class="instances-heading">Unregistered instances</div>
-          <div id="unregistered-sessions"></div>
-        </section>
-        <section id="escalations" hidden aria-label="Questions for you">
-          <div class="instances-heading">Questions for you</div>
-          <p id="escalation-error" role="status" hidden></p>
-          <div id="escalation-list"></div>
-        </section>
-        <p id="tagline">Let’s Go Together</p>
         <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
       </section>
       <button
         id="avatar"
         class="avatar"
         data-state="floating"
-        aria-label="Voyager. Click for agents. Hold to lift, then drag onto a terminal."
+        aria-label="Voyager. Click for vessels. Hold to lift, then drag onto a terminal."
         aria-expanded="false"
       >
         <img src="../../assets/idle.png" alt="" draggable="false" />
@@ -134,7 +145,7 @@
       </button>
     </main>
     <script src="authority.js"></script>
-    <script src="groups.js"></script>
+    <script src="hierarchy.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

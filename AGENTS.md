@@ -34,8 +34,10 @@ The CLI and Electron expose those service decisions; they do not grant rights.
 Read `docs/authority.md` before changing that boundary. Native voice and explicit
 preemptive override remain separate from rank and ordinary steering.
 
-Window groups derive from service assignments in `desktop/src/ui/groups.js`;
-cell geometry belongs in `desktop/src/layout.cjs`. Native layout is presentation
-through `src/window_layout.rs`, separate from agent lifecycle and authority.
-Read `docs/window-groups.md` before changing that boundary. Minimise retains the
-terminal client; background closes it. Neither changes rank or docking authority.
+Rank presentation derives from service assignments in `desktop/src/ui/hierarchy.js`.
+Fleet membership is separate, local presentation data in `desktop/src/fleets.cjs`.
+Cell geometry belongs in `desktop/src/layout.cjs`; native placement uses
+`src/window_layout.rs`. Read `docs/fleets.md` before changing these boundaries.
+Minimise retains the terminal; background closes it. Neither changes authority.
+Panel size follows rendered content through ResizeObserver, capped to the display.
+Do not reintroduce Vessel-count estimates or duplicate supervisor group headers.

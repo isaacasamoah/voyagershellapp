@@ -11,7 +11,9 @@ let lastEscalations;
 let lastAnswer;
 const escalationDrafts = new Map();
 const pendingActions = new Map();
-const collapsedGroups = new Set();
+const expandedVessels = new Set();
+let fleetRequest;
+let lastState;
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -37,7 +39,8 @@ function element(tag, text, className) {
   if (className) e.className = className;
   return e;
 }
-api.onState((value) => {
+function renderState(value) {
+  lastState = value;
   const focused = document.activeElement?.dataset.key;
   $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
@@ -66,16 +69,30 @@ api.onState((value) => {
   updateCreationAuthority();
   renderEscalations(value);
   if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
-  const rows = JSON.stringify([value.sessions, value.selected, Boolean(value.serviceError)]);
+  const rows = JSON.stringify([
+    value.sessions,
+    value.selected,
+    Boolean(value.serviceError),
+    value.fleetData,
+    value.fleetError,
+  ]);
   if (rows === lastRows) return;
   lastRows = rows;
   const active = value.sessions.filter((s) => s.removed_ms == null);
   const unregistered = value.sessions.filter(
     (s) => s.removed_ms != null && s.ownership === 'managed' && s.worker_state === 'running',
   );
+  const fleetData = value.fleetData || { fleets: [], assignments: {} };
+  $('fleet-error').textContent = value.fleetError || '';
+  $('fleet-error').hidden = !value.fleetError;
   function rowFor(s) {
     const b = element('button', '', 'session');
     b.dataset.key = s.id;
+    b.draggable = true;
+    b.ondragstart = (event) => {
+      event.dataTransfer.setData('application/x-voyager-vessel', s.id);
+      event.dataTransfer.effectAllowed = 'move';
+    };
     b.setAttribute('aria-pressed', String(s.id === value.selected));
     const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
     const status =
@@ -193,49 +210,81 @@ api.onState((value) => {
     row.append(menu);
     return row;
   }
-  function grouped(s, ancestors = new Set()) {
-    const reports = groups.children(active, s.id).filter((r) => !ancestors.has(r.id));
-    if (!['admiral', 'commodore', 'captain'].includes(s.rank)) return rowFor(s);
-    const group = element('section', '', 'instance-group');
-    const heading = element('div', '', 'group-heading');
-    const toggle = element('button', collapsedGroups.has(s.id) ? '▸' : '▾', 'group-toggle');
-    const name = instanceName(s);
-    toggle.setAttribute('aria-label', `Expand or collapse ${name}'s group`);
-    toggle.setAttribute('aria-expanded', String(!collapsedGroups.has(s.id)));
-    const show = element('button', `${name}'s group`, 'group-show');
-    show.dataset.group = s.id;
-    show.title = `Show ${groups.members(active, s.id).length} instances`;
-    show.onclick = () => showGroup(s.id, show);
-    const content = element('div', '', 'group-members');
-    content.hidden = collapsedGroups.has(s.id);
+  function ranked(s, visibleRows) {
+    const tree = element('section', '', 'rank-tree');
+    const row = rowFor(s);
+    tree.append(row);
+    const reports = hierarchy.children(visibleRows, s.id);
+    if (!reports.length) return tree;
+    const toggle = element('button', expandedVessels.has(s.id) ? '▾' : '▸', 'rank-toggle');
+    toggle.setAttribute('aria-label', `Expand or collapse ${instanceName(s)}`);
+    toggle.setAttribute('aria-expanded', String(expandedVessels.has(s.id)));
+    toggle.dataset.expand = s.id;
     toggle.onclick = () => {
-      if (collapsedGroups.has(s.id)) collapsedGroups.delete(s.id);
-      else collapsedGroups.add(s.id);
-      content.hidden = collapsedGroups.has(s.id);
-      toggle.textContent = content.hidden ? '▸' : '▾';
-      toggle.setAttribute('aria-expanded', String(!content.hidden));
+      if (expandedVessels.has(s.id)) expandedVessels.delete(s.id);
+      else expandedVessels.add(s.id);
+      lastRows = null;
+      renderState(lastState);
     };
-    const next = new Set([...ancestors, s.id]);
-    content.append(rowFor(s), ...reports.map((r) => grouped(r, next)));
-    heading.append(toggle, show);
-    group.append(heading, content);
-    return group;
+    row.append(toggle);
+    const children = element('div', '', 'rank-children');
+    children.hidden = !expandedVessels.has(s.id);
+    children.append(...reports.map((r) => ranked(r, visibleRows)));
+    tree.append(children);
+    return tree;
   }
-  $('sessions').replaceChildren(...groups.roots(active).map((s) => grouped(s)));
+  function renderTree(container, fleet) {
+    const members = active.filter(
+      (s) => hierarchy.fleetOf(s.id, active, fleetData.assignments) === fleet,
+    );
+    container.replaceChildren(...hierarchy.roots(members).map((s) => ranked(s, members)));
+    dropTarget(container, fleet);
+    if (!members.length && fleet) {
+      container.append(element('span', 'Drop vessels here', 'fleet-empty'));
+    }
+  }
+  renderTree($('sessions'), null);
+  const fleetNodes = fleetData.fleets.map((fleet) => {
+    const section = element('section', '', 'fleet');
+    section.dataset.fleet = fleet.id;
+    const heading = element('div', '', 'fleet-heading');
+    const name = element('button', fleet.name, 'fleet-name');
+    name.title = 'Surface this fleet';
+    name.onclick = () => arrange(() => api.surfaceFleet(fleet.id), name);
+    const remove = element('button', '×', 'fleet-remove');
+    remove.setAttribute('aria-label', `Remove fleet ${fleet.name}`);
+    remove.title = 'Remove fleet; keep vessels running';
+    remove.onclick = async () => {
+      try {
+        const result = await api.removeFleet(fleet.id);
+        showError(result?.error);
+      } catch (error) {
+        showError(error.message);
+      }
+    };
+    heading.append(name, remove);
+    const canvas = element('div', '', 'fleet-canvas');
+    renderTree(canvas, fleet.id);
+    section.append(heading, canvas);
+    dropTarget(section, fleet.id);
+    return section;
+  });
+  $('fleets').replaceChildren(...fleetNodes);
   $('unregistered-sessions').replaceChildren(...unregistered.map(rowFor));
   $('unregistered').hidden = unregistered.length === 0;
-  if (!active.length) $('sessions').append(element('p', 'No instances yet.', 'empty'));
+  if (!active.length) $('sessions').append(element('p', 'No vessels yet.', 'empty'));
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });
     }
   }
-});
-async function showGroup(id, button) {
+}
+api.onState(renderState);
+async function arrange(call, button) {
   document.body.dataset.arranging = 'true';
   button.disabled = true;
   try {
-    const result = await api.showGroup(id, $('group-layout').value || 'grid');
+    const result = await call();
     showError(result?.error);
   } catch (error) {
     showError(error.message);
@@ -244,7 +293,58 @@ async function showGroup(id, button) {
     button.disabled = false;
   }
 }
-$('show-all').onclick = () => showGroup(null, $('show-all'));
+function dropTarget(node, fleet) {
+  node.ondragover = (event) => {
+    if (!Array.from(event.dataTransfer.types).includes('application/x-voyager-vessel')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    node.dataset.over = 'true';
+  };
+  node.ondragleave = () => {
+    delete node.dataset.over;
+  };
+  node.ondrop = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    delete node.dataset.over;
+    const id = event.dataTransfer.getData('application/x-voyager-vessel');
+    if (!id) return;
+    try {
+      const result = await api.moveVessel(id, fleet);
+      showError(result?.error);
+    } catch (error) {
+      showError(error.message);
+    }
+  };
+}
+$('add-fleet').onclick = () => {
+  $('fleet-form').hidden = false;
+  lastRows = null;
+  renderState(lastState);
+  $('fleet-name').focus();
+};
+$('cancel-fleet').onclick = () => {
+  $('fleet-form').hidden = true;
+  lastRows = null;
+  renderState(lastState);
+};
+$('fleet-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const name = $('fleet-name').value.trim();
+  if (!fleetRequest || fleetRequest.name !== name) fleetRequest = { name, id: crypto.randomUUID() };
+  try {
+    const result = await api.createFleet(name, fleetRequest.id);
+    if (result?.error) throw Error(result.error);
+    fleetRequest = null;
+    $('fleet-name').value = '';
+    $('fleet-form').hidden = true;
+    lastRows = null;
+    renderState(lastState);
+    showError('');
+  } catch (error) {
+    showError(error.message);
+  }
+};
 $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();
@@ -281,12 +381,30 @@ $('avatar').addEventListener('keydown', (event) => {
   }
 });
 $('quit').onclick = () => api.quit();
+if (view === 'panel' && typeof ResizeObserver !== 'undefined') {
+  let previousHeight;
+  new ResizeObserver(() => {
+    const style = getComputedStyle($('panel'));
+    const height = Math.ceil(
+      $('panel-flow').getBoundingClientRect().height +
+        parseFloat(style.paddingTop) +
+        parseFloat(style.paddingBottom) +
+        parseFloat(style.borderTopWidth) +
+        parseFloat(style.borderBottomWidth) +
+        16,
+    );
+    if (height !== previousHeight) {
+      previousHeight = height;
+      api.panelContentHeight(height);
+    }
+  }).observe($('panel-flow'));
+}
 api.ready();
 
 function showError(message) {
   let text = message || '';
   for (const session of currentSessions) text = text.replaceAll(session.id, instanceName(session));
-  text = text.replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, 'an instance');
+  text = text.replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, 'a vessel');
   $('instance-error').textContent = text;
   $('instance-error').hidden = !message;
 }
@@ -445,7 +563,6 @@ function showCreate(open) {
   }
   $('create-form').hidden = !open;
   $('add').setAttribute('aria-expanded', String(open));
-  api.createForm(open);
   showError('');
   if (open) $('instance-name').focus();
 }

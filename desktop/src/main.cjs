@@ -6,7 +6,9 @@ const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
 const { authorityActions } = require('./authority.cjs');
-const { groupPlan, rectangles } = require('./layout.cjs');
+const { vesselPlan } = require('./layout.cjs');
+const hierarchy = require('./ui/hierarchy.js');
+const { fleetStore } = require('./fleets.cjs');
 const { visibleEscalations } = require('./ui/authority.js');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
@@ -41,6 +43,10 @@ let avatarWin,
   seated = false,
   dragging = null,
   binding = null;
+const fleets = fleetStore(path.join(stateDir, 'fleets.json'), () => rpc('list'));
+let fleetData = { fleets: [], assignments: {} },
+  fleetError = null,
+  measuredPanelHeight = 372;
 let sessions = [],
   escalations = [],
   escalationError = null,
@@ -52,7 +58,6 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
-let creating = false;
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
@@ -214,6 +219,8 @@ function sendState() {
       }),
     ),
     service,
+    fleetData,
+    fleetError,
     escalations,
     escalationError,
     serviceError,
@@ -245,18 +252,19 @@ function placePanel() {
   setBoundsIfChanged(avatarWin, { x: x + 100, y: y + 36 });
 }
 function panelHeight() {
-  return (
-    288 +
-    Math.max(1, sessions.length) * 56 +
-    (creating ? 390 : 0) +
-    (visibleEscalations(escalations).length || escalationError ? 220 : 0)
-  );
+  return measuredPanelHeight;
 }
 function resizePanel() {
-  panelWin.setSize(
-    320,
-    Math.min(screen.getDisplayMatching(panelWin.getBounds()).workArea.height, panelHeight()),
-  );
+  const previous = panelWin.getBounds();
+  const area = screen.getDisplayMatching(previous).workArea;
+  const height = Math.min(area.height, panelHeight());
+  const width = 320;
+  setBoundsIfChanged(panelWin, {
+    x: Math.max(area.x, Math.min(previous.x, area.x + area.width - width)),
+    y: Math.max(area.y, Math.min(previous.y, area.y + area.height - height)),
+    width,
+    height,
+  });
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
@@ -518,6 +526,12 @@ async function refresh() {
     } catch {
       escalationError = 'Questions could not be loaded.';
     }
+    try {
+      fleetData = await fleets.read();
+      fleetError = null;
+    } catch (error) {
+      fleetError = error.message;
+    }
     serviceError = null;
     if (!selected)
       selected = sessions.find((s) => s.ownership === 'managed')?.id ?? sessions[0]?.id ?? null;
@@ -577,7 +591,8 @@ async function refresh() {
   sendState();
 }
 let arranging = false;
-async function surface(id, mode, single = false) {
+async function surface(ids, single = false) {
+  const id = ids[0];
   if (arranging) throw Error('Windows are being arranged.');
   arranging = true;
   try {
@@ -596,19 +611,7 @@ async function surface(id, mode, single = false) {
     const display = screen.getDisplayMatching(panelWin.getBounds());
     const area = { ...display.workArea };
     if (single) area.width = Math.floor(area.width / 2);
-    let targets = single
-      ? rectangles(
-          sessions.filter(
-            (s) =>
-              s.id === id &&
-              s.removed_ms == null &&
-              s.ownership === 'managed' &&
-              s.worker_state === 'running',
-          ),
-          area,
-          'grid',
-        )
-      : groupPlan(sessions, id, mode, area);
+    let targets = vesselPlan(sessions, ids, area);
     if (!targets.length) throw Error('This instance is not running.');
     windows = await inventory();
     await discoverTerminals();
@@ -632,20 +635,7 @@ async function surface(id, mode, single = false) {
         Math.ceil((w?.minimum?.[1] || 80) / display.scaleFactor),
       );
     }
-    targets = single
-      ? rectangles(
-          sessions.filter(
-            (s) =>
-              s.id === id &&
-              s.removed_ms == null &&
-              s.ownership === 'managed' &&
-              s.worker_state === 'running',
-          ),
-          area,
-          'grid',
-          minimum,
-        )
-      : groupPlan(sessions, id, mode, area, minimum);
+    targets = vesselPlan(sessions, ids, area, minimum);
     const live = await identities();
     const plan = [];
     for (const record of records) {
@@ -675,7 +665,7 @@ async function surface(id, mode, single = false) {
             ),
         )
       )
-        throw Error('A group terminal changed before it could be arranged.');
+        throw Error('A vessel terminal changed before it could be arranged.');
     const request = { windows: plan, focus: plan.find((p) => !p.minimise).id };
     const { stdout } = await exec(probe, ['layout', JSON.stringify(request)], {
       timeout: 5000,
@@ -687,8 +677,8 @@ async function surface(id, mode, single = false) {
       path.join(stateDir, 'last-layout.json'),
       JSON.stringify(
         {
-          mode: single ? 'single' : mode,
-          root: id,
+          mode: single ? 'single' : 'rank',
+          vessels: ids,
           request,
           result,
           displays: screen.getAllDisplays(),
@@ -698,7 +688,7 @@ async function surface(id, mode, single = false) {
       ),
     );
     if (result.state !== 'confirmed')
-      throw Error('The desktop adjusted some window sizes. Try Even grid or a smaller group.');
+      throw Error('The desktop adjusted some window sizes. Try a smaller fleet.');
     return result;
   } finally {
     arranging = false;
@@ -761,11 +751,6 @@ app.whenReady().then(async () => {
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
-  handle('create-form', [panelWin], (open) => {
-    creating = open === true;
-    if (seated) placePanel();
-    else resizePanel();
-  });
   handle('choose-directory', [panelWin], async () => {
     const result = await dialog.showOpenDialog(panelWin, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];
@@ -775,15 +760,41 @@ app.whenReady().then(async () => {
     await refresh();
     return result;
   });
+  handle('panel-content-height', [panelWin], (height) => {
+    if (!Number.isInteger(height) || height < 0 || height > 20000)
+      throw Error('Invalid panel size.');
+    measuredPanelHeight = height;
+    if (expanded) {
+      if (seated) placePanel();
+      else resizePanel();
+    }
+  });
   handle('surface-instance', [panelWin], (id) => {
-    if (typeof id !== 'string') throw Error('Choose an instance.');
-    return surface(id, 'grid', true);
+    if (typeof id !== 'string') throw Error('Choose a vessel.');
+    return surface([id], true);
   });
-  handle('show-group', [panelWin], (id, mode) => {
-    if (id !== null && typeof id !== 'string') throw Error('Choose a group.');
-    if (!['rank', 'grid'].includes(mode)) throw Error('Choose a layout.');
-    return surface(id, mode);
+  handle('surface-fleet', [panelWin], async (id) => {
+    const data = await fleets.read();
+    if (!data.fleets.some((f) => f.id === id)) throw Error('Choose a fleet.');
+    const current = await rpc('list');
+    return surface(
+      current
+        .filter((s) => hierarchy.fleetOf(s.id, current, data.assignments) === id)
+        .map((s) => s.id),
+    );
   });
+  async function fleetAction(call) {
+    try {
+      return await call();
+    } finally {
+      await refresh();
+    }
+  }
+  handle('create-fleet', [panelWin], (name, request) =>
+    fleetAction(() => fleets.create(name, request)),
+  );
+  handle('move-vessel', [panelWin], (id, fleet) => fleetAction(() => fleets.move(id, fleet)));
+  handle('remove-fleet', [panelWin], (id) => fleetAction(() => fleets.remove(id)));
   async function instanceAction(id, request, op, flags = []) {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
     if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
@@ -924,13 +935,13 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-authority') ||
-    process.argv.includes('--proof-groups') ||
+    process.argv.includes('--proof-fleets') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-groups')
-        ? '../test/groups-proof.cjs'
+      process.argv.includes('--proof-fleets')
+        ? '../test/fleets-proof.cjs'
         : process.argv.includes('--proof-authority')
           ? '../test/authority-proof.cjs'
           : process.argv.includes('--proof-lifecycle')
@@ -972,8 +983,8 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-groups')
-            ? 'groups-proof.json'
+          process.argv.includes('--proof-fleets')
+            ? 'fleets-proof.json'
             : process.argv.includes('--proof-authority')
               ? 'authority-proof.json'
               : process.argv.includes('--proof-lifecycle')
