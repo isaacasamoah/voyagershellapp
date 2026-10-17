@@ -50,8 +50,8 @@ leaving restores transparency, without changing its colour palette.
 The panel shows Online/Offline and project names with connection dots. Green
 means connected; gray means disconnected, stopped or unknown. Tooltips and
 accessible labels retain the full status. No event feed, internal IDs,
-instructional footer is shown. A **+** opens the instance form, and **↗** reopens
-a managed instance’s native window. The close × quits only
+instructional footer is shown. A **+** opens the instance form; an instance card
+surfaces its native window. [Vessels and fleets](fleets.md) organise related work. The close × quits only
 Electron. Connection is observation status, not proof of task completion.
 
 ## Create from the panel
@@ -163,8 +163,9 @@ avatar joins. Registration may succeed even if subsequent visual placement fails
 the agent still appears in the service registry.
 
 `voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
-only a window belonging to its calling process; it does not move or type into the
-terminal. Electron checks the actual native stack after asking for placement. A covered
+only a window belonging to its calling process. Its separate layout operation
+arranges identified managed terminals as described in [Vessels and fleets](fleets.md).
+Neither operation types into a terminal. Electron checks the actual native stack after asking for placement. A covered
 marker hides rather than painting over another X11 app. Linux hover uses a
 bounded pointer/button probe while a dock or panel is visible, because Electron forwards ignored
 mouse movement only on macOS/Windows; it does not inject input. Native Wayland

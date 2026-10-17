@@ -62,13 +62,13 @@ function renderer() {
   nodes.get('instance-kind').value = 'codex';
   nodes.get('instance-rank').value = 'crew';
   nodes.get('create-form').hidden = true;
+  nodes.get('fleet-form').hidden = true;
   const api = {
     onState: (callback) => {
       onState = callback;
     },
     onDockSound() {},
     ready() {},
-    createForm() {},
     createInstance: async (input) => {
       calls.push(input);
       return { session: 'created' };
@@ -82,6 +82,7 @@ function renderer() {
     crypto: { randomUUID },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/authority.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/hierarchy.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
@@ -135,7 +136,7 @@ test('a rejected rank change keeps the same request on an explicit retry', async
       },
     ],
   });
-  const row = ui.nodes.get('sessions').children[0];
+  const row = ui.nodes.get('sessions').children[0].children[0];
   const change = row
     .querySelectorAll('button')
     .find((button) => button.textContent === 'Change rank');
@@ -192,4 +193,24 @@ test('owner questions keep answer identity after a lost reply and retire from se
   ui.update({ escalations: [{ ...entry, answered: true, answer: { delivery: 'accepted' } }] });
   assert.equal(ui.nodes.get('escalations').hidden, true);
   assert.equal(ui.nodes.get('authority-feedback').textContent, 'Response delivered.');
+});
+
+test('rank rows start collapsed and expand without a duplicate group header', async () => {
+  const ui = renderer();
+  const requests = [];
+  ui.api.surfaceInstance = async (id) => requests.push(id);
+  const base = { kind: 'codex', cwd: '/project', ownership: 'managed', worker_state: 'running' };
+  const rows = [
+    { ...base, id: 'captain', name: 'Captain', rank: 'captain' },
+    { ...base, id: 'crew', name: 'Crew', rank: 'crew', supervisor_id: 'captain' },
+  ];
+  ui.update({ sessions: rows });
+  let tree = ui.nodes.get('sessions').children[0];
+  assert.equal(tree.children[1].hidden, true);
+  tree.children[0].children[2].onclick();
+  tree = ui.nodes.get('sessions').children[0];
+  assert.equal(tree.children[1].hidden, false);
+  assert.equal(tree.children[0].children[0].children[0].children[0].textContent, 'Captain');
+  await tree.children[0].children[0].onclick();
+  assert.deepEqual(requests, ['captain']);
 });

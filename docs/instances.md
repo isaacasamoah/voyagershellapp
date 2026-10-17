@@ -7,7 +7,7 @@ prompt, manually copied conversation ID or dock step is required for creation.
 
 Dock the astronaut onto that window to select the human command surface.
 Undock to release that selection. Neither operation starts or stops the instance.
-Click **↗** beside a running instance to reopen its native interface after closing
+Click a running instance card to reopen its native interface after closing
 it. If its launched window is still alive, the same operation asks the desktop
 to bring that exact window forward. It does not start another instance or dock it.
 
@@ -40,7 +40,7 @@ directory. This is not an OS service installer or crash/reboot supervisor.
 
 Use **⋯** beside an instance for **Run in background**, **Stop**, **Remove** or
 **Stop and remove**. Removed but running owned instances appear under
-**Unregistered**, with **Register again**, **↗** and **Stop** available.
+**Unregistered**, with **Register again**, its reopenable card and **Stop** available.
 
 The [lifecycle contract](lifecycle.md) defines each action's effects, defaults,
 retry behavior and ownership limits. The [CLI reference](service.md#commands)

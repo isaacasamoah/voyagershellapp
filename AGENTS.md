@@ -33,3 +33,11 @@ coordination and capability presentation belong in `src/service/authority_ops.rs
 The CLI and Electron expose those service decisions; they do not grant rights.
 Read `docs/authority.md` before changing that boundary. Native voice and explicit
 preemptive override remain separate from rank and ordinary steering.
+
+Rank presentation derives from service assignments in `desktop/src/ui/hierarchy.js`.
+Fleet membership is separate, local presentation data in `desktop/src/fleets.cjs`.
+Cell geometry belongs in `desktop/src/layout.cjs`; native placement uses
+`src/window_layout.rs`. Read `docs/fleets.md` before changing these boundaries.
+Minimise retains the terminal; background closes it. Neither changes authority.
+Panel size follows rendered content through ResizeObserver, capped to the display.
+Do not reintroduce Vessel-count estimates or duplicate supervisor group headers.

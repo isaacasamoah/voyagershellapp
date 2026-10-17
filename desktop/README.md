@@ -27,8 +27,8 @@ VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start
 ```
 
 The directory is created privately if absent. Use the panel’s **+** to create a
-Codex instance or managed Bash and **↗** to reopen its native interface or bring
-its existing window forward. `npm start -- --expanded` opens the
+Codex instance or managed Bash. Click its card to reopen its native interface
+or bring its existing window forward. `npm start -- --expanded` opens the
 panel immediately. Quit and restart Electron to pick up changes to the main
 process or preload. The service and its workers keep running independently.
 Codex creation starts at Crew each time the form opens. Choose another rank
@@ -160,3 +160,20 @@ It records authority-proof.json and authority-panel.png in that private state,
 then stops its own instances and service. It makes native model calls. Physical
 drag quality and sound remain a separate user check. The ignored Rust
 native_authority test separately checks native agent tool identity.
+
+## Vessels and fleets
+
+[The panel contract](../docs/fleets.md) owns the terms and gestures.
+`src/ui/hierarchy.js` derives command branches; `src/fleets.cjs` persists local
+collections independently of authority. `src/layout.cjs` calculates rank rows
+using native minimum sizes. The card surfaces a Vessel and its top-right menu
+retains lifecycle actions. Fleet canvases accept dragged Vessel cards.
+
+ResizeObserver measures the unconstrained panel flow. A separate viewport scrolls
+at the display limit; the main process clamps native bounds to that display.
+An empty canvas starts at one row and grows with its visible cards.
+
+`test/fleets.test.cjs` checks durable membership; `test/hierarchy.test.cjs` checks
+branches and cell geometry. `--proof-fleets` exercises programmatic drag/drop and
+native sizing on an existing hierarchy, without agent/model launches. Physical
+pointer testing remains separate.

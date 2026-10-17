@@ -8,4 +8,5 @@ pub mod shell;
 pub mod shell_transport;
 pub mod store;
 pub mod terminal;
+pub mod window_layout;
 pub mod worker;
