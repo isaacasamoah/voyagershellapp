@@ -11,6 +11,7 @@ let lastEscalations;
 let lastAnswer;
 const escalationDrafts = new Map();
 const pendingActions = new Map();
+const collapsedGroups = new Set();
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -94,26 +95,21 @@ api.onState((value) => {
     if (s.rank) identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
     b.append(identity, dot);
     b.dataset.connected = String(status === 'Connected');
-    b.onclick = () => api.select(s.id);
+    b.onclick = async () => {
+      document.body.dataset.arranging = 'true';
+      b.disabled = true;
+      try {
+        const result = await api.surfaceInstance(s.id);
+        showError(result?.error);
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        document.body.dataset.arranging = 'false';
+        b.disabled = false;
+      }
+    };
     const row = element('div', '', 'instance-row');
     row.append(b);
-    if (s.ownership === 'managed' && s.worker_state === 'running') {
-      const open = element('button', '↗', 'open-instance');
-      open.setAttribute('aria-label', `Open ${name}`);
-      open.title = `Open ${name}`;
-      open.onclick = async () => {
-        open.disabled = true;
-        try {
-          const result = await api.openInstance(s.id);
-          showError(result?.error);
-        } catch (error) {
-          showError(error.message);
-        } finally {
-          open.disabled = false;
-        }
-      };
-      row.append(open);
-    }
     const menu = element('div', '', 'instance-menu');
     const summary = element('button', '⋯');
     summary.setAttribute('aria-label', `Actions for ${name}`);
@@ -197,7 +193,35 @@ api.onState((value) => {
     row.append(menu);
     return row;
   }
-  $('sessions').replaceChildren(...active.map(rowFor));
+  function grouped(s, ancestors = new Set()) {
+    const reports = groups.children(active, s.id).filter((r) => !ancestors.has(r.id));
+    if (!['admiral', 'commodore', 'captain'].includes(s.rank)) return rowFor(s);
+    const group = element('section', '', 'instance-group');
+    const heading = element('div', '', 'group-heading');
+    const toggle = element('button', collapsedGroups.has(s.id) ? '▸' : '▾', 'group-toggle');
+    const name = instanceName(s);
+    toggle.setAttribute('aria-label', `Expand or collapse ${name}'s group`);
+    toggle.setAttribute('aria-expanded', String(!collapsedGroups.has(s.id)));
+    const show = element('button', `${name}'s group`, 'group-show');
+    show.dataset.group = s.id;
+    show.title = `Show ${groups.members(active, s.id).length} instances`;
+    show.onclick = () => showGroup(s.id, show);
+    const content = element('div', '', 'group-members');
+    content.hidden = collapsedGroups.has(s.id);
+    toggle.onclick = () => {
+      if (collapsedGroups.has(s.id)) collapsedGroups.delete(s.id);
+      else collapsedGroups.add(s.id);
+      content.hidden = collapsedGroups.has(s.id);
+      toggle.textContent = content.hidden ? '▸' : '▾';
+      toggle.setAttribute('aria-expanded', String(!content.hidden));
+    };
+    const next = new Set([...ancestors, s.id]);
+    content.append(rowFor(s), ...reports.map((r) => grouped(r, next)));
+    heading.append(toggle, show);
+    group.append(heading, content);
+    return group;
+  }
+  $('sessions').replaceChildren(...groups.roots(active).map((s) => grouped(s)));
   $('unregistered-sessions').replaceChildren(...unregistered.map(rowFor));
   $('unregistered').hidden = unregistered.length === 0;
   if (!active.length) $('sessions').append(element('p', 'No instances yet.', 'empty'));
@@ -207,6 +231,20 @@ api.onState((value) => {
     }
   }
 });
+async function showGroup(id, button) {
+  document.body.dataset.arranging = 'true';
+  button.disabled = true;
+  try {
+    const result = await api.showGroup(id, $('group-layout').value || 'grid');
+    showError(result?.error);
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    document.body.dataset.arranging = 'false';
+    button.disabled = false;
+  }
+}
+$('show-all').onclick = () => showGroup(null, $('show-all'));
 $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();

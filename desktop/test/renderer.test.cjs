@@ -82,6 +82,7 @@ function renderer() {
     crypto: { randomUUID },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/authority.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/groups.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
@@ -192,4 +193,30 @@ test('owner questions keep answer identity after a lost reply and retire from se
   ui.update({ escalations: [{ ...entry, answered: true, answer: { delivery: 'accepted' } }] });
   assert.equal(ui.nodes.get('escalations').hidden, true);
   assert.equal(ui.nodes.get('authority-feedback').textContent, 'Response delivered.');
+});
+
+test('panel groups collapse independently and instance cards surface without an arrow', async () => {
+  const ui = renderer();
+  const requests = [];
+  ui.api.surfaceInstance = async (id) => requests.push(['surface', id]);
+  ui.api.showGroup = async (id, mode) => requests.push(['group', id, mode]);
+  const base = { kind: 'codex', cwd: '/project', ownership: 'managed', worker_state: 'running' };
+  const rows = [
+    { ...base, id: 'captain', name: 'Captain', rank: 'captain' },
+    { ...base, id: 'crew', name: 'Crew', rank: 'crew', supervisor_id: 'captain' },
+  ];
+  ui.update({ sessions: rows });
+  let group = ui.nodes.get('sessions').children[0];
+  const toggle = group.children[0].children[0];
+  toggle.onclick();
+  assert.equal(group.children[1].hidden, true);
+  ui.update({ sessions: rows, selected: 'crew' });
+  group = ui.nodes.get('sessions').children[0];
+  assert.equal(group.children[1].hidden, true);
+  await group.children[0].children[1].onclick();
+  assert.deepEqual(requests[0], ['group', 'captain', 'grid']);
+  const row = group.children[1].children[0];
+  await row.children[0].onclick();
+  assert.deepEqual(requests[1], ['surface', 'captain']);
+  assert.equal(row.children.length, 2);
 });

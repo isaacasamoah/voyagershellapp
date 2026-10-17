@@ -129,7 +129,7 @@ exports.run = async ({ panelWin, rpc, refresh, inventory, stateDir, setExpanded 
     observations.push({ action: 'background task completed', runtime_pid: info.pid });
     await refresh();
     await ui(
-      `Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(a.id)}).querySelector('.open-instance').click()`,
+      `Array.from(document.querySelectorAll('.instance-row')).find(r=>r.querySelector('[data-key]')?.dataset.key===${JSON.stringify(a.id)}).querySelector('.session').click()`,
     );
     await wait(
       inventory,

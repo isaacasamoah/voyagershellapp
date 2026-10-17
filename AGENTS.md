@@ -33,3 +33,9 @@ coordination and capability presentation belong in `src/service/authority_ops.rs
 The CLI and Electron expose those service decisions; they do not grant rights.
 Read `docs/authority.md` before changing that boundary. Native voice and explicit
 preemptive override remain separate from rank and ordinary steering.
+
+Window groups derive from service assignments in `desktop/src/ui/groups.js`;
+cell geometry belongs in `desktop/src/layout.cjs`. Native layout is presentation
+through `src/window_layout.rs`, separate from agent lifecycle and authority.
+Read `docs/window-groups.md` before changing that boundary. Minimise retains the
+terminal client; background closes it. Neither changes rank or docking authority.

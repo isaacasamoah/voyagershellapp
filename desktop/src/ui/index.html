@@ -102,6 +102,13 @@
         </form>
         <p id="instance-error" role="alert" hidden></p>
         <p id="authority-feedback" role="status"></p>
+        <div class="group-toolbar">
+          <button id="show-all">Show all</button>
+          <select id="group-layout" aria-label="Window layout">
+            <option value="grid">Even grid</option>
+            <option value="rank">By rank</option>
+          </select>
+        </div>
         <div id="sessions" aria-label="Your instances"></div>
         <section id="unregistered" hidden aria-label="Unregistered instances">
           <div class="instances-heading">Unregistered instances</div>
@@ -127,6 +134,7 @@
       </button>
     </main>
     <script src="authority.js"></script>
+    <script src="groups.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

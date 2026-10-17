@@ -23,7 +23,9 @@ is our starting point, and we’d love to build toward it with other developers.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
   Creation registers it and starts capture. Native windows open by default.
-- **↗** focuses an existing window or reopens the same running instance.
+- Click an instance card to surface its terminal on half a display and minimise
+  the others. Collapsible assignment groups and **Show all** arrange real windows
+  in a rank-ordered grid; see [window groups](docs/window-groups.md).
 - **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
 - Docking selects the human control attachment. Undocking or closing Electron

@@ -27,8 +27,8 @@ VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start
 ```
 
 The directory is created privately if absent. Use the panel’s **+** to create a
-Codex instance or managed Bash and **↗** to reopen its native interface or bring
-its existing window forward. `npm start -- --expanded` opens the
+Codex instance or managed Bash. Click its card to reopen its native interface
+or bring its existing window forward. `npm start -- --expanded` opens the
 panel immediately. Quit and restart Electron to pick up changes to the main
 process or preload. The service and its workers keep running independently.
 Codex creation starts at Crew each time the form opens. Choose another rank
@@ -160,3 +160,15 @@ It records authority-proof.json and authority-panel.png in that private state,
 then stops its own instances and service. It makes native model calls. Physical
 drag quality and sound remain a separate user check. The ignored Rust
 native_authority test separately checks native agent tool identity.
+
+## Window groups
+
+[Window groups](../docs/window-groups.md) owns the layout contract and terms.
+`src/ui/groups.js` derives the assignment tree; `src/layout.cjs` calculates cells
+using native minimum sizes. The instance card surfaces a window; the top-right
+menu retains lifecycle actions. The Rust `window_layout` helper applies the
+identified presentation plan and checks observed geometry.
+
+`test/groups.test.cjs` covers group boundaries and layout. The opt-in
+`--proof-groups` mode drives the actual panel against existing native instances,
+without launching agents or submitting tasks.

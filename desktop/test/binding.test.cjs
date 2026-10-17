@@ -78,3 +78,13 @@ test('hit testing chooses the frontmost visible window, never a covered terminal
   const avatar = { ...panel, id: 4 };
   assert.equal(windowAt([a, panel, avatar], { x: 50, y: 50 }, [4]).id, panel.id);
 });
+
+test('minimising preserves a verified attachment but cannot become a new docking target', () => {
+  const hidden = { ...a, visible: false };
+  assert.match(resolveWindow(hidden, [hidden], [record], identities).error, /unavailable/);
+  assert.equal(
+    resolveWindow(hidden, [hidden], [record], identities, false).record.nativeId,
+    nativeId,
+  );
+  assert.match(resolveWindow(hidden, [hidden], [record], new Map(), false).error, /changed/);
+});

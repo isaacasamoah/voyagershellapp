@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
 const { authorityActions } = require('./authority.cjs');
+const { groupPlan, rectangles } = require('./layout.cjs');
 const { visibleEscalations } = require('./ui/authority.js');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
@@ -197,6 +198,7 @@ function sendState() {
         removed_ms,
         rank,
         supervisor_id,
+        registered_ms,
       }) => ({
         id,
         name,
@@ -208,6 +210,7 @@ function sendState() {
         removed_ms,
         rank,
         supervisor_id,
+        registered_ms,
       }),
     ),
     service,
@@ -542,6 +545,7 @@ async function refresh() {
       windows,
       records,
       processes,
+      false,
     );
     const session = result.record && registeredSession(result.record, sessions);
     if (
@@ -571,6 +575,135 @@ async function refresh() {
     else resizePanel();
   }
   sendState();
+}
+let arranging = false;
+async function surface(id, mode, single = false) {
+  if (arranging) throw Error('Windows are being arranged.');
+  arranging = true;
+  try {
+    sessions = await rpc('list', '--include-removed');
+    if (
+      single &&
+      sessions.some(
+        (s) =>
+          s.id === id &&
+          s.removed_ms != null &&
+          s.ownership === 'managed' &&
+          s.worker_state === 'running',
+      )
+    )
+      return await rpc('open', id, 'ghostty');
+    const display = screen.getDisplayMatching(panelWin.getBounds());
+    const area = { ...display.workArea };
+    if (single) area.width = Math.floor(area.width / 2);
+    let targets = single
+      ? rectangles(
+          sessions.filter(
+            (s) =>
+              s.id === id &&
+              s.removed_ms == null &&
+              s.ownership === 'managed' &&
+              s.worker_state === 'running',
+          ),
+          area,
+          'grid',
+        )
+      : groupPlan(sessions, id, mode, area);
+    if (!targets.length) throw Error('This instance is not running.');
+    windows = await inventory();
+    await discoverTerminals();
+    for (const target of targets) {
+      if (!records.some((r) => registeredSession(r, sessions)?.id === target.session))
+        await rpc('open', target.session, 'ghostty');
+    }
+    sessions = await rpc('list', '--include-removed');
+    windows = await inventory();
+    await discoverTerminals();
+    const minimum = { width: 1, height: 1 };
+    for (const record of records) {
+      if (!targets.some((t) => registeredSession(record, sessions)?.id === t.session)) continue;
+      const w = windows.find((w) => w.pid === record.pid);
+      minimum.width = Math.max(
+        minimum.width,
+        Math.ceil((w?.minimum?.[0] || 100) / display.scaleFactor),
+      );
+      minimum.height = Math.max(
+        minimum.height,
+        Math.ceil((w?.minimum?.[1] || 80) / display.scaleFactor),
+      );
+    }
+    targets = single
+      ? rectangles(
+          sessions.filter(
+            (s) =>
+              s.id === id &&
+              s.removed_ms == null &&
+              s.ownership === 'managed' &&
+              s.worker_state === 'running',
+          ),
+          area,
+          'grid',
+          minimum,
+        )
+      : groupPlan(sessions, id, mode, area, minimum);
+    const live = await identities();
+    const plan = [];
+    for (const record of records) {
+      const session = registeredSession(record, sessions);
+      if (!session || session.ownership !== 'managed' || session.removed_ms != null) continue;
+      const w = windows.find((w) => w.pid === record.pid);
+      const match = resolveWindow(w, windows, [record], live, false);
+      if (match.error) throw Error(match.error);
+      const target = targets.find((t) => t.session === session.id);
+      const entry = { id: w.id, pid: record.pid, start: record.start, minimise: !target };
+      if (target) {
+        const origin = screen.dipToScreenPoint({ x: target.x, y: target.y });
+        Object.assign(entry, origin, {
+          width: Math.round(target.width * display.scaleFactor),
+          height: Math.round(target.height * display.scaleFactor),
+        });
+      }
+      plan.push(entry);
+    }
+    for (const target of targets)
+      if (
+        !plan.some(
+          (p) =>
+            !p.minimise &&
+            records.some(
+              (r) => r.pid === p.pid && registeredSession(r, sessions)?.id === target.session,
+            ),
+        )
+      )
+        throw Error('A group terminal changed before it could be arranged.');
+    const request = { windows: plan, focus: plan.find((p) => !p.minimise).id };
+    const { stdout } = await exec(probe, ['layout', JSON.stringify(request)], {
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    });
+    const result = JSON.parse(stdout);
+    if (single) selected = id;
+    await fs.writeFile(
+      path.join(stateDir, 'last-layout.json'),
+      JSON.stringify(
+        {
+          mode: single ? 'single' : mode,
+          root: id,
+          request,
+          result,
+          displays: screen.getAllDisplays(),
+        },
+        null,
+        2,
+      ),
+    );
+    if (result.state !== 'confirmed')
+      throw Error('The desktop adjusted some window sizes. Try Even grid or a smaller group.');
+    return result;
+  } finally {
+    arranging = false;
+    await refresh();
+  }
 }
 function createWindow(width, height) {
   const client = new BrowserWindow({
@@ -627,11 +760,6 @@ app.whenReady().then(async () => {
     });
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
-  handle('select', [panelWin], (id) => {
-    if (!sessions.some((s) => s.id === id)) throw Error('Unknown session');
-    selected = id;
-    sendState();
-  });
   handle('quit-ui', [panelWin], () => app.quit());
   handle('create-form', [panelWin], (open) => {
     creating = open === true;
@@ -647,10 +775,14 @@ app.whenReady().then(async () => {
     await refresh();
     return result;
   });
-  handle('open-instance', [panelWin], async (id) => {
-    if (!sessions.some((s) => s.id === id && s.ownership === 'managed'))
-      throw Error('Unknown managed instance');
-    return rpc('open', id, 'ghostty');
+  handle('surface-instance', [panelWin], (id) => {
+    if (typeof id !== 'string') throw Error('Choose an instance.');
+    return surface(id, 'grid', true);
+  });
+  handle('show-group', [panelWin], (id, mode) => {
+    if (id !== null && typeof id !== 'string') throw Error('Choose a group.');
+    if (!['rank', 'grid'].includes(mode)) throw Error('Choose a layout.');
+    return surface(id, mode);
   });
   async function instanceAction(id, request, op, flags = []) {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
@@ -792,19 +924,22 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-authority') ||
+    process.argv.includes('--proof-groups') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-authority')
-        ? '../test/authority-proof.cjs'
-        : process.argv.includes('--proof-lifecycle')
-          ? '../test/lifecycle-proof.cjs'
-          : process.argv.includes('--proof-control')
-            ? '../test/control-proof.cjs'
-            : process.argv.includes('--proof-registration')
-              ? '../test/registration-proof.cjs'
-              : '../test/live-proof.cjs',
+      process.argv.includes('--proof-groups')
+        ? '../test/groups-proof.cjs'
+        : process.argv.includes('--proof-authority')
+          ? '../test/authority-proof.cjs'
+          : process.argv.includes('--proof-lifecycle')
+            ? '../test/lifecycle-proof.cjs'
+            : process.argv.includes('--proof-control')
+              ? '../test/control-proof.cjs'
+              : process.argv.includes('--proof-registration')
+                ? '../test/registration-proof.cjs'
+                : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -814,6 +949,7 @@ app.whenReady().then(async () => {
         rpc,
         refresh,
         inventory,
+        surface,
         dock,
         undock,
         setExpanded,
@@ -836,15 +972,17 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-authority')
-            ? 'authority-proof.json'
-            : process.argv.includes('--proof-lifecycle')
-              ? 'lifecycle-proof.json'
-              : process.argv.includes('--proof-control')
-                ? 'control-proof.json'
-                : process.argv.includes('--proof-registration')
-                  ? 'registration-proof.json'
-                  : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-groups')
+            ? 'groups-proof.json'
+            : process.argv.includes('--proof-authority')
+              ? 'authority-proof.json'
+              : process.argv.includes('--proof-lifecycle')
+                ? 'lifecycle-proof.json'
+                : process.argv.includes('--proof-control')
+                  ? 'control-proof.json'
+                  : process.argv.includes('--proof-registration')
+                    ? 'registration-proof.json'
+                    : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(
