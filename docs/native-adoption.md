@@ -2,7 +2,23 @@
 
 The feature branch adds adoption through the Electron avatar. Dragging onto a supported Ghostty window asks the Rust service to retain its existing Bash PTY, register the instance and select human control. It preserves the original process. It does not restart the shell or replace its interface.
 
-The current target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. Codex additionally needs the [pinned native identity integration](../integrations/codex/README.md). Stock Codex, other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
+The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. Adoption of unmodified Codex remains unproved. Other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
+
+## Codex acceptance
+
+The app must work with normally installed, unmodified Codex. A source patch,
+custom build or pinned replacement binary does not satisfy this requirement.
+The existing [frontend bridge experiment](../integrations/codex/README.md) proved
+parts of the mechanism, but is not the selected distribution approach.
+
+Codex must pass the same native journey as Bash: independent launch, avatar drop,
+exact identity, control, future capture, undock, normal viewer close while work
+continues, same-instance reopen, and selected stop/removal. It must also launch
+a worker and refuse a stale binding after the displayed conversation changes.
+A similar unrelated window and conversation must remain unaffected. No prepared
+title, launch metadata, model prompt or manual conversation selection may supply
+the identity. Capability checks may refuse an unsupported installed version;
+they must not silently choose a likely conversation.
 
 ## User actions
 
@@ -41,11 +57,12 @@ The [pinned Ghostty shutdown source](https://github.com/ghostty-org/ghostty/blob
 
 Bash command boundaries come from Ghostty's shell integration markers. They are observations of native output, not authenticated claims about command semantics. Agent commands require a foreground Bash prompt with no draft. The prototype reads Bash's exported readline state; unexpected mappings or missing symbols fail explicitly.
 
-Codex's bridge identifies the displayed conversation through its own frontend event loop. Capture and instructions then use the existing app-server connection. Voyager checks the identity again before sending. Switching the frontend to another conversation is not permission to send to that new conversation.
+The earlier Codex bridge identifies the displayed conversation through its own frontend event loop. Capture and instructions then use the existing app-server connection. Voyager checks the identity again before sending. Switching the frontend to another conversation is not permission to send to that new conversation. Replacing that bridge with an unmodified-Codex mechanism is the current open problem.
 
 ## Proof and limits
 
-The 17 October 2026 native run passed against source `51b1ede`:
+The 17 October 2026 native run passed against source `51b1ede`, using a custom
+Codex build. It does not establish the unmodified-Codex acceptance above:
 
 | Journey | Observed result |
 | --- | --- |

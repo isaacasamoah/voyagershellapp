@@ -35,14 +35,16 @@ is our starting point, and we’d love to build toward it with other developers.
   steering is not implemented.
 
 The tested platform is Fedora, Linux x86_64 and Ghostty 1.1.3 on XWayland, with
-one Bash terminal surface per Ghostty process. Existing Codex conversations need
-our explicit [pinned frontend integration](integrations/codex/README.md); stock
-Codex cannot yet identify its displayed conversation to Voyager. Tabs/panes,
-other shells/terminals, macOS and native Wayland remain unsupported.
+one Bash terminal surface per Ghostty process. Adoption of unmodified Codex is
+under investigation. The earlier patched-frontend experiment does not satisfy
+the app's acceptance criteria and is not a supported installation requirement.
+Tabs/panes, other shells/terminals, macOS and native Wayland remain unsupported.
 
 The [native adoption experiment](docs/native-adoption.md) has passed real avatar
-and lifecycle journeys for Bash and integrated Codex. It retains the existing
-PTY through a version-specific Linux debugger handoff. Kernel policy may refuse
+and lifecycle journeys for Bash and a custom Codex build. The Codex result is
+mechanism evidence only; the same journey must pass with normally installed,
+unmodified Codex. The experiment retains the existing PTY through a
+version-specific Linux debugger handoff. Kernel policy may refuse
 that integration; Voyager does not weaken it. Persistence covers closing native
 viewers, not daemon crashes or reboots.
 
