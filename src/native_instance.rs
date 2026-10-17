@@ -114,7 +114,7 @@ impl AgentIdentity {
         ensure!(
             current["thread_id"] == self.thread
                 && current["server"].as_str() == self.server.to_str(),
-            "native conversation changed; dock again"
+            "native conversation changed; return to the adopted conversation before controlling it"
         );
         Ok(())
     }

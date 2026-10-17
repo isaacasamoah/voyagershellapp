@@ -89,6 +89,7 @@ async function identities() {
   }
   return result;
 }
+let discoveryErrors = new Map();
 async function discoverTerminals() {
   const endpoints = [];
   if (service?.codex_connected) {
@@ -102,15 +103,17 @@ async function discoverTerminals() {
   for (const session of sessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
   )) {
-    const info = await rpc('attach-info', session.id);
-    endpoints.push({
-      server: session.server,
-      executable: await fs.realpath(info.executable),
-      external: false,
-      kind: info.kind || session.kind,
-      nativeId: session.native_thread_id,
-      args: info.args,
-    });
+    try {
+      const info = await rpc('attach-info', session.id);
+      endpoints.push({
+        server: session.server,
+        executable: await fs.realpath(info.executable),
+        external: false,
+        kind: info.kind || session.kind,
+        nativeId: session.native_thread_id,
+        args: info.args,
+      });
+    } catch {}
   }
   const found = [];
   for (const endpoint of endpoints) {
@@ -121,6 +124,7 @@ async function discoverTerminals() {
       } catch {}
     }
   }
+  discoveryErrors = new Map();
   for (const window of windows) {
     try {
       const process = await processIdentity(window.pid);
@@ -129,7 +133,9 @@ async function discoverTerminals() {
       const previous = found.findIndex((candidate) => candidate.pid === record.pid);
       if (previous >= 0) found.splice(previous, 1);
       found.push(record);
-    } catch {}
+    } catch (error) {
+      discoveryErrors.set(window.id, error.message);
+    }
   }
   records = found;
 }
@@ -408,7 +414,7 @@ async function dock(id) {
     await identities(),
   );
   if (target.error) {
-    undock(target.error);
+    undock(discoveryErrors.get(id)?.replace(/^unsupported: /, '') || target.error);
     return false;
   }
   if (target.record.adoptable) {

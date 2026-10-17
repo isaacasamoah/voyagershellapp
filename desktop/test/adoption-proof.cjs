@@ -94,6 +94,12 @@ exports.run = async ({
     await delay(400);
     await xt('mousedown', 1);
     await delay(450);
+    await wait(
+      async () => getState().dragging,
+      Boolean,
+      'Desktop press did not reach the astronaut',
+      2000,
+    );
     for (let i = 1; i <= 12; i++) {
       await xt(
         'mousemove',
@@ -425,7 +431,11 @@ exports.run = async ({
     evidence.verdict = 'rework';
     evidence.error = error.stack;
     evidence.state = getState();
+    evidence.pointer = screen.getCursorScreenPoint();
+    evidence.avatar = avatarWin.getBounds();
+    await capture('failure', avatarWin.getNativeWindowHandle().readUInt32LE()).catch(() => {});
     await save();
+    await xt('mouseup', 1).catch(() => {});
     pointer.stdin.end();
     app.quit();
   }

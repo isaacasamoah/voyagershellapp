@@ -529,8 +529,12 @@ impl Runtime {
                 self.terminals.swap_remove(index).process.reap()?;
             }
         }
-        for native in self.adopted.values_mut() {
+        for (id, native) in &mut self.adopted {
             native.observe(&self.store)?;
+            if !native.alive && self.captures.remove(id).is_some() {
+                self.store
+                    .local(id, "capture.stopped", json!({"reason":"runtime_stopped"}))?;
+            }
         }
         for shell in self.shells.values_mut() {
             shell.observe(&self.store)?;
