@@ -45,7 +45,17 @@ Codex's bridge identifies the displayed conversation through its own frontend ev
 
 ## Proof and limits
 
-A real desktop run has established ordinary Bash avatar drop, fade, hover, undock, command capture, draft refusal, foreground-job persistence, same-PID/environment reopen and stop/remove. The combined Codex avatar journey has also passed task completion after close, same-thread reopen, re-docking, capture cutoff and stop. A separate service run verified that unrelated loaded conversations remained available.
+The 17 October 2026 native run passed against source `51b1ede`:
+
+| Journey | Observed result |
+| --- | --- |
+| Bash | Avatar drop, fade, hover, undock, command capture, draft refusal, foreground-job persistence, same-PID/environment reopen and stop/remove |
+| Codex | Avatar drop, worker launch with the adopted parent ID, task completion after close, same-thread reopen, re-docking, capture cutoff and stop |
+| Isolation and failures | A similar unrelated terminal remained usable; released tracing left native input usable; repeated adoption was idempotent; stale windows, changed request inputs and malformed viewer input were refused |
+
+A separate service run verified that selected-thread stop left unrelated loaded Codex conversations available. The ordinary Rust and Electron checks passed. A desktop refresh race found during worker shutdown was fixed: a single ended instance no longer clears the window inventory or undocks its parent.
+
+These observations do not establish frontend reconnection, native conversation-switch interaction, microphone behavior or recovery after a service crash. The existing identity checks refuse a changed conversation. Physical drag feel and sound still benefit from human review.
 
 Run ordinary checks without opening windows:
 
