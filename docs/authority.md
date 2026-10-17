@@ -128,3 +128,29 @@ It checks actual tool caller identity, delegated completion, other-chain and Cre
 refusal, upward escalation and credential absence from stored capture. It cleans
 up only its own service and instances. Native observations and remaining physical
 interaction checks are recorded separately from fixture results.
+
+## Observed in the native experiment
+
+On Fedora with Codex 0.163.0 and dedicated Ghostty XWayland clients, real native
+tools reported the correct Captain and Crew identities. Captain delegation to
+its assigned Crew completed; unrelated-target and Crew-to-peer instructions
+refused. Crew escalation reached its Captain. The stored capture and native
+server arguments contained no generated instance credential.
+
+The actual panel created ranked Codex and rankless Bash instances, changed an
+assignment, docked Crew onto its native window, withdrew temporary authority on
+undock while accepted work completed, and delivered an owner response to an
+escalated question. Docking was driven programmatically; physical gestures and
+sound remain a person’s check.
+
+A separate real Codex experiment delivered a second message to the same active
+turn and observed the updated exact reply. Repeating the message ID returned its
+saved receipt. Run it deliberately with the installed account:
+
+```sh
+python3 experiments/native_steering.py
+```
+
+Normal fixture tests exercise all four ranks and denied relationship cases. The
+real native tool journey uses the Captain/Crew pair. Neither establishes native
+Wayland discovery, other terminal applications, native voice or crash recovery.

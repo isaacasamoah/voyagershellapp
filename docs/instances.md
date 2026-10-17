@@ -11,7 +11,8 @@ Click **↗** beside a running instance to reopen its native interface after clo
 it. If its launched window is still alive, the same operation asks the desktop
 to bring that exact window forward. It does not start another instance or dock it.
 
-This increment supports Codex 0.162.1 and a managed Bash in separate Ghostty
+Native creation was established with Codex 0.162.1; the authority journey was
+also exercised with unmodified Codex 0.163.0 and managed Bash in separate Ghostty
 XWayland windows on Linux. There is one native viewer per shell. Claude, Ptyxis,
 other shell profiles, tabs, native Wayland and macOS need their own implementation
 and proof. Discovery of independently opened terminals remains separate.
