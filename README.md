@@ -38,6 +38,9 @@ The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
+The [native adoption experiment](docs/native-adoption.md) tests ordinary Bash
+window identity and PTY retention. It has not established lifecycle transfer.
+
 Captain/crew authority, supervisor priority, automatic native voice, knowledge
 extraction and shared graphs are later work. Voyager is an experimental prototype.
 
