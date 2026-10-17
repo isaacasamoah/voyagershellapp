@@ -55,6 +55,9 @@ impl Action {
 
 pub enum Phase {
     Start,
+    AdoptedArchive {
+        request: u64,
+    },
     WaitStop {
         force_at: Instant,
         forced: bool,
@@ -62,6 +65,7 @@ pub enum Phase {
     Close,
     WaitClose {
         window: u32,
+        confirmation: Option<std::process::Child>,
     },
     WaitOpen,
     Remove,

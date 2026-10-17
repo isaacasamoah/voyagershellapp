@@ -103,6 +103,7 @@ impl Runtime {
                     "invalid_input: request or message too long"
                 );
                 self.store.require_registered(session)?;
+                self.verify_adopted(session)?;
                 if let Some(previous) = self.store.request(id)? {
                     ensure!(
                         previous["session_id"] == session && previous["message"] == message,
@@ -297,6 +298,7 @@ impl Runtime {
                 );
                 self.check_control(&call.input)?;
                 self.store.require_registered(session)?;
+                self.verify_adopted(session)?;
                 let native = self.store.session(session)?["native_thread_id"]
                     .as_str()
                     .context("native identity missing")?

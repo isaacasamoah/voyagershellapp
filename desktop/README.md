@@ -130,3 +130,15 @@ It writes `lifecycle-proof.json` and `panel-lifecycle.png` privately. It is a
 programmatic native check; Isaac still tests pointer delivery and visual quality.
 It makes no model requests. The separate ignored Rust native test in the
 [lifecycle guide](../docs/lifecycle.md#native-checks) uses the actual Codex account.
+
+## Native adoption experiment
+
+Dropping onto an ordinary supported Ghostty window calls the Rust service's
+`inspect-window` and `adopt` operations before acquiring control. The renderer
+does not infer conversation identity. Codex requires the pinned integration; see
+[native adoption](../docs/native-adoption.md).
+
+`--proof-adoption` runs actual desktop pointer gestures and lifecycle operations
+in disposable windows. It is separate from renderer tests, needs the GNOME
+pointer helper and uses a real Codex request. Its JSON verdict and screenshots
+stay in the private state directory. Do not point it at the live user service.

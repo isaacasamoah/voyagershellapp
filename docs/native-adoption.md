@@ -1,66 +1,81 @@
-# Native adoption experiment
+# Adopting existing native work
 
-This branch investigates adopting work that Voyager did not launch. It does not add adoption to docking yet. Existing registration and lifecycle behavior are unchanged.
+The feature branch adds adoption through the Electron avatar. Dragging onto a supported Ghostty window asks the Rust service to retain its existing Bash PTY, register the instance and select human control. It preserves the original process. It does not restart the shell or replace its interface.
 
-## Design
+The current target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. Codex additionally needs the [pinned native identity integration](../integrations/codex/README.md). Stock Codex, other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
 
-A drop should resolve the exact native window, acquire lifecycle control, start capture and select human control. Background, reopen, send, stop and remove must then operate on that same instance. Keeping a PID or registering a conversation alone does not meet that contract.
+## User actions
 
-| Alternative | Tradeoff | Result |
-| --- | --- | --- |
-| Retain the existing PTY and cooperate with Bash | Preserves shell identity and native interface without moving its descriptors | Does not overcome Ghostty's shutdown ownership |
-| Steal the PTY | Can retain the shell, but disrupts the original viewer | Earlier probe required forcibly terminating that viewer |
-| Launch through Voyager first | Already supports persistence | Does not adopt independently started work |
-| Explicit terminal/provider handoff | Can transfer the relevant ownership deliberately | Required capability remains to be implemented or integrated |
+| Action | Effect |
+| --- | --- |
+| First avatar drop | Verify the exact window, acquire the native handoff, register capture, select control |
+| Undock | Release control; runtime and capture continue |
+| Background | Close the original viewer; retain the existing shell and foreground work |
+| Open | Open a native Ghostty viewer onto that same PTY |
+| Stop | Stop the selected runtime and close its viewer |
+| Remove | End registration and capture; retain historical events |
 
-The initial recommendation was to test Bash cooperation before changing service ownership. The native result rejects that mechanism for the full Ghostty lifecycle. The next design decision is an explicit terminal handoff integration, rather than treating duplicated descriptors as adoption.
+For Codex, stop archives the selected conversation and stops its frontend and enclosing shell. It leaves the shared app-server daemon and unrelated conversations running. Archived conversation history remains available through Codex.
 
-## Rust inspection
+The CLI exposes `inspect-window WINDOW_ID` for a read-only identity check and `adopt WINDOW_ID REQUEST_ID` for the same adoption operation used by Electron. A repeated request ID returns its recorded result; changed inputs are refused. These commands are for the service contract and diagnostics. The user gesture needs neither a conversation ID nor a special terminal title.
+
+## Mechanism and alternatives
+
+| Approach | Observation |
+| --- | --- |
+| Keep only a duplicate PTY master | Ghostty still sends HUP and waits for its shell to exit |
+| Ask Bash to ignore HUP | Preserves Bash but leaves Ghostty waiting during close |
+| Move the process to another PTY | Disrupts the original viewer and terminal state |
+| Launch through Voyager | Works for new work; does not adopt existing work |
+| Retain the PTY and intercept Ghostty's exact shutdown handshake | Preserves the original shell and lets the original viewer close; selected for this prototype |
+
+Voyager resolves the X11 window PID, verifies UID/process start/session identity, finds the unique Bash slave TTY and matching Ghostty master, then retains pidfds and duplicates the master. No title, folder or transcript recency is used as identity.
+
+A dedicated Linux ptrace thread observes terminal I/O. It suppresses only Ghostty's HUP to the selected Bash process group and supplies the corresponding nonblocking wait acknowledgement. Ghostty remains the sole PTY reader until its process exits; Voyager then takes over reading and relays bytes to a native viewer. This is a version-specific debugger integration, not a public Ghostty handoff API.
+
+Ghostty's native close confirmation is handled through AT-SPI only for the adopted process while its handoff tracer is active. The adapter matches the exact close dialog and its Yes action. It changes no global Ghostty setting. Python 3, PyGObject and AT-SPI are required for this small native adapter.
+
+The [pinned Ghostty shutdown source](https://github.com/ghostty-org/ghostty/blob/889478f310c9a531327b14a380ea56dbc602eb82/src/termio/Exec.zig#L1256) explains the HUP/wait behavior. The earlier failed Bash-only experiment is retained in `experiments/adoption_probe.py`; it is not the product mechanism.
+
+## Capture and identity
+
+Bash command boundaries come from Ghostty's shell integration markers. They are observations of native output, not authenticated claims about command semantics. Agent commands require a foreground Bash prompt with no draft. The prototype reads Bash's exported readline state; unexpected mappings or missing symbols fail explicitly.
+
+Codex's bridge identifies the displayed conversation through its own frontend event loop. Capture and instructions then use the existing app-server connection. Voyager checks the identity again before sending. Switching the frontend to another conversation is not permission to send to that new conversation.
+
+## Proof and limits
+
+A real desktop run has established ordinary Bash avatar drop, fade, hover, undock, command capture, draft refusal, foreground-job persistence, same-PID/environment reopen and stop/remove. The combined Codex avatar journey has also passed task completion after close, same-thread reopen, re-docking, capture cutoff and stop. A separate service run verified that unrelated loaded conversations remained available.
+
+Run ordinary checks without opening windows:
 
 ```sh
-cargo build --locked --example adoption_inspect --bin voyager-windows
-cargo run --locked --example adoption_inspect -- WINDOW_ID
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cd desktop && npm run format:check && npm test
 ```
 
-Use a decimal X11 window ID from `target/debug/voyager-windows`. This diagnostic accepts a separate Ghostty XWayland window running ordinary Bash. It uses no session ID, title or working directory as identity. Multiple windows on the terminal process, multiple direct children, a different user, stale processes, a non-Bash child or an ambiguous PTY fail explicitly.
-
-It resolves the window owner, opens pidfds, checks process start/session identity and duplicates the single matching PTY master. `TIOCGPTN` verifies the duplicated descriptor against Bash's slave TTY. It emits `not_adopted`, then releases its handles. `--retain` holds them until stdin closes; the only input command is `status`, which polls the retained process handles. It never sends signals or writes terminal input.
-
-The inspection is a snapshot. It does not prove a current Codex conversation, exclusive terminal input, command capture or a completed ownership transfer. A same-user application can change after inspection. The experiment stays outside the live service until it establishes the required handoff.
-
-Linux `pidfd_getfd` is permission controlled. Refusal is an experimental limit, not a reason to lower ptrace policy or grant Voyager extra privileges. The native run used the machine's existing `ptrace_scope=0`; a normal installation may refuse it.
-
-## Native reproduction
-
-Requirements: Linux x86_64, Ghostty, an X11/XWayland desktop, `xprop`, system Python with PyGObject, and the existing kernel permissions for duplicating the disposable terminal's master. Run in your graphical login environment:
+From a GNOME graphical terminal, run the native proof separately:
 
 ```sh
-cargo build --locked --example adoption_inspect --bin voyager-windows
-/usr/bin/python3 experiments/adoption_probe.py /absolute/fresh/private/proof-directory
+cargo build --locked --bins
+python3 experiments/run_adoption.py /absolute/path/to/integrated/codex
 ```
 
-The driver opens two disposable windows sequentially with ordinary Bash startup. The per-launch X11 and single-instance flags isolate its windows; no conversation IDs, special matching titles or agent prompts are provided. Each shell acknowledges its HUP handler through a private marker before closure is requested. The Rust process holds the original master without reading it. The driver verifies the exact GTK owner before requesting normal native close, polls the retained pidfds, writes `result.json` and cleans up only its own processes. It performs no model calls and changes no global settings. Do not use the marker or the driver's command injection as a proposed discovery or user integration mechanism.
+The driver creates a fresh private `/tmp/vsad-*` service, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale.
 
-Observed with Ghostty 1.1.3 on Fedora:
+The output directory holds `adoption-proof.json` and native screenshots. A `rework` result exits nonzero and leaves evidence for inspection. It never uses the live user service. The standalone binary includes normal CLI/server commands as well as the frontend identity bridge.
 
-| Shell handling | Normal close | Same shell after close |
-| --- | --- | --- |
-| Catch HUP with a handler | Completes | Exits |
-| Ignore HUP | GTK request times out; terminal process remains | Survives |
+Kernel policy may prohibit pidfd duplication or ptrace. Voyager does not lower that policy or grant itself privileges. The observed host already allowed same-user tracing. This prototype does not recover retained PTYs after service crash/reboot and does not claim broad terminal compatibility.
 
-A rework result exits with status 2; it is not an adoption acceptance pass.
-Neither result establishes graceful persistent adoption. The second result is not success just because its visible window disappears.
+## Code ownership
 
-[Ghostty's pinned shutdown implementation](https://github.com/ghostty-org/ghostty/blob/889478f310c9a531327b14a380ea56dbc602eb82/src/termio/Exec.zig#L1256) repeatedly sends HUP to the child's process group and waits for the child to exit. The inference is that a Bash-only integration cannot supply a clean close handoff against this implementation. Voyager must cooperate with the terminal's lifecycle owner or change the accepted behavior.
+- `src/adoption.rs`: verified process handles, PTY identity and tracer handshake.
+- `src/native_instance.rs`: native runtime, byte relay, shell observations and Codex identity checks.
+- `src/service/adopt.rs`: adoption request and service registration.
+- `src/service/lifecycle.rs`: existing lifecycle operations for launched and adopted instances.
+- `integrations/ghostty/confirm_close.py`: scoped native close-dialog action.
+- `desktop/src/main.cjs`: discovery, avatar drop and presentation.
 
-## Codex boundary
-
-The installed Codex 0.163.0 uses a shared app-server daemon by default. Its generated protocol provides conversation and turn operations, but this investigation has not found a verified ordinary frontend-to-current-conversation mapping or a complete per-conversation stop operation. Stopping the shared daemon would affect unrelated work. Interrupting a turn or unsubscribing one connection does not establish the requested lifecycle parity.
-
-The service must not claim managed ownership for either target until its adapter establishes the actual handoff. This experiment leaves the existing desktop matcher intact.
-
-## Code contracts
-
-`examples/adoption_inspect.rs` owns its descriptors with Rust `File` values. The unsafe calls are Linux `pidfd_open`, `pidfd_getfd`, `poll` and `ioctl`. Only successful descriptor results become `File`s; polling uses a live pidfd; `TIOCGPTN` receives a valid writable unsigned integer. These calls do not alter the target process or original descriptor. The probe assumes Linux `/proc` and refuses unexpected identities instead of falling back to a title or recent transcript.
-
-`experiments/adoption_probe.py` owns all mutated resources. Its duplicate master is used only to establish a handler in its disposable shell. The ignored-HUP case requires explicitly stopping that shell during cleanup so Ghostty can finish closing. Failure evidence is retained, not presented as a product feature.
+Unsafe calls stay at Linux process/PTY boundaries. Successful raw descriptors immediately become owned `File` values. Remote memory reads use bounded buffers, and retained pidfds prevent PID reuse from redirecting signals. No ptrace option kills the target when the tracer exits. Recovery and backpressure limits remain explicit prototype work.

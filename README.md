@@ -2,7 +2,7 @@
 
 Voyager connects native coding agents and terminals to a local Rust service.
 Electron provides a floating astronaut and a small control panel. Your agent keeps
-its own interface; Voyager manages the work it starts and records what happens.
+its own interface; Voyager manages launched or explicitly adopted work and records what happens.
 
 We build small, real experiments, try them ourselves, and share the results here.
 
@@ -26,20 +26,25 @@ is our starting point, and we’d love to build toward it with other developers.
 - **↗** focuses an existing window or reopens the same running instance.
 - **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
-- Docking selects the human control attachment. Undocking or closing Electron
+- Docking an ordinary supported Ghostty window adopts its existing runtime and
+  selects the human control attachment. Undocking or closing Electron
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
 - Agent messages can start a turn only while the target is idle. Active-turn
   steering is not implemented.
 
-The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
-`codex` launches, tabs, other terminals, macOS and native Wayland are not supported
-by the current matcher. Registration does not transfer ownership of an external
-process. Persistence covers client disconnection, not daemon crashes or reboots.
+The tested platform is Fedora, Linux x86_64 and Ghostty 1.1.3 on XWayland, with
+one Bash terminal surface per Ghostty process. Existing Codex conversations need
+our explicit [pinned frontend integration](integrations/codex/README.md); stock
+Codex cannot yet identify its displayed conversation to Voyager. Tabs/panes,
+other shells/terminals, macOS and native Wayland remain unsupported.
 
-The [native adoption experiment](docs/native-adoption.md) tests ordinary Bash
-window identity and PTY retention. It has not established lifecycle transfer.
+The [native adoption experiment](docs/native-adoption.md) has passed real avatar
+and lifecycle journeys for Bash and integrated Codex. It retains the existing
+PTY through a version-specific Linux debugger handoff. Kernel policy may refuse
+that integration; Voyager does not weaken it. Persistence covers closing native
+viewers, not daemon crashes or reboots.
 
 Captain/crew authority, supervisor priority, automatic native voice, knowledge
 extraction and shared graphs are later work. Voyager is an experimental prototype.
@@ -90,7 +95,8 @@ replace a person trying gestures and sound.
 | `skills/` | Agent instructions for the CLI |
 
 The [desktop source map](desktop/README.md) explains its process boundaries.
-Python supports experiments; the service runtime is Rust. We learn from Herdr,
+The service runtime is Rust. A small Python/AT-SPI adapter handles adopted
+Ghostty close confirmations; Python also supports experiments. We learn from Herdr,
 tmux and Pi without using them as Voyager's backend or copying their code.
 
 Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).

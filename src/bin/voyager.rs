@@ -101,6 +101,12 @@ fn main() -> Result<()> {
         {
             json!({"op":op,"include_removed":include_removed})
         }
+        [op, window] if op == "inspect-window" => {
+            json!({"op":op,"window_id":window.parse::<u32>()?})
+        }
+        [op, window, id] if op == "adopt" => {
+            json!({"op":op,"window_id":window.parse::<u32>()?,"request_id":id})
+        }
         [op, thread] if op == "register" => json!({"op":op,"thread_id":thread}),
         [op, generation] if op == "undock" => json!({"op":op,"generation":generation}),
         [op, session, id, message] if op == "send" => {
@@ -164,6 +170,7 @@ fn main() -> Result<()> {
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
+            inspect-window WINDOW_ID | adopt WINDOW_ID REQUEST_ID\n\
             create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] | open SESSION_ID ghostty [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\

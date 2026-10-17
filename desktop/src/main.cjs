@@ -107,7 +107,7 @@ async function discoverTerminals() {
       server: session.server,
       executable: await fs.realpath(info.executable),
       external: false,
-      kind: session.kind,
+      kind: info.kind || session.kind,
       nativeId: session.native_thread_id,
       args: info.args,
     });
@@ -120,6 +120,16 @@ async function discoverTerminals() {
         if (record) found.push(record);
       } catch {}
     }
+  }
+  for (const window of windows) {
+    try {
+      const process = await processIdentity(window.pid);
+      if (process.executable !== '/usr/bin/ghostty') continue;
+      const record = await rpc('inspect-window', String(window.id));
+      const previous = found.findIndex((candidate) => candidate.pid === record.pid);
+      if (previous >= 0) found.splice(previous, 1);
+      found.push(record);
+    } catch {}
   }
   records = found;
 }
@@ -401,7 +411,11 @@ async function dock(id) {
     undock(target.error);
     return false;
   }
-  if (target.record.external) await rpc('register', target.record.nativeId);
+  if (target.record.adoptable) {
+    await rpc('adopt', String(id), randomUUID());
+    target.record = await rpc('inspect-window', String(id));
+    records = records.filter((record) => record.pid !== target.record.pid).concat(target.record);
+  } else if (target.record.external) await rpc('register', target.record.nativeId);
   sessions = await rpc('list', '--include-removed');
   windows = await inventory();
   const fresh = resolveWindow(
@@ -738,19 +752,22 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-adoption') ||
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-lifecycle')
-        ? '../test/lifecycle-proof.cjs'
-        : process.argv.includes('--proof-control')
-          ? '../test/control-proof.cjs'
-          : process.argv.includes('--proof-registration')
-            ? '../test/registration-proof.cjs'
-            : '../test/live-proof.cjs',
+      process.argv.includes('--proof-adoption')
+        ? '../test/adoption-proof.cjs'
+        : process.argv.includes('--proof-lifecycle')
+          ? '../test/lifecycle-proof.cjs'
+          : process.argv.includes('--proof-control')
+            ? '../test/control-proof.cjs'
+            : process.argv.includes('--proof-registration')
+              ? '../test/registration-proof.cjs'
+              : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,

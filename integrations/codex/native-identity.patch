@@ -1,0 +1,129 @@
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index a7f7f1e..f05e551 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -159,6 +159,23 @@ impl App {
+             event => (event, None),
+         };
+         match event {
++            #[cfg(target_os = "linux")]
++            AppEvent::VoyagerSnapshot { reply } => {
++                let endpoint = match &self.app_server_target {
++                    AppServerTarget::LocalDaemon { endpoint, .. } | AppServerTarget::Remote { endpoint } => match endpoint {
++                        crate::RemoteAppServerEndpoint::UnixSocket { socket_path } => Some(socket_path.as_path()),
++                        _ => None,
++                    },
++                    AppServerTarget::Embedded => None,
++                };
++                let _ = reply.send(serde_json::json!({
++                    "protocol": "voyager-native-identity-v1",
++                    "pid": std::process::id(),
++                    "thread_id": self.current_displayed_thread_id().map(|id| id.to_string()),
++                    "server": endpoint,
++                    "cwd": self.config.cwd,
++                }));
++            }
+             AppEvent::OpenDaemonMenu => self.open_daemon_menu(),
+             AppEvent::ConfirmDaemonRestart => self.confirm_daemon_restart(),
+             AppEvent::RunDaemonRestart => {
+diff --git a/codex-rs/tui/src/app/startup.rs b/codex-rs/tui/src/app/startup.rs
+index 4c329f3..0b026d0 100644
+--- a/codex-rs/tui/src/app/startup.rs
++++ b/codex-rs/tui/src/app/startup.rs
+@@ -272,6 +272,11 @@ impl App {
+         let startup_started_at = Instant::now();
+         let (app_event_tx, mut app_event_rx) = unbounded_channel();
+         let app_event_tx = AppEventSender::new(app_event_tx);
++        #[cfg(target_os = "linux")]
++        let _voyager_bridge = match crate::voyager_bridge::start(app_event_tx.clone()) {
++            Ok(bridge) => Some(bridge),
++            Err(error) => { tracing::warn!(%error, "Voyager native identity unavailable"); None }
++        };
+         if let Some(message) = project_config_warning(&config) {
+             app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                 history_cell::StartupWarningsCell::new(vec![message]),
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index a201931..6f0cb9c 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -295,6 +295,8 @@ pub(crate) struct AgentPickerThreadRefresh {
+ #[allow(clippy::large_enum_variant)]
+ #[derive(Debug, IntoStaticStr)]
+ pub(crate) enum AppEvent {
++    #[cfg(target_os = "linux")]
++    VoyagerSnapshot { reply: std::sync::mpsc::SyncSender<serde_json::Value> },
+     AccountEmailLoaded {
+         request_id: uuid::Uuid,
+         email: Option<String>,
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index a3fb544..acf4e47 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -205,6 +205,8 @@ mod screen_reader;
+ mod service_tier_resolution;
+ mod session_archive_commands;
+ mod session_log;
++#[cfg(target_os = "linux")]
++mod voyager_bridge;
+ mod session_queue_commands;
+ mod session_resume;
+ mod session_start;
+diff --git a/codex-rs/tui/src/voyager_bridge.rs b/codex-rs/tui/src/voyager_bridge.rs
+new file mode 100644
+index 0000000..ebdd219
+--- /dev/null
++++ b/codex-rs/tui/src/voyager_bridge.rs
+@@ -0,0 +1,53 @@
++use crate::app_event::AppEvent;
++use crate::app_event_sender::AppEventSender;
++use std::fs;
++use std::io::{BufRead, BufReader, Read, Write};
++use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
++use std::os::unix::net::UnixListener;
++use std::path::PathBuf;
++use std::sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc};
++use std::time::Duration;
++
++pub(crate) struct Bridge { path: PathBuf, stop: Arc<AtomicBool> }
++
++impl Drop for Bridge {
++    fn drop(&mut self) {
++        self.stop.store(true, Ordering::Relaxed);
++        let _ = fs::remove_file(&self.path);
++    }
++}
++
++pub(crate) fn start(sender: AppEventSender) -> std::io::Result<Bridge> {
++    let uid = unsafe { libc::geteuid() };
++    let root = PathBuf::from(format!("/run/user/{uid}/codex-frontends"));
++    if !root.exists() { fs::DirBuilder::new().mode(0o700).create(&root)?; }
++    let meta = fs::symlink_metadata(&root)?;
++    if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
++        return Err(std::io::Error::other("Codex frontend directory is not private"));
++    }
++    let path = root.join(format!("{}.sock", std::process::id()));
++    let listener = UnixListener::bind(&path)?;
++    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
++    listener.set_nonblocking(true)?;
++    let stop = Arc::new(AtomicBool::new(false));
++    let stopping = stop.clone();
++    std::thread::spawn(move || {
++        while !stopping.load(Ordering::Relaxed) {
++            let Ok((mut stream, _)) = listener.accept() else {
++                std::thread::sleep(Duration::from_millis(25));
++                continue;
++            };
++            let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
++            let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
++            let mut line = String::new();
++            let Ok(_) = BufReader::new(&stream).take(64).read_line(&mut line) else { continue; };
++            if line != "snapshot\n" { continue; }
++            let (reply, response) = mpsc::sync_channel(1);
++            sender.send(AppEvent::VoyagerSnapshot { reply });
++            if let Ok(snapshot) = response.recv_timeout(Duration::from_secs(2)) {
++                let _ = writeln!(stream, "{snapshot}");
++            }
++        }
++    });
++    Ok(Bridge { path, stop })
++}
