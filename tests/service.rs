@@ -973,7 +973,7 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"typeahead-refused","command":"echo wrong"})).is_err());
     writeln!(again, "{}", json!({"input":vec![3u8]})).unwrap();
     wait(ready);
-    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"sleep 0.3; touch should-not-complete"}));
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"while [ ! -e stop-release ]; do sleep 0.01; done; touch should-not-complete"}));
     wait(|| {
         f.events()["events"]
             .as_array()
@@ -982,6 +982,7 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
             .any(|e| e["type"] == "shell.command" && e["payload"]["command_id"] == "stop-live")
     });
     f.call(json!({"op":"stop-instance","session_id":session}));
+    fs::write(f.dir.join("child/stop-release"), "release").unwrap();
     thread::sleep(Duration::from_millis(350));
     assert!(!f.dir.join("child/should-not-complete").exists());
     assert!(client(
