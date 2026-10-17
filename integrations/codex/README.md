@@ -1,24 +1,9 @@
-# Codex native identity integration
+# Native Codex identity
 
-The adoption prototype needs the conversation currently displayed by a specific native frontend. The stock app-server protocol lists conversations but does not bind one to a desktop window. Matching titles, folders or recent transcripts cannot establish that identity.
+The adapter uses normally installed Codex. It does not patch or replace its executable.
 
-This small frontend patch publishes a private, read-only Unix socket. Voyager verifies its peer UID and PID, then asks the frontend's own event loop for the displayed conversation and app-server endpoint. It does not insert a prompt, create a conversation or change permissions.
+Discovery finds the frontend on the selected Ghostty PTY and verifies its existing local Unix app-server connection. Discovery does not type into the interface. Adoption acquires the PTY observer, reads the displayed conversation through native `/status`, then validates that ID with the same daemon. Control actions check the displayed conversation again. A changed conversation is refused.
 
-Pinned source: [Codex rust-v0.163.0, 83086188](https://github.com/openai/codex/tree/83086188ae0614bd882818ff1aa23f3194962012).
+`src/native_status.rs` observes the terminal with a VT parser. A temporary Linux observer reads the frontend’s own output so Ghostty rendering does not delay identity checks. It uses native composer history to retain an unfinished draft while querying status. Ghostty's input writer is held briefly at its event-loop wait; input remains queued. The observer answers cursor-position queries during that hold. Unknown composer layouts and modal states are refused. The original terminal dimensions and input writer are released on exit.
 
-Build a separate integration binary:
-
-```sh
-git clone https://github.com/openai/codex.git codex-voyager
-cd codex-voyager
-git checkout 83086188ae0614bd882818ff1aa23f3194962012
-git apply /absolute/path/to/voyagershellapp/integrations/codex/native-identity.patch
-cd codex-rs
-RUSTUP_TOOLCHAIN=stable CARGO_BUILD_JOBS=4 CARGO_PROFILE_DEV_DEBUG=0 cargo build -p codex-cli --bin codex
-```
-
-The pinned tag's lockfile still records workspace package version `0.0.0`, so this build refreshes those workspace version entries. Keep the resulting lockfile with the build evidence. The tested compiler was Rust 1.99.
-
-Run `target/debug/codex` in your normal Ghostty Bash shell, or deliberately add a `codex` symlink to it in your chosen PATH. This repository does not replace your installed Codex or restart its shared daemon. Start a conversation, then drag the avatar onto that terminal.
-
-This is an explicit prototype integration, not stock Codex support. Only local Unix app-server connections are accepted. Frontend reconnection and empty conversations remain to be verified. A missing or stale bridge refuses adoption; it does not fall back to guessing.
+This replacement is under experiment. Idle and active-task draft/cursor checks, plus queued native keyboard input, have passed on Codex 0.163.0 and Ghostty 1.1.3. These isolated mechanism checks do not establish the complete avatar journey, which remains unproved. The earlier custom frontend bridge has been removed; its historical results are not stock-Codex proof. See [native adoption](../../docs/native-adoption.md) for the acceptance boundary.

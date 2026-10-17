@@ -19,7 +19,8 @@ exports.run = async ({
   stateDir,
 }) => {
   const evidence = {
-    surface: 'native X11 pointer gestures, stock Ghostty, Bash, integrated Codex',
+    surface:
+      'native GNOME avatar gestures; verified PTY input; stock Ghostty, Bash and unmodified Codex',
     steps: [],
   };
   const file = path.join(stateDir, 'adoption-proof.json');
@@ -65,17 +66,33 @@ exports.run = async ({
     screen.getAllDisplays().every((d) => d.scaleFactor === scale),
     'Pointer proof requires uniform display scale',
   );
+  const owned = new Map();
+  let inputWindow;
+  const input = async (text) => {
+    assert(owned.has(inputWindow), 'Input requires an owned experiment window');
+    await exec('python3', [
+      path.join(__dirname, '../../experiments/native_input.py'),
+      String(inputWindow),
+      String(owned.get(inputWindow)),
+      Buffer.from(text).toString('base64'),
+    ]);
+  };
   const xt = (...args) =>
     args[0] === 'mousemove'
       ? move(['move', Number(args[1]), Number(args[2]), scale])
       : args[0] === 'mousedown' || args[0] === 'mouseup'
         ? move(['button', args[0] === 'mousedown'])
-        : exec('xdotool', args.map(String), { timeout: 3000 });
+        : args[0] === 'type'
+          ? input(args.at(-1))
+          : args[0] === 'key'
+            ? input(args[1] === 'ctrl+c' ? '\x03' : '\r')
+            : exec('xdotool', args.map(String), { timeout: 3000 });
   const activate = async (id) => {
+    inputWindow = id;
     await exec('xdotool', ['windowactivate', String(id)], { timeout: 3000 });
     await wait(
-      async () => (await exec('xprop', ['-root', '_NET_ACTIVE_WINDOW'])).stdout,
-      (text) => text.trim().endsWith('0x' + id.toString(16)),
+      async () => (await exec('xprop', ['-id', String(id), '_NET_WM_STATE'])).stdout,
+      (text) => text.includes('_NET_WM_STATE_FOCUSED'),
       'Window did not receive desktop focus',
       8000,
     );
@@ -167,6 +184,7 @@ exports.run = async ({
       'Ordinary Ghostty did not open',
     );
     const target = stack.find((w) => w.visible && !before.some((old) => old.id === w.id));
+    owned.set(target.id, child.pid);
     const at = screen.dipToScreenPoint({ x: display.bounds.x + 200, y: display.bounds.y + 250 });
     await xt('windowmove', target.id, at.x, at.y);
     await delay(400);
@@ -272,6 +290,7 @@ exports.run = async ({
     bad.destroy();
     assert.equal((await rpc('status')).owns_shells, true);
     let opened = await rpc('open', shell.id, 'ghostty');
+    owned.set(opened.window_id, opened.pid);
     await fs.writeFile(
       path.join(stateDir, 'proof.sh'),
       'printf "%s:%s" "$$" "$ADOPTION_VALUE" > retained-state\n',
@@ -310,11 +329,10 @@ exports.run = async ({
     await nativeCommand(terminal.id, 'source integration.sh');
     await nativeCommand(terminal.id, 'codex --dangerously-bypass-approvals-and-sandbox');
     await delay(2000);
-    await nativeCommand(terminal.id, 'Reply exactly ADOPTIONREADY');
     await wait(
       () => rpc('inspect-window', String(terminal.id)).catch(() => null),
       (r) => r?.kind === 'codex',
-      'Integrated Codex identity unavailable',
+      'Installed Codex frontend unavailable',
       30000,
     );
     const agent = await gesture(terminal);
@@ -375,6 +393,7 @@ exports.run = async ({
     );
     assert(complete.events.some((e) => e.type === 'message' && e.payload.role === 'user'));
     opened = await rpc('open', agent.id, 'ghostty');
+    owned.set(opened.window_id, opened.pid);
     assert.equal((await rpc('attach-info', agent.id)).pid, original.pid);
     await refresh();
     terminal = (await inventory()).find((w) => w.id === opened.window_id);
@@ -421,7 +440,7 @@ exports.run = async ({
     evidence.verdict = 'pass';
     evidence.limits = [
       'Linux x86_64 XWayland, one surface in the selected Ghostty process',
-      'Codex uses the explicit version-pinned identity integration',
+      'Unmodified Codex; supported native composer layout and local daemon connection',
       'No crash/reboot recovery',
     ];
     await save();

@@ -6,7 +6,7 @@ import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-assert len(sys.argv) == 2, 'Usage: python3 experiments/run_adoption.py /absolute/integrated/codex'
+assert len(sys.argv) == 2, 'Usage: python3 experiments/run_adoption.py /absolute/installed/codex'
 codex = Path(sys.argv[1]).resolve(strict=True)
 state = Path(tempfile.mkdtemp(prefix='vsad-'))
 (state / 'bin').mkdir()

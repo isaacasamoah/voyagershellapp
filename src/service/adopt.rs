@@ -3,7 +3,7 @@ use crate::{
     actions,
     adoption::{Candidate, Process, children, window_owner},
     codex::Codex,
-    native_instance::{AgentIdentity, NativeInstance},
+    native_instance::{AgentFrontend, NativeInstance},
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -36,13 +36,13 @@ impl Runtime {
                 .filter(|n| n.candidate.terminal.pid == owner)
             {
                 if let Some(agent) = &native.agent {
-                    agent.verify()?;
+                    agent.frontend.verify()?;
                 }
                 Process::open(
                     native
                         .agent
                         .as_ref()
-                        .map_or(native.candidate.shell.pid, |a| a.process.pid),
+                        .map_or(native.candidate.shell.pid, |a| a.frontend.process.pid),
                 )?
             } else {
                 let list = children(owner)?;
@@ -59,7 +59,7 @@ impl Runtime {
             return Ok(record);
         }
         let candidate = Candidate::inspect(window)?;
-        let agent = AgentIdentity::inspect(&candidate)?;
+        let agent = AgentFrontend::inspect(&candidate)?;
         let mut record = process_value(&candidate.terminal)?;
         record["frontend"] =
             process_value(agent.as_ref().map_or(&candidate.shell, |a| &a.process))?;
@@ -87,11 +87,14 @@ impl Runtime {
             return Ok(receipt);
         }
         let candidate = Candidate::inspect(window)?;
-        let agent = AgentIdentity::inspect(&candidate)?;
+        let frontend = AgentFrontend::inspect(&candidate)?;
         let cwd = fs::read_link(format!("/proc/{}/cwd", candidate.shell.pid))?;
         let cwd = cwd.to_str().context("native directory is not UTF-8")?;
-        let (connection, server, metadata) = if let Some(agent) = &agent {
-            let mut connection = Codex::connect(&agent.server)?;
+        let pid = candidate.shell.pid;
+        let terminal_process = Process::open(candidate.terminal.pid)?;
+        let mut native = NativeInstance::acquire(candidate, frontend, &self.state, id)?;
+        let (connection, server, metadata) = if let Some(agent) = &native.agent {
+            let mut connection = Codex::connect(&agent.frontend.server)?;
             let metadata = connection
                 .metadata(&agent.thread)
                 .context("read existing Codex thread")?;
@@ -109,11 +112,16 @@ impl Runtime {
                 reply["thread"]["id"] == agent.thread,
                 "native capture identity mismatch"
             );
-            agent.verify()?;
+            agent.frontend.verify()?;
             connection.pending.clear();
             (
                 Some(connection),
-                agent.server.to_str().context("invalid server")?.to_owned(),
+                agent
+                    .frontend
+                    .server
+                    .to_str()
+                    .context("invalid server")?
+                    .to_owned(),
                 metadata,
             )
         } else {
@@ -121,9 +129,9 @@ impl Runtime {
                 None,
                 format!(
                     "native-pty:{}:{}",
-                    candidate.shell.pid, candidate.shell.start
+                    native.candidate.shell.pid, native.candidate.shell.start
                 ),
-                json!({"id":format!("{}:{}",candidate.shell.pid,candidate.shell.start),"kind":"shell","cwd":cwd}),
+                json!({"id":format!("{}:{}",native.candidate.shell.pid,native.candidate.shell.start),"kind":"shell","cwd":cwd}),
             )
         };
         ensure!(
@@ -134,9 +142,6 @@ impl Runtime {
                 .any(|s| s["server"] == server && s["native_thread_id"] == metadata["id"]),
             "already registered through another owner; adopt that owner explicitly"
         );
-        let pid = candidate.shell.pid;
-        let terminal_process = Process::open(candidate.terminal.pid)?;
-        let mut native = NativeInstance::acquire(candidate, agent, &self.state, id)?;
         self.store.begin_launch(
             id,
             None,
@@ -171,15 +176,13 @@ impl Runtime {
         Ok(receipt)
     }
 
-    pub(super) fn verify_adopted(&self, session: &str) -> Result<()> {
-        if let Some(native) = self.adopted.get(session) {
+    pub(super) fn verify_adopted(&mut self, session: &str) -> Result<()> {
+        if let Some(native) = self.adopted.get_mut(session) {
             ensure!(
                 native.alive && native.capture,
                 "adopted runtime is unavailable"
             );
-            if let Some(agent) = &native.agent {
-                agent.verify()?;
-            }
+            native.verify(&self.store)?;
         }
         Ok(())
     }

@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     fs,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, Read, Write},
     os::{
         fd::AsRawFd,
         unix::net::{UnixListener, UnixStream},
@@ -25,44 +25,17 @@ use std::{
 
 const LIMIT: usize = 1024 * 1024;
 
-pub struct AgentIdentity {
+pub struct AgentFrontend {
     pub process: Process,
-    pub thread: String,
     pub server: PathBuf,
 }
 
-impl AgentIdentity {
-    pub fn snapshot(pid: u32) -> Result<Value> {
-        let path = PathBuf::from(format!(
-            "/run/user/{}/codex-frontends/{pid}.sock",
-            Uid::current()
-        ));
-        let mut socket = UnixStream::connect(path)
-            .context("unsupported: Codex native identity integration is required")?;
-        let peer = getsockopt(&socket, sockopt::PeerCredentials)?;
-        ensure!(
-            peer.uid() == Uid::current().as_raw() && peer.pid() == pid as i32,
-            "native identity peer mismatch"
-        );
-        socket.set_read_timeout(Some(Duration::from_millis(250)))?;
-        socket.set_write_timeout(Some(Duration::from_millis(100)))?;
-        socket.write_all(b"snapshot\n")?;
-        let mut bytes = Vec::new();
-        BufReader::new(socket)
-            .take(8192)
-            .read_until(b'\n', &mut bytes)?;
-        ensure!(
-            bytes.ends_with(b"\n"),
-            "native identity response incomplete"
-        );
-        let value: Value = serde_json::from_slice(&bytes)?;
-        ensure!(
-            value["protocol"] == "voyager-native-identity-v1" && value["pid"] == pid,
-            "unsupported native identity protocol"
-        );
-        Ok(value)
-    }
+pub struct AgentIdentity {
+    pub frontend: AgentFrontend,
+    pub thread: String,
+}
 
+impl AgentFrontend {
     pub fn inspect(candidate: &Candidate) -> Result<Option<Self>> {
         let mut pending: Vec<_> = children(candidate.shell.pid)?.into_iter().collect();
         let mut found = Vec::new();
@@ -82,23 +55,8 @@ impl AgentIdentity {
                 .file_name()
                 .is_some_and(|name| name == "codex" || name == "codex-tui")
             {
-                let value = Self::snapshot(pid)?;
-                let thread = value["thread_id"]
-                    .as_str()
-                    .context("unsupported: start the Codex conversation before adopting it")?
-                    .to_owned();
-                uuid::Uuid::parse_str(&thread)?;
-                let server = PathBuf::from(
-                    value["server"]
-                        .as_str()
-                        .context("unsupported: Codex has no local app server")?,
-                );
-                ensure!(server.is_absolute(), "invalid native server path");
-                found.push(Self {
-                    process,
-                    thread,
-                    server,
-                });
+                let server = Self::server(&process)?;
+                found.push(Self { process, server });
             }
         }
         ensure!(
@@ -108,13 +66,56 @@ impl AgentIdentity {
         Ok(found.pop())
     }
 
+    fn server(process: &Process) -> Result<PathBuf> {
+        let mut peers = std::collections::BTreeSet::new();
+        for entry in fs::read_dir(format!("/proc/{}/fd", process.pid))? {
+            let entry = entry?;
+            if !fs::read_link(entry.path())
+                .ok()
+                .is_some_and(|p| p.to_string_lossy().starts_with("socket:"))
+            {
+                continue;
+            }
+            let number: i32 = entry
+                .file_name()
+                .to_str()
+                .context("invalid descriptor")?
+                .parse()?;
+            let Ok(file) = process.duplicate(number) else {
+                continue;
+            };
+            let socket = UnixStream::from(std::os::fd::OwnedFd::from(file));
+            let Ok(address) = socket.peer_addr() else {
+                continue;
+            };
+            let Some(path) = address.as_pathname() else {
+                continue;
+            };
+            let peer = getsockopt(&socket, sockopt::PeerCredentials)?;
+            if peer.uid() != Uid::current().as_raw() {
+                continue;
+            }
+            let server = Process::open(peer.pid() as u32)?;
+            if server
+                .executable
+                .file_name()
+                .is_some_and(|name| name == "codex" || name == "codex-app-server")
+            {
+                peers.insert(path.to_path_buf());
+            }
+        }
+        ensure!(
+            peers.len() == 1,
+            "unsupported: native Codex needs one identifiable local app-server connection"
+        );
+        peers.pop_first().context("native server unavailable")
+    }
+
     pub fn verify(&self) -> Result<()> {
         ensure!(self.process.alive()?, "native Codex frontend exited");
-        let current = Self::snapshot(self.process.pid)?;
         ensure!(
-            current["thread_id"] == self.thread
-                && current["server"].as_str() == self.server.to_str(),
-            "native conversation changed; return to the adopted conversation before controlling it"
+            Self::server(&self.process)? == self.server,
+            "native Codex server changed"
         );
         Ok(())
     }
@@ -146,7 +147,7 @@ pub struct NativeInstance {
 impl NativeInstance {
     pub fn acquire(
         candidate: Candidate,
-        agent: Option<AgentIdentity>,
+        frontend: Option<AgentFrontend>,
         state: &Path,
         launch: &str,
     ) -> Result<Self> {
@@ -159,16 +160,26 @@ impl NativeInstance {
                 .success(),
             "unsupported: native Ghostty close adapter needs Python, PyGObject and AT-SPI"
         );
+        let handoff = candidate.handoff()?;
+        let (agent, output) = if let Some(frontend) = frontend {
+            frontend.verify()?;
+            let status = crate::native_status::read(&candidate, Some(&handoff), &frontend.process)?;
+            (
+                Some(AgentIdentity {
+                    frontend,
+                    thread: status.thread?,
+                }),
+                status.output,
+            )
+        } else {
+            (None, Vec::new())
+        };
         let socket = state.join(format!("native-{}.sock", uuid::Uuid::new_v4()));
         let listener = UnixListener::bind(&socket)?;
-        listener.set_nonblocking(true)?;
-        let handoff = match candidate.handoff() {
-            Ok(handoff) => handoff,
-            Err(error) => {
-                let _ = fs::remove_file(&socket);
-                return Err(error);
-            }
-        };
+        if let Err(error) = listener.set_nonblocking(true) {
+            let _ = fs::remove_file(&socket);
+            return Err(error.into());
+        }
         Ok(Self {
             candidate,
             agent,
@@ -182,7 +193,7 @@ impl NativeInstance {
             listener,
             socket,
             viewer: None,
-            output: Vec::new(),
+            output,
             output_start: 0,
             osc: Vec::new(),
             title: None,
@@ -193,14 +204,30 @@ impl NativeInstance {
         })
     }
 
+    pub fn verify(&mut self, store: &Store) -> Result<()> {
+        let Some(agent) = &self.agent else {
+            return Ok(());
+        };
+        agent.frontend.verify()?;
+        let expected = agent.thread.clone();
+        let status = crate::native_status::read(
+            &self.candidate,
+            (!self.released).then_some(&self.handoff),
+            &agent.frontend.process,
+        )?;
+        self.observe_bytes(store, &status.output)?;
+        ensure!(
+            status.thread? == expected,
+            "native conversation changed; return to the adopted conversation before controlling it"
+        );
+        Ok(())
+    }
+
     pub fn attach(&self, state: &Path) -> Result<Value> {
         ensure!(
             self.alive && self.handoff_error.is_none(),
             "native runtime has ended or handoff failed"
         );
-        if let Some(agent) = &self.agent {
-            agent.verify()?;
-        }
         Ok(
             json!({"executable":std::env::current_exe()?,"args":["--state",state,"shell-attach",self.session],"pid":self.candidate.shell.pid,"socket":self.socket,"kind":"shell","session_id":self.session}),
         )
@@ -287,7 +314,6 @@ impl NativeInstance {
         while let Ok(event) = self.handoff.events.try_recv() {
             match event {
                 NativeEvent::Output(bytes) => self.observe_bytes(store, &bytes)?,
-                NativeEvent::Input(_) => (),
                 NativeEvent::Released => {
                     self.released = true;
                     let fd = self.candidate.master.as_raw_fd();

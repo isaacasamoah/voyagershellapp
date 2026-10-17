@@ -86,7 +86,7 @@ impl Process {
         Ok(())
     }
 
-    fn duplicate(&self, fd: i32) -> Result<File> {
+    pub(crate) fn duplicate(&self, fd: i32) -> Result<File> {
         let result =
             unsafe { libc::syscall(libc::SYS_pidfd_getfd, self.handle.as_raw_fd(), fd, 0) };
         ensure!(
@@ -233,19 +233,48 @@ impl Candidate {
 
 pub enum NativeEvent {
     Output(Vec<u8>),
-    Input(Vec<u8>),
     Released,
     Failed(String),
 }
 
 pub struct Handoff {
     pub events: Receiver<NativeEvent>,
-    stop: Sender<()>,
+    commands: Sender<TracerCommand>,
+}
+
+enum TracerCommand {
+    Hold(uuid::Uuid, Sender<Result<()>>),
+    Release(uuid::Uuid),
+    Stop,
+}
+
+pub struct InputHold {
+    id: uuid::Uuid,
+    commands: Sender<TracerCommand>,
+}
+
+impl Drop for InputHold {
+    fn drop(&mut self) {
+        let _ = self.commands.send(TracerCommand::Release(self.id));
+    }
+}
+
+impl Handoff {
+    pub fn hold_input(&self) -> Result<InputHold> {
+        let hold = InputHold {
+            id: uuid::Uuid::new_v4(),
+            commands: self.commands.clone(),
+        };
+        let (reply, receive) = mpsc::channel();
+        self.commands.send(TracerCommand::Hold(hold.id, reply))?;
+        receive.recv_timeout(Duration::from_secs(3))??;
+        Ok(hold)
+    }
 }
 
 impl Drop for Handoff {
     fn drop(&mut self) {
-        let _ = self.stop.send(());
+        let _ = self.commands.send(TracerCommand::Stop);
     }
 }
 
@@ -256,10 +285,27 @@ mod linux {
     #[derive(Clone, Copy)]
     enum Exit {
         Pass,
-        Read { address: u64, length: usize },
-        Write { address: u64, length: usize },
+        Output { address: u64, length: usize },
         Retained,
         Released { status: u64 },
+    }
+
+    struct InputLease {
+        id: uuid::Uuid,
+        tid: i32,
+        ready: Option<Sender<Result<()>>>,
+        parked: bool,
+    }
+
+    impl Drop for InputLease {
+        fn drop(&mut self) {
+            if self.parked {
+                let _ = ptrace(libc::PTRACE_SYSCALL, self.tid, 0, 0);
+            }
+            if let Some(ready) = self.ready.take() {
+                let _ = ready.send(Err(anyhow::anyhow!("native input hold cancelled")));
+            }
+        }
     }
 
     fn ptrace(request: u32, tid: i32, address: usize, data: usize) -> Result<i64> {
@@ -327,14 +373,23 @@ mod linux {
         Ok(())
     }
 
+    pub(super) enum Trace {
+        Terminal { shell: u32, master: i32 },
+        Output,
+    }
+
     fn run(
         pid: u32,
-        shell: u32,
-        master: i32,
+        trace: Trace,
         events: mpsc::SyncSender<NativeEvent>,
         ready: mpsc::SyncSender<Result<()>>,
-        stop: Receiver<()>,
+        commands: Receiver<TracerCommand>,
     ) -> Result<()> {
+        let (output_call, output_fd, shell) = match trace {
+            Trace::Terminal { shell, master } => (libc::SYS_read, master, Some(shell)),
+            Trace::Output => (libc::SYS_write, 1, None),
+        };
+        let mut input: Option<InputLease> = None;
         let mut threads = BTreeMap::new();
         for entry in fs::read_dir(format!("/proc/{pid}/task"))? {
             let tid: i32 = entry?
@@ -355,8 +410,43 @@ mod linux {
         let mut announced = false;
         let mut releasing = false;
         while !threads.is_empty() {
-            if !matches!(stop.try_recv(), Err(mpsc::TryRecvError::Empty)) {
-                return Ok(());
+            match commands.try_recv() {
+                Ok(TracerCommand::Hold(id, reply)) => {
+                    if input.is_some() {
+                        let _ = reply.send(Err(anyhow::anyhow!("native input already held")));
+                    } else {
+                        let ids: Vec<_> = threads
+                            .keys()
+                            .copied()
+                            .filter(|tid| {
+                                fs::read_to_string(format!("/proc/{pid}/task/{tid}/comm"))
+                                    .is_ok_and(|name| name.trim() == "io")
+                            })
+                            .collect();
+                        if ids.len() != 1 {
+                            let _ = reply.send(Err(anyhow::anyhow!(
+                                "unsupported: native input writer is ambiguous"
+                            )));
+                            continue;
+                        }
+                        let tid = ids[0];
+                        ptrace(libc::PTRACE_INTERRUPT, tid, 0, 0)?;
+                        input = Some(InputLease {
+                            id,
+                            tid,
+                            ready: Some(reply),
+                            parked: false,
+                        });
+                    }
+                }
+                Ok(TracerCommand::Release(id))
+                    if input.as_ref().is_some_and(|lease| lease.id == id) =>
+                {
+                    input.take();
+                }
+                Ok(TracerCommand::Release(_)) => (),
+                Ok(TracerCommand::Stop) | Err(mpsc::TryRecvError::Disconnected) => return Ok(()),
+                Err(mpsc::TryRecvError::Empty) => (),
             }
             let mut status = 0;
             let tid = unsafe {
@@ -405,16 +495,14 @@ mod linux {
                 let mut regs = registers(tid)?;
                 if entry {
                     let action = match regs.orig_rax as i64 {
-                        libc::SYS_read if regs.rdi as i32 == master => Exit::Read {
-                            address: regs.rsi,
-                            length: regs.rdx as usize,
-                        },
-                        libc::SYS_write if regs.rdi as i32 == master => Exit::Write {
-                            address: regs.rsi,
-                            length: regs.rdx as usize,
-                        },
+                        call if call == output_call && regs.rdi as i32 == output_fd => {
+                            Exit::Output {
+                                address: regs.rsi,
+                                length: regs.rdx as usize,
+                            }
+                        }
                         libc::SYS_kill
-                            if regs.rdi as i32 == -(shell as i32)
+                            if Some(regs.rdi as i32) == shell.map(|pid| -(pid as i32))
                                 && regs.rsi == libc::SIGHUP as u64 =>
                         {
                             releasing = true;
@@ -422,7 +510,7 @@ mod linux {
                         }
                         libc::SYS_wait4
                             if releasing
-                                && regs.rdi == shell as u64
+                                && Some(regs.rdi) == shell.map(u64::from)
                                 && regs.rdx & libc::WNOHANG as u64 != 0 =>
                         {
                             Exit::Released { status: regs.rsi }
@@ -436,15 +524,9 @@ mod linux {
                     threads.insert(tid, action);
                 } else if info[0] as u8 == 2 {
                     match threads.insert(tid, Exit::Pass).unwrap_or(Exit::Pass) {
-                        Exit::Read { address, length } | Exit::Write { address, length }
-                            if regs.rax as i64 > 0 =>
-                        {
+                        Exit::Output { address, length } if regs.rax as i64 > 0 => {
                             let bytes = read_memory(tid, address, (regs.rax as usize).min(length))?;
-                            let event = if regs.orig_rax == libc::SYS_read as u64 {
-                                NativeEvent::Output(bytes)
-                            } else {
-                                NativeEvent::Input(bytes)
-                            };
+                            let event = NativeEvent::Output(bytes);
                             events
                                 .try_send(event)
                                 .context("native capture queue unavailable")?;
@@ -455,7 +537,7 @@ mod linux {
                         }
                         Exit::Released { status } => {
                             write_status(tid, status)?;
-                            regs.rax = shell as u64;
+                            regs.rax = u64::from(shell.context("missing retained shell")?);
                             ptrace(libc::PTRACE_SETREGS, tid, 0, &mut regs as *mut _ as usize)?;
                         }
                         _ => (),
@@ -463,6 +545,20 @@ mod linux {
                 }
             } else if event == 0 {
                 deliver = signal;
+            }
+            if let Some(lease) = input
+                .as_mut()
+                .filter(|lease| lease.tid == tid && !lease.parked)
+            {
+                if signal == (libc::SIGTRAP | 0x80)
+                    && registers(tid)?.orig_rax as i64 == libc::SYS_io_uring_enter
+                {
+                    lease.parked = true;
+                    if let Some(ready) = lease.ready.take() {
+                        let _ = ready.send(Ok(()));
+                    }
+                    continue;
+                }
             }
             waiting.remove(&tid);
             ptrace(libc::PTRACE_SYSCALL, tid, 0, deliver as usize)?;
@@ -475,24 +571,13 @@ mod linux {
         Ok(())
     }
 
-    pub(super) fn start(candidate: &Candidate) -> Result<Handoff> {
+    pub(super) fn start(process: &Process, trace: Trace) -> Result<Handoff> {
         let (events_tx, events) = mpsc::sync_channel(512);
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
-        let (stop, stop_rx) = mpsc::channel();
-        let (pid, shell, master) = (
-            candidate.terminal.pid,
-            candidate.shell.pid,
-            candidate.master_fd,
-        );
+        let (commands, commands_rx) = mpsc::channel();
+        let pid = process.pid;
         thread::spawn(move || {
-            if let Err(error) = run(
-                pid,
-                shell,
-                master,
-                events_tx.clone(),
-                ready_tx.clone(),
-                stop_rx,
-            ) {
+            if let Err(error) = run(pid, trace, events_tx.clone(), ready_tx.clone(), commands_rx) {
                 let reason = error.to_string();
                 let _ = ready_tx.try_send(Err(error));
                 let _ = events_tx.try_send(NativeEvent::Failed(reason));
@@ -501,17 +586,29 @@ mod linux {
         ready_rx
             .recv_timeout(Duration::from_secs(3))
             .context("native handoff did not acknowledge attachment")??;
-        ensure!(
-            candidate.terminal.alive()? && candidate.shell.alive()?,
-            "native target exited during handoff"
-        );
-        Ok(Handoff { events, stop })
+        ensure!(process.alive()?, "native target exited during handoff");
+        Ok(Handoff { events, commands })
     }
 }
 
 impl Candidate {
     #[cfg(target_arch = "x86_64")]
     pub fn handoff(&self) -> Result<Handoff> {
-        linux::start(self)
+        let handoff = linux::start(
+            &self.terminal,
+            linux::Trace::Terminal {
+                shell: self.shell.pid,
+                master: self.master_fd,
+            },
+        )?;
+        ensure!(self.shell.alive()?, "native shell exited during handoff");
+        Ok(handoff)
+    }
+}
+
+impl Handoff {
+    #[cfg(target_arch = "x86_64")]
+    pub(crate) fn output(process: &Process) -> Result<Self> {
+        linux::start(process, linux::Trace::Output)
     }
 }

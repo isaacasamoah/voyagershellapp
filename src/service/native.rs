@@ -103,7 +103,6 @@ impl Runtime {
                     "invalid_input: request or message too long"
                 );
                 self.store.require_registered(session)?;
-                self.verify_adopted(session)?;
                 if let Some(previous) = self.store.request(id)? {
                     ensure!(
                         previous["session_id"] == session && previous["message"] == message,

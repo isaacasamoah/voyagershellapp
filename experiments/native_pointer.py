@@ -36,7 +36,7 @@ try:
             elif args[0] == 'button':
                 call(remote, session, remote + '.Session', 'NotifyPointerButton', GLib.Variant('(ib)', (272, args[1])))
             else:
-                raise ValueError('Unknown pointer action')
+                raise ValueError('Unknown native input action')
             print(json.dumps({'ok': True}), flush=True)
         except Exception as error:
             print(json.dumps({'error': str(error)}), flush=True)

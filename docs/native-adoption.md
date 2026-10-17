@@ -8,8 +8,9 @@ The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash,
 
 The app must work with normally installed, unmodified Codex. A source patch,
 custom build or pinned replacement binary does not satisfy this requirement.
-The existing [frontend bridge experiment](../integrations/codex/README.md) proved
-parts of the mechanism, but is not the selected distribution approach.
+The [native identity adapter](../integrations/codex/README.md) now experiments with
+a native `/status` lookup. The earlier custom bridge is removed. Its historical
+results do not establish this adapter.
 
 Codex must pass the same native journey as Bash: independent launch, avatar drop,
 exact identity, control, future capture, undock, normal viewer close while work
@@ -57,7 +58,7 @@ The [pinned Ghostty shutdown source](https://github.com/ghostty-org/ghostty/blob
 
 Bash command boundaries come from Ghostty's shell integration markers. They are observations of native output, not authenticated claims about command semantics. Agent commands require a foreground Bash prompt with no draft. The prototype reads Bash's exported readline state; unexpected mappings or missing symbols fail explicitly.
 
-The earlier Codex bridge identifies the displayed conversation through its own frontend event loop. Capture and instructions then use the existing app-server connection. Voyager checks the identity again before sending. Switching the frontend to another conversation is not permission to send to that new conversation. Replacing that bridge with an unmodified-Codex mechanism is the current open problem.
+The stock-Codex experiment obtains the displayed ID through native `/status`, preserving drafts through native history and queuing input during the query. Capture and instructions use the verified existing app-server connection. Voyager checks the displayed ID again before sending. Switching the frontend to another conversation is not permission to send to that new conversation. Isolated checks passed for busy draft/cursor restoration and queued typing. The complete stock-Codex journey remains under test.
 
 ## Proof and limits
 
@@ -87,12 +88,12 @@ From a GNOME graphical terminal, run the native proof separately:
 
 ```sh
 cargo build --locked --bins
-python3 experiments/run_adoption.py /absolute/path/to/integrated/codex
+python3 experiments/run_adoption.py /absolute/path/to/installed/codex
 ```
 
 The driver creates a fresh private `/tmp/vsad-*` service, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale.
 
-The output directory holds `adoption-proof.json` and native screenshots. A `rework` result exits nonzero and leaves evidence for inspection. It never uses the live user service. The standalone binary includes normal CLI/server commands as well as the frontend identity bridge.
+The output directory holds `adoption-proof.json` and native screenshots. A `rework` result exits nonzero and leaves evidence for inspection. It never uses the live user service. The executable must be the normal installed Codex binary. The driver does not build or patch it.
 
 Kernel policy may prohibit pidfd duplication or ptrace. Voyager does not lower that policy or grant itself privileges. The observed host already allowed same-user tracing. This prototype does not recover retained PTYs after service crash/reboot and does not claim broad terminal compatibility.
 
@@ -100,6 +101,7 @@ Kernel policy may prohibit pidfd duplication or ptrace. Voyager does not lower t
 
 - `src/adoption.rs`: verified process handles, PTY identity and tracer handshake.
 - `src/native_instance.rs`: native runtime, byte relay, shell observations and Codex identity checks.
+- `src/native_status.rs`: bounded native status lookup and composer restoration.
 - `src/service/adopt.rs`: adoption request and service registration.
 - `src/service/lifecycle.rs`: existing lifecycle operations for launched and adopted instances.
 - `integrations/ghostty/confirm_close.py`: scoped native close-dialog action.

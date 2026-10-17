@@ -345,10 +345,8 @@ impl Runtime {
         match std::mem::replace(&mut operation.phase, Phase::Start) {
             Phase::Start => match operation.action {
                 Action::Open => {
-                    if let Some(native) = self.adopted.get(&id) {
-                        if let Some(agent) = &native.agent {
-                            agent.verify()?;
-                        }
+                    if let Some(native) = self.adopted.get_mut(&id) {
+                        native.verify(&self.store)?;
                     }
                     for terminal in self.terminals.iter_mut().rev().filter(|t| t.session == id) {
                         if !terminal.process.alive()? {
@@ -426,10 +424,10 @@ impl Runtime {
                         "instance.stop_requested",
                         json!({"request_id":operation.id}),
                     )?;
-                    if let Some(native) = self.adopted.get(&id) {
+                    if let Some(native) = self.adopted.get_mut(&id) {
+                        native.verify(&self.store)?;
                         if let Some(agent) = &native.agent {
-                            agent.verify()?;
-                            agent.process.signal(nix::libc::SIGTERM)?;
+                            agent.frontend.process.signal(nix::libc::SIGTERM)?;
                             let thread = agent.thread.clone();
                             self.adopted_stop_connection(&id)?;
                             let request = self
