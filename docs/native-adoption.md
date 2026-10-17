@@ -2,7 +2,7 @@
 
 The feature branch adds adoption through the Electron avatar. Dragging onto a supported Ghostty window asks the Rust service to retain its existing Bash PTY, register the instance and select human control. It preserves the original process. It does not restart the shell or replace its interface.
 
-The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. Adoption of unmodified Codex remains unproved. Other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
+The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. The core unmodified-Codex journey has passed; the empty-conversation fallback is under test. Other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
 
 ## Codex acceptance
 
@@ -58,22 +58,20 @@ The [pinned Ghostty shutdown source](https://github.com/ghostty-org/ghostty/blob
 
 Bash command boundaries come from Ghostty's shell integration markers. They are observations of native output, not authenticated claims about command semantics. Agent commands require a foreground Bash prompt with no draft. The prototype reads Bash's exported readline state; unexpected mappings or missing symbols fail explicitly.
 
-The stock-Codex experiment obtains the displayed ID through native `/status`, preserving drafts through native history and queuing input during the query. Capture and instructions use the verified existing app-server connection. Voyager checks the displayed ID again before sending. Switching the frontend to another conversation is not permission to send to that new conversation. Isolated checks passed for busy draft/cursor restoration and queued typing. The complete stock-Codex journey remains under test.
+The stock-Codex experiment obtains the displayed ID through native `/status`, preserving drafts through native history and queuing input during the query. Capture and instructions use the verified existing app-server connection. Voyager checks the displayed ID again before sending. Switching the frontend to another conversation is not permission to send to that new conversation. Native checks passed for busy draft/cursor restoration, queued typing, lifecycle and conversation switching. Health polling does not query the composer. See the Codex adapter document for the empty-conversation capture fallback.
 
 ## Proof and limits
 
-The 17 October 2026 native run passed against source `51b1ede`, using a custom
-Codex build. It does not establish the unmodified-Codex acceptance above:
+The 17 October 2026 native run used normally installed Codex 0.163.0, Ghostty 1.1.3 and a separate Mutter/XWayland desktop. It used real avatar pointer gestures, native windows and real model requests.
 
 | Journey | Observed result |
 | --- | --- |
 | Bash | Avatar drop, fade, hover, undock, command capture, draft refusal, foreground-job persistence, same-PID/environment reopen and stop/remove |
-| Codex | Avatar drop, worker launch with the adopted parent ID, task completion after close, same-thread reopen, re-docking, capture cutoff and stop |
-| Isolation and failures | A similar unrelated terminal remained usable; released tracing left native input usable; repeated adoption was idempotent; stale windows, changed request inputs and malformed viewer input were refused |
+| Working Codex conversation | Avatar drop during work with an unsent multiline draft, worker launch, completion after native close, same-thread reopen and re-docking |
+| Isolation and failures | Native `/new` caused instruction and open refusal; returning with `/resume` restored control. Selected stop left another independent Codex conversation usable. Removal ended capture while retaining history. |
+| Empty Codex conversation | A transcript fallback is implemented and undergoing native proof; the installed native subscription rejects this case. |
 
-A separate service run verified that selected-thread stop left unrelated loaded Codex conversations available. The ordinary Rust and Electron checks passed. A desktop refresh race found during worker shutdown was fixed: a single ended instance no longer clears the window inventory or undocks its parent.
-
-These observations do not establish frontend reconnection, native conversation-switch interaction, microphone behavior or recovery after a service crash. The existing identity checks refuse a changed conversation. Physical drag feel and sound still benefit from human review.
+The older custom-build result is historical and is not used as stock-Codex proof. Physical drag feel and sound remain Isaac's review. Reconnection after frontend failure, service crash/reboot recovery, multiple terminal surfaces and other platforms are outside this prototype.
 
 Run ordinary checks without opening windows:
 
@@ -91,9 +89,9 @@ cargo build --locked --bins
 python3 experiments/run_adoption.py /absolute/path/to/installed/codex
 ```
 
-The driver creates a fresh private `/tmp/vsad-*` service, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale.
+The driver creates a fresh private `/tmp/vsad-*` service, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale. A separate XWayland desktop can use `VOYAGER_PROOF_POINTER=x11` for native XTEST gestures without touching the human desktop.
 
-The output directory holds `adoption-proof.json` and native screenshots. A `rework` result exits nonzero and leaves evidence for inspection. It never uses the live user service. The executable must be the normal installed Codex binary. The driver does not build or patch it.
+The output directory holds `adoption-proof.json` and native screenshots. A `rework` result leaves evidence for inspection. It never uses the live user service. The executable must be the normal installed Codex binary. The driver does not build or patch it.
 
 Kernel policy may prohibit pidfd duplication or ptrace. Voyager does not lower that policy or grant itself privileges. The observed host already allowed same-user tracing. This prototype does not recover retained PTYs after service crash/reboot and does not claim broad terminal compatibility.
 
@@ -103,6 +101,7 @@ Kernel policy may prohibit pidfd duplication or ptrace. Voyager does not lower t
 - `src/native_instance.rs`: native runtime, byte relay, shell observations and Codex identity checks.
 - `src/native_status.rs`: bounded native status lookup and composer restoration.
 - `src/service/adopt.rs`: adoption request and service registration.
+- `src/service/capture.rs` and `src/transcript.rs`: notification capture and the empty-thread transcript fallback.
 - `src/service/lifecycle.rs`: existing lifecycle operations for launched and adopted instances.
 - `integrations/ghostty/confirm_close.py`: scoped native close-dialog action.
 - `desktop/src/main.cjs`: discovery, avatar drop and presentation.

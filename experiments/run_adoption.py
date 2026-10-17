@@ -14,7 +14,7 @@ state = Path(tempfile.mkdtemp(prefix='vsad-'))
 env = {**os.environ, 'GDK_BACKEND': 'x11', 'VOYAGER_STATE': str(state), 'PATH': str(state / 'bin') + ':' + os.environ['PATH']}
 print(state, flush=True)
 with (state / 'desktop.log').open('w') as log:
-    desktop = subprocess.Popen([root / 'desktop/node_modules/.bin/electron', '.', '--proof-adoption'], cwd=root / 'desktop', env=env, stdout=log, stderr=log, start_new_session=True)
+    desktop = subprocess.Popen([root / 'desktop/node_modules/.bin/electron', '--ozone-platform=x11', '.', '--proof-adoption'], cwd=root / 'desktop', env=env, stdout=log, stderr=log, start_new_session=True)
     (state / 'process.json').write_text(json.dumps({'desktop': desktop.pid}))
     desktop.wait()
 result = json.loads((state / 'adoption-proof.json').read_text())

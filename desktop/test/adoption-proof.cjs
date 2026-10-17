@@ -18,9 +18,9 @@ exports.run = async ({
   setExpanded,
   stateDir,
 }) => {
+  const x11Pointer = process.env.VOYAGER_PROOF_POINTER === 'x11';
   const evidence = {
-    surface:
-      'native GNOME avatar gestures; verified PTY input; stock Ghostty, Bash and unmodified Codex',
+    surface: `native ${x11Pointer ? 'X11' : 'Mutter'} avatar gestures; verified PTY input; stock Ghostty, Bash and unmodified Codex`,
     steps: [],
   };
   const file = path.join(stateDir, 'adoption-proof.json');
@@ -28,7 +28,9 @@ exports.run = async ({
   const home = { x: display.bounds.x + display.bounds.width - 240, y: display.bounds.y + 80 };
   const placeAvatar = () => avatarWin.setPosition(home.x, home.y);
   const capture = async (name, window) => {
-    await exec('import', ['-window', String(window), path.join(stateDir, name + '.png')]);
+    await exec('import', ['-window', String(window), path.join(stateDir, name + '.png')], {
+      timeout: 5000,
+    });
     if (process.env.VOYAGER_PROOF_MONITOR)
       await exec('python3', [
         path.join(__dirname, '../../experiments/desktop_capture.py'),
@@ -47,10 +49,12 @@ exports.run = async ({
     }
     throw Error(label);
   };
-  const pointer = spawn('python3', [path.join(__dirname, '../../experiments/native_pointer.py')], {
-    stdio: ['pipe', 'pipe', 'inherit'],
-  });
-  const lines = require('node:readline').createInterface({ input: pointer.stdout });
+  const pointer = x11Pointer
+    ? null
+    : spawn('python3', [path.join(__dirname, '../../experiments/native_pointer.py')], {
+        stdio: ['pipe', 'pipe', 'inherit'],
+      });
+  const lines = pointer && require('node:readline').createInterface({ input: pointer.stdout });
   const move = (args) =>
     new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(Error('Native pointer did not respond')), 4000);
@@ -79,9 +83,13 @@ exports.run = async ({
   };
   const xt = (...args) =>
     args[0] === 'mousemove'
-      ? move(['move', Number(args[1]), Number(args[2]), scale])
+      ? x11Pointer
+        ? exec('xdotool', args.map(String))
+        : move(['move', Number(args[1]), Number(args[2]), scale])
       : args[0] === 'mousedown' || args[0] === 'mouseup'
-        ? move(['button', args[0] === 'mousedown'])
+        ? x11Pointer
+          ? exec('xdotool', args.map(String))
+          : move(['button', args[0] === 'mousedown'])
         : args[0] === 'type'
           ? input(args.at(-1))
           : args[0] === 'key'
@@ -108,7 +116,12 @@ exports.run = async ({
       y: target.y + Math.round(target.height * 0.6),
     };
     await xt('mousemove', from.x, from.y);
-    await delay(400);
+    await wait(
+      async () => screen.dipToScreenPoint(screen.getCursorScreenPoint()),
+      (point) => Math.abs(point.x - from.x) < 4 && Math.abs(point.y - from.y) < 4,
+      'Native pointer did not reach the avatar center',
+      2000,
+    );
     await xt('mousedown', 1);
     await delay(450);
     await wait(
@@ -307,11 +320,7 @@ exports.run = async ({
     terminal = (await inventory()).find((w) => w.id === opened.window_id);
     await gesture(terminal);
     evidence.steps.push({ action: 'same shell reopened', retained });
-    await exec('import', [
-      '-window',
-      String(avatarWin.getNativeWindowHandle().readUInt32LE()),
-      path.join(stateDir, 'shell-docked.png'),
-    ]);
+    await capture('shell-docked', terminal.id);
     evidence.steps.push({
       action: 'stop and remove shell',
       receipt: await rpc('remove', shell.id, '--stop'),
@@ -321,6 +330,20 @@ exports.run = async ({
     park();
     placeAvatar();
     await delay(300);
+    await nativeCommand(other.id, 'codex --dangerously-bypass-approvals-and-sandbox');
+    await delay(2500);
+    await nativeCommand(
+      other.id,
+      `Use the shell tool to write ready to '${stateDir}/other-codex-ready', then reply OTHERREADY.`,
+    );
+    await wait(
+      () => fs.readFile(path.join(stateDir, 'other-codex-ready'), 'utf8').catch(() => ''),
+      (v) => v === 'ready',
+      'Unrelated Codex did not start',
+      90000,
+    );
+    const otherCodex = await rpc('inspect-window', String(other.id));
+    assert.equal(otherCodex.kind, 'codex');
     terminal = await openOrdinary();
     await fs.writeFile(
       path.join(stateDir, 'integration.sh'),
@@ -335,7 +358,47 @@ exports.run = async ({
       'Installed Codex frontend unavailable',
       30000,
     );
+    const initiallyEmpty = await gesture(terminal);
+    evidence.steps.push({
+      action: 'empty native Codex adopted before its first message',
+      session_id: initiallyEmpty.id,
+    });
+    await undockGesture();
+    await activate(terminal.id);
+    await nativeCommand(
+      terminal.id,
+      `Use the shell tool to run: printf started > '${stateDir}/native-started'; sleep 30; printf retained > '${stateDir}/native-finished'. Then reply exactly NATIVEWORKPRESERVED.`,
+    );
+    await wait(
+      () => fs.readFile(path.join(stateDir, 'native-started'), 'utf8').catch(() => ''),
+      (v) => v === 'started',
+      'Native task did not start',
+      90000,
+    );
+    await input('\x1b[200~UNSENT_NATIVE_DRAFT 😀\nsecond line  \x1b[201~');
+    await delay(300);
+    await input('\x1b[D\x1b[D\x1b[D');
+    await capture('draft-before', terminal.id);
     const agent = await gesture(terminal);
+    assert.equal(agent.id, initiallyEmpty.id);
+    await capture('draft-after', terminal.id);
+    await assert.rejects(fs.access(path.join(stateDir, 'native-finished')));
+    await wait(
+      () => fs.readFile(path.join(stateDir, 'native-finished'), 'utf8').catch(() => ''),
+      (v) => v === 'retained',
+      'Native work did not survive adoption',
+      45000,
+    );
+    await wait(
+      () => rpc('events', '0'),
+      (p) => p.events.some((e) => e.session_id === agent.id && e.type === 'turn.completed'),
+      'Adopted native turn did not complete',
+      60000,
+    );
+    await activate(terminal.id);
+    await input('\x03');
+    await delay(300);
+    evidence.steps.push({ action: 'active native task and draft survived adoption' });
     const original = await rpc('attach-info', agent.id);
     const childCursor = (await rpc('events')).cursor;
     const child = await rpc(
@@ -354,12 +417,11 @@ exports.run = async ({
     );
     evidence.steps.push({ action: 'adopted parent launched real worker', receipt: child });
     await rpc('remove', child.session_id, '--stop');
+    await activate(terminal.id);
+    await refresh();
+    await delay(500);
 
-    await exec('import', [
-      '-window',
-      String(avatarWin.getNativeWindowHandle().readUInt32LE()),
-      path.join(stateDir, 'codex-docked.png'),
-    ]);
+    await capture('codex-docked', terminal.id);
     await undockGesture();
     await delay(1500);
     const cursor = (await rpc('events')).cursor;
@@ -367,10 +429,21 @@ exports.run = async ({
       'send',
       agent.id,
       'adoption-native-task',
-      `Run a shell command that sleeps for three seconds, then prints ADOPTIONCONTINUED. Then reply exactly ADOPTIONCOMPLETE.`,
+      `Run a shell command that writes started to '${stateDir}/close-started', sleeps for 30 seconds, then writes finished to '${stateDir}/close-finished'. Then reply exactly ADOPTIONCOMPLETE.`,
     );
     evidence.steps.push({ action: 'real task accepted', receipt: sent });
-    evidence.steps.push({ action: 'background Codex', receipt: await rpc('background', agent.id) });
+    await wait(
+      () => fs.readFile(path.join(stateDir, 'close-started'), 'utf8').catch(() => ''),
+      (v) => v === 'started',
+      'Close task did not start',
+      90000,
+    );
+    evidence.steps.push({
+      action: 'background Codex during work',
+      receipt: await rpc('background', agent.id),
+    });
+    await assert.rejects(fs.access(path.join(stateDir, 'close-finished')));
+    assert(!(await inventory()).some((w) => w.id === terminal.id && w.pid === terminal.pid));
     const complete = await wait(
       () => rpc('events', String(cursor)),
       (p) =>
@@ -399,17 +472,29 @@ exports.run = async ({
     terminal = (await inventory()).find((w) => w.id === opened.window_id);
     await gesture(terminal);
     assert.equal(getState().binding.session.id, agent.id);
-    await exec('import', [
-      '-window',
-      String(avatarWin.getNativeWindowHandle().readUInt32LE()),
-      path.join(stateDir, 'codex-reopened.png'),
-    ]);
+    await capture('codex-reopened', opened.window_id);
     evidence.steps.push({
       action: 'Codex completion and same-session reopen',
       native_thread_id: agent.native_thread_id,
       events: complete.events,
       receipt: opened,
     });
+    await nativeCommand(opened.window_id, '/new');
+    await delay(1500);
+    const staleCursor = (await rpc('events')).cursor;
+    await assert.rejects(
+      rpc('send', agent.id, 'stale-native-task', 'Reply exactly MUSTNOTSEND'),
+      /native conversation changed/,
+    );
+    await assert.rejects(rpc('open', agent.id, 'ghostty'), /native conversation changed/);
+    const afterSwitch = await rpc('events', String(staleCursor));
+    assert(!afterSwitch.events.some((e) => e.type === 'turn.started' || e.type === 'message'));
+    evidence.steps.push({
+      action: 'native conversation switch refused instruction and open without dispatch',
+    });
+    await nativeCommand(opened.window_id, '/resume ' + agent.native_thread_id);
+    await delay(2000);
+    await rpc('open', agent.id, 'ghostty');
     await rpc('remove', agent.id);
     const removedCursor = (await rpc('events')).cursor;
     await nativeCommand(opened.window_id, 'Reply exactly REMOVEDPRIVATE');
@@ -424,7 +509,24 @@ exports.run = async ({
       receipt: await rpc('stop-instance', agent.id),
     });
     assert.deepEqual(await rpc('list'), []);
-    assert.deepEqual(await rpc('inspect-window', String(other.id)), otherIdentity);
+    assert.deepEqual(await rpc('inspect-window', String(other.id)), otherCodex);
+    await nativeCommand(
+      other.id,
+      `Use the shell tool to write usable to '${stateDir}/other-codex-result', then reply OTHERUSABLE.`,
+    );
+    await wait(
+      () => fs.readFile(path.join(stateDir, 'other-codex-result'), 'utf8').catch(() => ''),
+      (v) => v === 'usable',
+      'Unrelated Codex was affected',
+      90000,
+    );
+    evidence.steps.push({
+      action: 'unrelated Codex on shared daemon remained usable',
+      identity: otherCodex,
+    });
+    await delay(2000);
+    await nativeCommand(other.id, '/quit');
+    await delay(1000);
     await fs.writeFile(path.join(stateDir, 'other-check.sh'), 'printf usable > other-result\n');
     await nativeCommand(other.id, 'source other-check.sh');
     await wait(
@@ -444,7 +546,7 @@ exports.run = async ({
       'No crash/reboot recovery',
     ];
     await save();
-    pointer.stdin.end();
+    pointer?.stdin.end();
     app.quit();
   } catch (error) {
     evidence.verdict = 'rework';
@@ -455,7 +557,7 @@ exports.run = async ({
     await capture('failure', avatarWin.getNativeWindowHandle().readUInt32LE()).catch(() => {});
     await save();
     await xt('mouseup', 1).catch(() => {});
-    pointer.stdin.end();
+    pointer?.stdin.end();
     app.quit();
   }
 };

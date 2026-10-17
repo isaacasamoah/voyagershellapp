@@ -34,6 +34,8 @@ use std::{
 };
 
 mod adopt;
+mod capture;
+use capture::Capture;
 mod lifecycle;
 mod native;
 use native::NativeCall;
@@ -176,6 +178,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                     runtime.observe()?;
                     if request["op"] == "dock" {
                         runtime.ensure_connected(string(&request, "session_id")?)?;
+                        runtime.verify_adopted(string(&request, "session_id")?)?;
                         let peer =
                             u32::try_from(getsockopt(&stream, sockopt::PeerCredentials)?.pid())?;
                         return Ok(Some((
@@ -251,7 +254,7 @@ struct Runtime {
     codex: Option<Codex>,
     server: Option<String>,
     registered: HashMap<String, (String, i64)>,
-    captures: HashMap<String, (Codex, i64)>,
+    captures: HashMap<String, Capture>,
     instance: String,
     workers: HashMap<String, Worker>,
     shells: HashMap<String, Shell>,
@@ -462,9 +465,16 @@ impl Runtime {
 
     fn ensure_connected(&mut self, session: &str) -> Result<()> {
         self.store.require_registered(session)?;
-        self.verify_adopted(session)?;
-        if self.adopted.get(session).is_some_and(|n| n.agent.is_none()) {
-            return Ok(());
+        if let Some(native) = self.adopted.get(session) {
+            ensure!(
+                native.alive && native.capture,
+                "adopted runtime is unavailable"
+            );
+            if let Some(agent) = &native.agent {
+                agent.frontend.verify()?;
+            } else {
+                return Ok(());
+            }
         }
         if let Some(shell) = self.shells.get(session) {
             ensure!(shell.connected(), "shell is disconnected");
@@ -478,8 +488,8 @@ impl Runtime {
         if let Some(worker) = self.workers.get_mut(session) {
             return worker.client();
         }
-        if let Some((connection, _)) = self.captures.get_mut(session) {
-            return Ok(connection);
+        if let Some(capture) = self.captures.get_mut(session) {
+            return Ok(&mut capture.connection);
         }
         let native = self.store.native(
             session,
@@ -543,31 +553,17 @@ impl Runtime {
             worker.observe(&self.store)?;
         }
         let mut disconnected = Vec::new();
-        for (session, (connection, generation)) in &mut self.captures {
-            let native = self.store.session(session)?["native_thread_id"]
-                .as_str()
-                .context("native identity missing")?
-                .to_owned();
-            let mut notes: Vec<_> = connection.pending.drain(..).collect();
-            match connection.read() {
-                Ok(Some(note)) => notes.push(note),
-                Ok(None) => (),
-                Err(_) => disconnected.push(session.clone()),
-            }
-            for note in notes {
-                if let Some(event) = events::normalize(&note) {
-                    if event.thread == native {
-                        self.store.record(session, *generation, event)?;
-                    }
-                }
+        for (session, capture) in &mut self.captures {
+            if let Err(error) = capture.observe(&self.store, session) {
+                disconnected.push((session.clone(), error.to_string()));
             }
         }
-        for session in disconnected {
+        for (session, reason) in disconnected {
             self.captures.remove(&session);
             self.store.local(
                 &session,
                 "capture.gap",
-                json!({"reason":"native_disconnected","replay_available":false}),
+                json!({"reason":reason,"replay_available":false}),
             )?;
         }
         let pending: Vec<_> = self

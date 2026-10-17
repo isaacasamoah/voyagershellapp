@@ -1,3 +1,4 @@
+use super::Capture;
 use super::{Runtime, Terminal, TerminalProcess, string};
 use crate::{
     actions::{self, Action, PendingOperation, Phase},
@@ -63,6 +64,7 @@ impl Runtime {
         } else {
             let parent = string(request, "parent_id")?;
             self.ensure_connected(parent)?;
+            self.verify_adopted(parent)?;
             let prompt = string(request, "prompt")?;
             ensure!(
                 prompt.len() <= events::TEXT_LIMIT,
@@ -733,6 +735,27 @@ impl Runtime {
                     .as_str()
                     .context("native identity missing")?
                     .to_owned();
+                if self.adopted.contains_key(&id) {
+                    let metadata = connection.metadata(&native)?;
+                    let generation = self.store.session(&id)?["capture_generation"]
+                        .as_i64()
+                        .context("capture generation missing")?
+                        + 1;
+                    let capture = Capture::adopt(connection, &metadata, generation)?;
+                    self.store.reactivate(&id)?;
+                    self.captures.insert(id.clone(), capture);
+                    self.adopted
+                        .get_mut(&id)
+                        .context("adopted runtime missing")?
+                        .reactivate(generation)?;
+                    self.store.local(
+                        &id,
+                        "capture.started",
+                        json!({"generation":generation,"history_imported":false}),
+                    )?;
+                    operation.effect("register", "confirmed");
+                    return Ok(true);
+                }
                 let request = connection.begin_rpc(
                     "thread/resume",
                     json!({"threadId":native,"excludeTurns":true}),
@@ -762,7 +785,8 @@ impl Runtime {
                         worker.connection = Some(*connection);
                         worker.generation = generation;
                     } else {
-                        self.captures.insert(id.clone(), (*connection, generation));
+                        self.captures
+                            .insert(id.clone(), Capture::notifications(*connection, generation));
                     }
                     self.store.local(&id,"capture.started",json!({"generation":generation,"history_imported":false,"source":"new_native_subscription"}))?;
                     if let Some(native) = self.adopted.get_mut(&id) {

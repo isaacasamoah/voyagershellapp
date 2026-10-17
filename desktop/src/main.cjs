@@ -598,6 +598,7 @@ app.whenReady().then(async () => {
       try {
         return await fn(...args);
       } catch (error) {
+        console.error(`${name}: ${error.message}`);
         if (['begin-drag', 'end-drag', 'cancel-drag'].includes(name)) {
           dockError = 'Couldn’t connect to this terminal.';
           sendState();

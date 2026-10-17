@@ -1,4 +1,4 @@
-use super::{Runtime, Terminal, TerminalProcess, string};
+use super::{Capture, Runtime, Terminal, TerminalProcess, string};
 use crate::{
     actions,
     adoption::{Candidate, Process, children, window_owner},
@@ -82,6 +82,7 @@ impl Runtime {
         let record = self.inspect_window(window)?;
         if let Some(session) = record["session_id"].as_str() {
             self.ensure_connected(session)?;
+            self.verify_adopted(session)?;
             let receipt = json!({"request_id":id,"session_id":session,"state":"completed","action":"adopt","already_adopted":true});
             self.store.begin_operation(id, request, &receipt)?;
             return Ok(receipt);
@@ -102,20 +103,10 @@ impl Runtime {
                 metadata["id"] == agent.thread,
                 "native metadata identity mismatch"
             );
-            let reply = connection
-                .rpc(
-                    "thread/resume",
-                    json!({"threadId":agent.thread,"excludeTurns":true}),
-                )
-                .context("subscribe to existing Codex thread")?;
-            ensure!(
-                reply["thread"]["id"] == agent.thread,
-                "native capture identity mismatch"
-            );
             agent.frontend.verify()?;
-            connection.pending.clear();
+            let capture = Capture::adopt(connection, &metadata, 1)?;
             (
-                Some(connection),
+                Some(capture),
                 agent
                     .frontend
                     .server
@@ -168,7 +159,12 @@ impl Runtime {
             window: Some(window),
         });
         if let Some(connection) = connection {
-            self.captures.insert(session.clone(), (connection, 1));
+            self.store.local(
+                &session,
+                "capture.started",
+                json!({"source":connection.source(),"history_imported":false}),
+            )?;
+            self.captures.insert(session.clone(), connection);
         }
         self.store.local(&session,"instance.adopted",json!({"window_id":window,"shell_pid":pid,"runtime_restarted":false,"history_imported":false,"mechanism":"linux-ptrace-pty"}))?;
         let receipt = json!({"request_id":id,"action":"adopt","session_id":session,"state":"completed","runtime":"running","window":"open","registration":"active","window_id":window,"runtime_pid":pid});
@@ -193,7 +189,7 @@ impl Runtime {
             let connection = Codex::connect(Path::new(string(&session, "server")?))?;
             self.captures.insert(
                 id.into(),
-                (
+                Capture::notifications(
                     connection,
                     session["capture_generation"]
                         .as_i64()
