@@ -57,6 +57,7 @@ future descendants, removal, invalid data and collapsed rank rows.
 `npm start -- --expanded --proof-fleets` exercises the actual desktop panel with
 an existing Captain hierarchy and empty Fleet settings. It creates a temporary
 Fleet, delivers programmatic drag/drop events, checks measured native panel
-bounds and canvas growth, then removes its own metadata. It preserves service
+bounds and canvas growth, surfaces a Fleet in native terminals, restores their
+previous geometry, then removes its own metadata. It preserves service
 registrations, ranks, assignments and capture. It creates no agent or model task.
 Physical dragging remains a user check.

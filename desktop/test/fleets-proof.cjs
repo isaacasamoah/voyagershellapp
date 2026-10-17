@@ -4,10 +4,15 @@ const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 const hierarchy = require('../src/ui/hierarchy.js');
 const { screen } = require('electron');
-exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded }) => {
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const exec = promisify(execFile);
+exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded, inventory, getState }) => {
   const observations = [];
   const file = path.join(stateDir, 'fleets-proof.json');
   let fleetId;
+  let restore;
+  const probe = path.resolve(__dirname, '../../target/debug/voyager-windows');
   const ui = (code) => panelWin.webContents.executeJavaScript(code);
   const save = (verdict, error) =>
     fs.writeFile(
@@ -19,7 +24,7 @@ exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded }) => {
           observations,
           limits: [
             'Actual Electron renderer, preload and persisted fleet file; drag/drop events are programmatic, not physical pointer proof.',
-            'No model requests, new vessels or native terminal placement in this check.',
+            'No model requests or new vessels; native window placement is restored after the check.',
           ],
         },
         null,
@@ -72,6 +77,23 @@ exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded }) => {
     const sessions = await rpc('list');
     await setExpanded(true);
     await refresh();
+    const originalWindows = await inventory();
+    const originalRecords = getState().records;
+    const windows = originalRecords.map((r) => {
+      const w = originalWindows.find((w) => w.pid === r.pid);
+      assert.ok(w, 'Original terminal identity missing');
+      return {
+        id: w.id,
+        pid: r.pid,
+        start: r.start,
+        minimise: !w.visible,
+        x: w.x,
+        y: w.y,
+        width: w.width,
+        height: w.height,
+      };
+    });
+    restore = { windows, focus: windows.find((w) => !w.minimise).id };
     assert.equal(
       await ui(
         "Boolean(document.getElementById('show-all') || document.getElementById('group-layout'))",
@@ -156,6 +178,30 @@ exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded }) => {
       emptyHeight,
       joinedHeight,
     });
+    await fs.rm(path.join(stateDir, 'last-layout.json'), { force: true });
+    await ui(`document.querySelector('[data-fleet="${fleetId}"] .fleet-name').click()`);
+    const placement = await wait(
+      async () =>
+        fs
+          .readFile(path.join(stateDir, 'last-layout.json'), 'utf8')
+          .then(JSON.parse)
+          .catch(() => null),
+      (d) => d?.mode === 'rank',
+      'Fleet surface did not complete',
+    );
+    assert.equal(placement.result.state, 'confirmed');
+    assert.equal(placement.result.windows.filter((w) => w.visible).length, 5);
+    await wait(
+      () => ui('document.body.dataset.arranging'),
+      (v) => v !== 'true',
+      'Fleet surface did not settle',
+    );
+    observations.push({ action: 'native fleet surface', placement });
+    const restored = JSON.parse(
+      (await exec(probe, ['layout', JSON.stringify(restore)], { timeout: 5000 })).stdout,
+    );
+    assert.equal(restored.state, 'confirmed');
+    restore = null;
     await drop(captain.id, "document.getElementById('sessions')");
     await wait(
       async () => JSON.parse(await fs.readFile(path.join(stateDir, 'fleets.json'), 'utf8')),
@@ -201,6 +247,8 @@ exports.run = async ({ panelWin, rpc, refresh, stateDir, setExpanded }) => {
     );
     await save('pass');
   } catch (error) {
+    if (restore)
+      await exec(probe, ['layout', JSON.stringify(restore)], { timeout: 5000 }).catch(() => {});
     if (fleetId) await ui(`window.voyager.removeFleet(${JSON.stringify(fleetId)})`).catch(() => {});
     await save('rework', error.message);
     throw error;
