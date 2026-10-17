@@ -183,7 +183,19 @@ fn native_captain_and_crew_use_their_bound_cli_identity() -> Result<()> {
         fs::read_to_string(state.join("crew/permission-result"))? == "refused",
         "crew instructed a peer"
     );
-    let escalation = load(state.join("crew/escalation.json"))?;
+    let recorded = load(state.join("crew/escalation.json"))?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let escalation = loop {
+        let receipt = service::client(
+            &state,
+            json!({"op":"operation","request_id":recorded["request_id"]}),
+        )?;
+        if receipt["delivery"] != "recorded" {
+            break receipt;
+        }
+        ensure!(Instant::now() < deadline, "escalation delivery timed out");
+        thread::sleep(Duration::from_millis(50));
+    };
     ensure!(
         escalation["destination"] == captain && escalation["delivery"] == "accepted",
         "escalation did not reach assigned captain"
