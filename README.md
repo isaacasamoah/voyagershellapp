@@ -30,22 +30,26 @@ is our starting point, and we’d love to build toward it with other developers.
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
-- Agent messages can start a turn only while the target is idle. Active-turn
-  steering is not implemented.
+- Agent creation selects Admiral, Commodore, Captain or Crew, defaulting to Crew.
+  Assigned supervisors delegate and adjudicate downward; agents escalate upward.
+  Docking temporarily grants human command authority.
+- Agent messages start an idle turn or steer the observed active turn. The service
+  checks the bound caller; it never silently replays a failed or uncertain send.
 
 The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
-Captain/crew authority, supervisor priority, automatic native voice, knowledge
-extraction and shared graphs are later work. Voyager is an experimental prototype.
+Explicit supervisor preemption, automatic native voice, knowledge extraction and
+shared graphs are later work. Voyager is an experimental prototype.
 
 ## Try it
 
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
 The [desktop guide](docs/desktop.md) describes docking and gestures.
 The [lifecycle contract](docs/lifecycle.md) defines each action and its result.
+The [authority guide](docs/authority.md) explains ranks, assignment and agent tools.
 The [CLI reference](docs/service.md#commands) exposes the same operations to scripts
 and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that workflow.
 

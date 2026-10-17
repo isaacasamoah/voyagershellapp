@@ -1,6 +1,7 @@
 # Docking and current control
 
-This increment records where the human is working. One service instance has at
+Docking records where the human is working and grants the selected bound agent
+temporary command authority under the [authority contract](authority.md). One service instance has at
 most one current control attachment. It is separate from registration, capture,
 process ownership and worker parentage.
 
@@ -70,12 +71,12 @@ refused before submitting work. A control-conditioned launch must name the
 current session as parent. `undock GENERATION` releases only that attachment and
 is safe to repeat. `list` and `status` stay read-only.
 
-These are coordination preconditions, not authentication secrets. Same-user
-programs already have direct CLI access. Docking grants no new permission.
-Direct commands work while undocked; supervisor loops are not cancelled.
-Busy-agent sends still refuse to interrupt. Priority scheduling, live steering,
-supervisor arbitration and automatic tool/context installation in an existing
-agent remain separate increments.
+Control generations express freshness; bound instance credentials establish the
+agent caller. Undocked agents return to their rank and direct assignment scope.
+Accepted work continues. Ordinary authorized input steers an active native turn
+without interruption. Explicit human replacement, supervisor preemption and
+voice takeover remain later work. This prototype does not isolate hostile
+processes sharing the same OS user.
 
 ## Voice preference
 

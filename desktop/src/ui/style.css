@@ -271,13 +271,16 @@ body[data-dock-error='true'] #indicator {
   display: grid;
   gap: 9px;
   -webkit-app-region: no-drag;
+  max-height: calc(100vh - 280px);
+  overflow: auto;
 }
 #create-form label {
   display: grid;
   gap: 4px;
 }
 input,
-select {
+select,
+textarea {
   font: inherit;
   width: 100%;
   min-width: 0;
@@ -356,4 +359,64 @@ select {
 }
 #unregistered {
   margin-top: 14px;
+}
+.session-identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.session-rank {
+  font-size: 10px;
+  color: #42566a;
+}
+.instance-actions label,
+.escalation label {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  font-size: 11px;
+}
+.instance-actions {
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  max-width: calc(100vw - 16px);
+  -webkit-app-region: no-drag;
+}
+#escalations {
+  min-height: 100px;
+  max-height: 280px;
+  overflow: auto;
+  -webkit-app-region: no-drag;
+}
+.escalation {
+  display: grid;
+  gap: 6px;
+  padding: 9px 0;
+  border-top: 1px solid #ffffff9c;
+}
+.escalation p,
+#authority-feedback,
+#escalation-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.question-text {
+  white-space: pre-wrap;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.escalation textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+.escalation button {
+  justify-self: end;
+  border: 1px solid #ffffffc0;
+  border-radius: 5px;
+  padding: 7px;
+  background: #ffffffa0;
+}
+#authority-feedback:empty {
+  display: none;
 }

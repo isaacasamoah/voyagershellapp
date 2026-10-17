@@ -31,6 +31,18 @@ Codex instance or managed Bash and **↗** to reopen its native interface or bri
 its existing window forward. `npm start -- --expanded` opens the
 panel immediately. Quit and restart Electron to pick up changes to the main
 process or preload. The service and its workers keep running independently.
+Codex creation starts at Crew each time the form opens. Choose another rank
+explicitly and optionally select an existing supervisor one rank above. Bash has
+no rank; its optional controller can be an Admiral, Commodore or Captain. Each
+instance's **⋯** menu shows its rank and current assignment and lets the owner
+change them. The service rejects a rank change that would invalidate an assignment;
+clear or change those assignments first.
+
+Questions addressed to the owner appear in **Questions for you**, with their
+sender and delivery status. Answer a question, accept a result or request changes
+there. A recorded response and delivery to the agent are separate outcomes.
+Actions retain their request identity after a lost reply when explicitly retried
+with the same inputs. The panel never resubmits them automatically.
 If Electron's binary download was skipped during installation, run
 `node node_modules/electron/install.js` once before starting it.
 
@@ -41,9 +53,11 @@ If Electron's binary download was skipped during installation, run
 | `src/main.cjs`                           | Native windows, gestures, IPC authorization and service calls                 |
 | `src/binding.cjs`                        | Process identity and exact terminal-to-session matching                       |
 | `src/instances.cjs`                      | Creation validation, pending request identity and retry after opening failure |
+| `src/authority.cjs`                      | Named rank, assignment and owner-response calls                               |
 | `src/control.cjs`                        | Persistent attachment socket, acknowledgement and connection loss             |
 | `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                                     |
 | `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                                |
+| `src/ui/authority.js`                    | Rank labels and eligible supervisor choices                                   |
 | `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                                  |
 | `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                              |
 | `assets/`                                | Astronaut artwork and its attribution                                         |
@@ -81,6 +95,11 @@ The live proof creates and closes one unrelated shell as a counterexample. It
 does not submit work to a model or inject desktop-wide mouse input. Its receipts
 and screenshots stay in the private service directory. It leaves the panel open
 and the marker docked for a human to check appearance, physical gestures and sounds.
+
+`test/authority.test.cjs` checks eligible choices and the named preload actions.
+`test/renderer.test.cjs` executes the renderer against a small document fixture to
+check Crew resets, Bash rank visibility, rejection feedback and explicit retry
+identity. These fixtures do not prove native appearance or pointer delivery.
 
 Keep changes small, explain what was actually observed, and update the user guide
 with behavior changes. Reports of a failed native interaction are useful: include
@@ -130,3 +149,14 @@ It writes `lifecycle-proof.json` and `panel-lifecycle.png` privately. It is a
 programmatic native check; Isaac still tests pointer delivery and visual quality.
 It makes no model requests. The separate ignored Rust native test in the
 [lifecycle guide](../docs/lifecycle.md#native-checks) uses the actual Codex account.
+
+## Native authority experiment
+
+`npm start -- --proof-authority` requires a fresh private VOYAGER_STATE, the built
+Rust binaries, installed Codex and a graphical session. It creates real Captain,
+Crew and Bash instances through the panel, checks creation defaults, changes an
+assignment, exercises dock/undock authority and answers an owner escalation.
+It records authority-proof.json and authority-panel.png in that private state,
+then stops its own instances and service. It makes native model calls. Physical
+drag quality and sound remain a separate user check. The ignored Rust
+native_authority test separately checks native agent tool identity.

@@ -57,6 +57,7 @@ impl Worker {
         launch: &str,
         cwd: &str,
         name: Option<&str>,
+        context: &Path,
     ) -> Result<StartingWorker> {
         let dir = state.join(format!("w-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir(&dir)?;
@@ -85,6 +86,13 @@ impl Worker {
             .arg(format!(
                 "shell_environment_policy.set.VOYAGER_BIN={}",
                 json!(binary)
+            ))
+            .arg("-c")
+            .arg("shell_environment_policy.set.VOYAGER_CALLER=\"instance\"")
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_SESSION_CONTEXT={}",
+                json!(context)
             ))
             .current_dir(cwd)
             .stdin(Stdio::null())

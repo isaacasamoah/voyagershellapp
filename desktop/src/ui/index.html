@@ -62,6 +62,20 @@
               <option value="shell">Terminal · Bash</option>
             </select></label
           >
+          <label id="rank-field"
+            >Rank<select id="instance-rank">
+              <option value="admiral">Admiral</option>
+              <option value="commodore">Commodore</option>
+              <option value="captain">Captain</option>
+              <option value="crew" selected>Crew</option>
+            </select></label
+          >
+          <label
+            ><span id="supervisor-label">Supervisor</span
+            ><select id="instance-supervisor">
+              <option value="">Unassigned</option>
+            </select></label
+          >
           <label
             >Name<input
               id="instance-name"
@@ -87,10 +101,16 @@
           </div>
         </form>
         <p id="instance-error" role="alert" hidden></p>
+        <p id="authority-feedback" role="status"></p>
         <div id="sessions" aria-label="Your instances"></div>
         <section id="unregistered" hidden aria-label="Unregistered instances">
           <div class="instances-heading">Unregistered instances</div>
           <div id="unregistered-sessions"></div>
+        </section>
+        <section id="escalations" hidden aria-label="Questions for you">
+          <div class="instances-heading">Questions for you</div>
+          <p id="escalation-error" role="status" hidden></p>
+          <div id="escalation-list"></div>
         </section>
         <p id="tagline">Let’s Go Together</p>
         <button id="quit" aria-label="Quit Voyager" title="Quit Voyager">×</button>
@@ -106,6 +126,7 @@
         <span id="indicator" aria-hidden="true"></span>
       </button>
     </main>
+    <script src="authority.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

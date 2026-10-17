@@ -80,8 +80,8 @@ helpers return connections and metadata without mutating the store. Waiting
 phases advance between capture passes, keeping other instances responsive.
 JSON stays at protocol and storage boundaries.
 
-The private socket is locked, bounded and same-UID checked. SQLite version-one
-migration is transactional; unsupported newer schemas are refused before writes.
+The private socket is locked, bounded and same-UID checked. SQLite migrations are transactional; version two adds agent authority while
+preserving existing lifecycle state; unsupported newer schemas are refused before writes.
 PTY ioctl calls use live descriptors and valid pointers. Post-fork setup uses
 async-signal-safe calls only; inherited hook descriptor nine is intentional.
 Uncertain or incomplete shell writes are never replayed, and human typeahead
@@ -104,5 +104,6 @@ VOYAGER_NATIVE_PROOF_DIR="$HOME/.local/share/voyager-native-lifecycle-proof" \
 ```
 
 Use a fresh private directory. Physical gestures, menu readability and sound
-still require a person. These checks do not establish other platforms, role
-authentication, voice handoff or crash/reboot recovery.
+still require a person. These lifecycle checks do not establish other platforms, voice handoff or
+crash/reboot recovery. [Authority checks](authority.md#checks) cover the separate
+bound-identity and hierarchy contract.

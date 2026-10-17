@@ -1,7 +1,7 @@
 # Create an instance from the panel
 
 Open Voyager, click **+** above Instances, choose **Codex** or **Terminal · Bash**,
-enter a name and folder, then choose **Create and open**. A real Ghostty window
+enter a name and folder, select an agent rank (Crew by default), then choose **Create and open**. A real Ghostty window
 opens; the new instance is already registered and capturing. No preparation
 prompt, manually copied conversation ID or dock step is required for creation.
 
@@ -11,7 +11,8 @@ Click **↗** beside a running instance to reopen its native interface after clo
 it. If its launched window is still alive, the same operation asks the desktop
 to bring that exact window forward. It does not start another instance or dock it.
 
-This increment supports Codex 0.162.1 and a managed Bash in separate Ghostty
+Native creation was established with Codex 0.162.1; the authority journey was
+also exercised with unmodified Codex 0.163.0 and managed Bash in separate Ghostty
 XWayland windows on Linux. There is one native viewer per shell. Claude, Ptyxis,
 other shell profiles, tabs, native Wayland and macOS need their own implementation
 and proof. Discovery of independently opened terminals remains separate.
@@ -78,10 +79,12 @@ its existing window. Mapping is not proof of keyboard focus or native UI
 usability. Failed opening retains the instance and saved result; inspect it
 before using a new-ID `open` to repair the same instance.
 
-Owned Codex tool environments explicitly receive `VOYAGER_BIN`, `VOYAGER_STATE`
+Owned Codex tool environments explicitly receive `VOYAGER_BIN`, `VOYAGER_STATE`,
+`VOYAGER_CALLER` and the private `VOYAGER_SESSION_CONTEXT` locator
 through the [native environment policy](https://learn.chatgpt.com/docs/config-file/config-advanced#shell-environment-policy), plus the small
-[orchestration instructions](../src/orchestration.md). They can call the same
-CLI operations as the panel. No captain/crew role system is introduced.
+[orchestration instructions](../src/orchestration.md). They call the shared CLI under their bound identity. The service enforces
+[rank and assignment permissions](authority.md); owner panel operations remain
+available to the person.
 [Docking control](control.md) is a current human selection, not an isolation
 boundary between mutually untrusted agents running under the same OS user.
 
