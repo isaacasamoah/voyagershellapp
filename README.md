@@ -35,9 +35,10 @@ is our starting point, and we’d love to build toward it with other developers.
   steering is not implemented.
 
 The tested platform is Fedora, Linux x86_64 and Ghostty 1.1.3 on XWayland, with
-one Bash terminal surface per Ghostty process. The working-conversation journey now passes with
-unmodified Codex. Fresh empty conversations use a transcript fallback currently
-under native test. No patched frontend is an installation requirement.
+one Bash terminal surface per Ghostty process. Native journeys pass with
+unmodified Codex 0.163.0, both before its first message and during ongoing work.
+Fresh conversations use future records from their exact native transcript.
+No patched frontend is an installation requirement.
 Tabs/panes, other shells/terminals, macOS and native Wayland remain unsupported.
 
 The [native adoption experiment](docs/native-adoption.md) has passed real avatar

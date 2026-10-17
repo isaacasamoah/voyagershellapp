@@ -16,4 +16,4 @@ The installed Codex rejects `thread/resume` before a fresh conversation has usab
 
 `src/transcript.rs` owns this bounded fallback. It verifies the tested transcript format and thread ID, handles incomplete trailing records, checks file identity and the previous byte boundary, and stops capture on replacement, truncation or unsupported records. Removal drops the reader. Registration again establishes a fresh capture boundary. Process lifecycle and instructions still use the same verified native instance and daemon.
 
-This fallback is undergoing its native empty-conversation proof. Ordinary checks establish parsing and cutoff behavior only. See [native adoption](../../docs/native-adoption.md) for the acceptance boundary and current proof.
+The native empty-conversation journey passed: first-message capture, busy re-docking, worker launch, work after viewer closure, same-instance reopen and stop/removal. Parsing and cutoff also have ordinary tests. See [native adoption](../../docs/native-adoption.md) for the acceptance boundary and current proof.

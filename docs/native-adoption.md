@@ -2,7 +2,7 @@
 
 The feature branch adds adoption through the Electron avatar. Dragging onto a supported Ghostty window asks the Rust service to retain its existing Bash PTY, register the instance and select human control. It preserves the original process. It does not restart the shell or replace its interface.
 
-The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. The core unmodified-Codex journey has passed; the empty-conversation fallback is under test. Other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
+The current proved target is Linux x86_64, X11/XWayland, Ghostty 1.1.3 and Bash, with one terminal surface in that Ghostty process. The native journeys pass with unmodified Codex, both for a fresh conversation and one already doing work. Other shells, multiple panes/windows in one Ghostty process, native Wayland and macOS are not established by this experiment.
 
 ## Codex acceptance
 
@@ -71,7 +71,8 @@ The 17 October 2026 native run used normally installed Codex 0.163.0, Ghostty 1.
 | Bash | Avatar drop, fade, hover, undock, command capture, draft refusal, foreground-job persistence, same-PID/environment reopen and stop/remove |
 | Working Codex conversation | Avatar drop during work with an unsent multiline draft, worker launch, completion after native close, same-thread reopen and re-docking |
 | Isolation and failures | Native `/new` caused instruction and open refusal; returning with `/resume` restored control. Selected stop left another independent Codex conversation usable. Removal ended capture while retaining history. |
-| Empty Codex conversation | A transcript fallback is implemented and undergoing native proof; the installed native subscription rejects this case. |
+| Empty Codex conversation | Avatar adoption before the first message, future user/assistant/tool capture, busy re-docking, worker launch, work after viewer close, same-instance reopen and stop/removal passed. |
+| Electron closure and active stop | Closing Electron during a real task left capture and work running to completion. Explicit stop then ended a different active shell command and closed its native viewer. |
 
 The older custom-build result is historical and is not used as stock-Codex proof. Physical drag feel and sound remain Isaac's review. Reconnection after frontend failure, service crash/reboot recovery, multiple terminal surfaces and other platforms are outside this prototype.
 
@@ -91,7 +92,7 @@ cargo build --locked --bins
 python3 experiments/run_adoption.py /absolute/path/to/installed/codex
 ```
 
-The driver creates a fresh private `/tmp/vsad-*` service, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale. A separate XWayland desktop can use `VOYAGER_PROOF_POINTER=x11` for native XTEST gestures without touching the human desktop.
+The driver creates a fresh private `/tmp/vsad-*` service from a fixed binary copy, opens disposable ordinary Ghostty windows and submits real Codex requests. It temporarily moves the desktop pointer. It needs `xdotool`, ImageMagick and the GNOME D-Bus input interfaces. Optional `VOYAGER_PROOF_MONITOR=CONNECTOR` adds compositor screenshots through GStreamer/PipeWire. Native gesture checks currently require uniform Electron-reported display scale. A separate XWayland desktop can use `VOYAGER_PROOF_POINTER=x11` for native XTEST gestures without touching the human desktop.
 
 The output directory holds `adoption-proof.json` and native screenshots. A `rework` result leaves evidence for inspection. It never uses the live user service. The executable must be the normal installed Codex binary. The driver does not build or patch it.
 
