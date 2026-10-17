@@ -12,7 +12,14 @@ assert int(property_text.split(' = ', 1)[1]) == pid, 'Native window changed owne
 assert Path(f'/proc/{pid}/exe').resolve() == Path('/usr/bin/ghostty'), 'Expected an owned Ghostty experiment'
 handle = os.pidfd_open(pid)
 try:
-    masters = [int(p.name) for p in Path(f'/proc/{pid}/fdinfo').iterdir() if 'tty-index:' in p.read_text()]
+    masters = []
+    for entry in Path(f'/proc/{pid}/fdinfo').iterdir():
+        try:
+            descriptor = entry.read_text()
+        except FileNotFoundError:
+            continue
+        if 'tty-index:' in descriptor:
+            masters.append(int(entry.name))
     assert len(masters) == 1, 'Expected one native PTY'
     libc = ctypes.CDLL(None, use_errno=True)
     fd = libc.syscall(438, handle, masters[0], 0)

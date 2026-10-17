@@ -56,6 +56,7 @@ impl Action {
 pub enum Phase {
     Start,
     AdoptedArchive {
+        connection: Box<crate::codex::Codex>,
         request: u64,
     },
     WaitStop {

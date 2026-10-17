@@ -73,7 +73,11 @@ generation. Late or queued content cannot resume recording after removal.
 Administrative lifecycle events may still describe stopped or removed work.
 
 Codex re-registration creates a fresh observation connection without importing
-snapshot turns. Bash requires a clean idle prompt with no pending command,
+snapshot turns. An adopted empty Codex conversation may instead read future
+records from its exact native transcript; see [the adapter](../integrations/codex/README.md).
+Stopping an adopted Codex instance uses a separate native request connection,
+so removal or failure of its capture source cannot cancel the stop operation.
+Bash requires a clean idle prompt with no pending command,
 partial input or incomplete hook frame. Its removed-period buffer is discarded.
 Opening a window never implicitly registers it.
 

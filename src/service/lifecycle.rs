@@ -429,14 +429,16 @@ impl Runtime {
                     if let Some(native) = self.adopted.get_mut(&id) {
                         native.verify(&self.store)?;
                         if let Some(agent) = &native.agent {
+                            let mut connection = Codex::connect(&agent.frontend.server)?;
                             agent.frontend.process.signal(nix::libc::SIGTERM)?;
                             let thread = agent.thread.clone();
-                            self.adopted_stop_connection(&id)?;
-                            let request = self
-                                .connection(&id)?
+                            let request = connection
                                 .begin_rpc("thread/archive", json!({"threadId":thread}))?;
                             operation.effect("stop", "requested");
-                            operation.phase = Phase::AdoptedArchive { request };
+                            operation.phase = Phase::AdoptedArchive {
+                                connection: Box::new(connection),
+                                request,
+                            };
                             return Ok(false);
                         }
                         native.stop(false)?;
@@ -502,8 +504,11 @@ impl Runtime {
                     }
                 }
             },
-            Phase::AdoptedArchive { request } => {
-                if self.connection(&id)?.poll_rpc(request)?.is_some() {
+            Phase::AdoptedArchive {
+                mut connection,
+                request,
+            } => {
+                if connection.poll_rpc(request)?.is_some() {
                     self.adopted
                         .get(&id)
                         .context("adopted runtime missing")?
@@ -518,7 +523,10 @@ impl Runtime {
                         json!({"history_retained":true,"shared_server_stopped":false}),
                     )?;
                 } else {
-                    operation.phase = Phase::AdoptedArchive { request };
+                    operation.phase = Phase::AdoptedArchive {
+                        connection,
+                        request,
+                    };
                 }
                 Ok(false)
             }

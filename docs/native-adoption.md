@@ -50,6 +50,8 @@ Voyager resolves the X11 window PID, verifies UID/process start/session identity
 
 A dedicated Linux ptrace thread observes terminal I/O. It suppresses only Ghostty's HUP to the selected Bash process group and supplies the corresponding nonblocking wait acknowledgement. Ghostty remains the sole PTY reader until its process exits; Voyager then takes over reading and relays bytes to a native viewer. This is a version-specific debugger integration, not a public Ghostty handoff API.
 
+Live output and replay use bounded transport frames, including redraws produced by a native identity check. A large redraw must not disconnect the reopened viewer.
+
 Ghostty's native close confirmation is handled through AT-SPI only for the adopted process while its handoff tracer is active. The adapter matches the exact close dialog and its Yes action. It changes no global Ghostty setting. Python 3, PyGObject and AT-SPI are required for this small native adapter.
 
 The [pinned Ghostty shutdown source](https://github.com/ghostty-org/ghostty/blob/889478f310c9a531327b14a380ea56dbc602eb82/src/termio/Exec.zig#L1256) explains the HUP/wait behavior. The earlier failed Bash-only experiment is retained in `experiments/adoption_probe.py`; it is not the product mechanism.

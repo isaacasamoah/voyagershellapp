@@ -241,7 +241,7 @@ impl NativeInstance {
 
     fn observe_bytes(&mut self, store: &Store, bytes: &[u8]) -> Result<()> {
         if let Some(viewer) = &mut self.viewer {
-            if viewer.send(json!({"output":bytes})).is_err() {
+            if viewer.output(bytes).is_err() {
                 self.viewer = None;
             }
         }
@@ -371,11 +371,7 @@ impl NativeInstance {
                     socket,
                     input: Vec::new(),
                 };
-                if self
-                    .output
-                    .chunks(4096)
-                    .all(|chunk| viewer.send(json!({"output":chunk})).is_ok())
-                {
+                if viewer.output(&self.output).is_ok() {
                     self.viewer = Some(viewer);
                 }
             }

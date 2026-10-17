@@ -1,4 +1,4 @@
-use super::{Capture, Runtime, Terminal, TerminalProcess, string};
+use super::{Capture, Runtime, Terminal, TerminalProcess};
 use crate::{
     actions,
     adoption::{Candidate, Process, children, window_owner},
@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use std::{fs, path::Path};
+use std::fs;
 
 fn process_value(process: &Process) -> Result<Value> {
     let argv: Vec<_> = fs::read(format!("/proc/{}/cmdline", process.pid))?
@@ -179,23 +179,6 @@ impl Runtime {
                 "adopted runtime is unavailable"
             );
             native.verify(&self.store)?;
-        }
-        Ok(())
-    }
-
-    pub(super) fn adopted_stop_connection(&mut self, id: &str) -> Result<()> {
-        if !self.captures.contains_key(id) {
-            let session = self.store.session(id)?;
-            let connection = Codex::connect(Path::new(string(&session, "server")?))?;
-            self.captures.insert(
-                id.into(),
-                Capture::notifications(
-                    connection,
-                    session["capture_generation"]
-                        .as_i64()
-                        .context("capture generation missing")?,
-                ),
-            );
         }
         Ok(())
     }
