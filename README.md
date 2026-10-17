@@ -34,6 +34,9 @@ is our starting point, and we’d love to build toward it with other developers.
   an update to an active native turn without cancelling it.
 - This experiment branch includes an opt-in [collaboration trial](docs/collaboration-trial.md):
   real Jev/Sol extraction, evidence-linked knowledge, subscriptions and a live inspector.
+- A separate [structural topics experiment](docs/structural-topics.md) scans Rust
+  and Electron modules and replays source events through Jev for independent
+  topic membership. It does not change the live collaboration pipeline.
 
 The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported

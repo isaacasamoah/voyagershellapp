@@ -26,3 +26,10 @@ tiny_http = "0.12.0"
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 uuid = { version = "1.26.1", features = ["v4"] }
 x11rb = { version = "0.14.0", features = ["shape"] }
+
+[dev-dependencies]
+sha2 = "0.10"
+toml = "0.8"
+tree-sitter = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-rust = "0.24"
