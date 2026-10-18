@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self' blob:; connect-src 'self'"
+    />
+    <title>Talk to Voyager</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Voyager</h1>
+      <p>Let's go together</p>
+    </header>
+    <p id="status" role="status">Connecting…</p>
+    <main id="messages" aria-live="polite"></main>
+    <form id="chat">
+      <label for="text">Talk directly to Voyager</label>
+      <div>
+        <input id="text" autocomplete="off" placeholder="Ask Voyager…" maxlength="8192" /><button
+          id="send"
+        >
+          Send
+        </button>
+      </div>
+    </form>
+    <button id="voice" type="button">〰 Start voice</button>
+    <p id="voice-status">Microphone off</p>
+    <small>Conversation experiment · independent of terminal sessions</small
+    ><audio id="audio" autoplay></audio>
+    <script src="renderer.js"></script>
+  </body>
+</html>

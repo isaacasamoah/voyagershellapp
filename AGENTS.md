@@ -41,3 +41,8 @@ Cell geometry belongs in `desktop/src/layout.cjs`; native placement uses
 Minimise retains the terminal; background closes it. Neither changes authority.
 Panel size follows rendered content through ResizeObserver, capped to the display.
 Do not reintroduce Vessel-count estimates or duplicate supervisor group headers.
+
+The opt-in private-runtime experiment lives in `examples/harness-runtime/` and
+`desktop/experiments/harness/`; its contract is `docs/harness-runtime.md`.
+It has no public service action for internal reasoning and does not change normal
+startup. Keep its test evidence and account data outside the repository.

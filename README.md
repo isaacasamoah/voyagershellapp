@@ -47,6 +47,13 @@ process. Persistence covers client disconnection, not daemon crashes or reboots.
 Explicit supervisor preemption, automatic native voice, knowledge extraction and
 shared graphs are later work. Voyager is an experimental prototype.
 
+## Separate conversation experiment
+
+An opt-in [private runtime and Electron voice experiment](docs/harness-runtime.md)
+proved terminal-free text requests and a WebRTC audio round trip with one
+ChatGPT-authenticated Codex account. Human voice acceptance and integration into
+normal service startup remain pending; this is separate from terminal docking.
+
 ## Try it
 
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
