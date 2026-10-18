@@ -62,7 +62,7 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
     await audio(`(async()=>{
       window.assignmentSender=await window.voyagerConversation.startVoice(true);
       const context=new AudioContext();await context.resume();
-      const destination=context.createMediaStreamDestination();await window.assignmentSender.replaceTrack(destination.stream.getAudioTracks()[0]);
+      const destination=context.createMediaStreamDestination();const silence=context.createConstantSource();silence.offset.value=0;silence.connect(destination);silence.start();await window.assignmentSender.replaceTrack(destination.stream.getAudioTracks()[0]);
       const analyser=context.createAnalyser(),gain=context.createGain();gain.gain.value=0;
       context.createMediaStreamSource(window.voyagerConversation.stream()).connect(analyser);analyser.connect(gain).connect(context.destination);
       window.assignmentAudio={context,destination,analyser,peak:0};
@@ -71,6 +71,7 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
     await delay(2000);
     await audio('window.assignmentAudio.peak=0');
     const prompt = `Use your bound Voyager CLI to escalate the question to the human. Run exactly: "$VOYAGER_BIN" --state "$VOYAGER_STATE" escalate ${question} "May I create approved.txt containing the word Voyager in my working folder?". Do not create the file before the human answers. After the answer arrives, act only if it authorizes that file, create it, then reply exactly BEACON_COMPLETED. Do not wait in a polling loop; the human answer arrives as a new Voyager message.`;
+    console.log('Assignment: created Vessel/Fleet; voice connected; requesting real escalation');
     result.agent_request = await rpc('send', vessel.id, `ask-${question}`, prompt);
     result.presentation = await waitFor(async () => {
       await conversation.poll();
@@ -87,10 +88,12 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
         presentation
       );
     }, 'Escalation was not rewritten and queued to native voice');
+    console.log('Assignment: presentation and native speech acknowledgement observed');
     result.notification_audio_peak = await waitFor(async () => {
       const peak = await audio('window.assignmentAudio.peak');
       return peak > 0.001 && peak;
     }, 'No decoded notification audio');
+    console.log('Assignment: decoded notification audio observed');
     await waitFor(
       async () =>
         await ui(`Boolean(document.querySelector('.chat-question[data-request="${question}"]'))`),
@@ -108,6 +111,7 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
       const samples=Uint8Array.from(atob(${JSON.stringify(input)}),c=>c.charCodeAt(0));
       const source=state.context.createBufferSource();source.buffer=await state.context.decodeAudioData(samples.buffer);source.connect(state.destination);source.start();
     })()`);
+    console.log('Assignment: test human answer sent through native WebRTC audio');
     result.answer = await waitFor(async () => {
       const questions = await rpc('escalations');
       return questions.find(
@@ -144,6 +148,9 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
     assert.ok(result.tools.some((e) => e.data.name === 'voyager_answer' && e.data.success));
     result.status = 'pass';
   } catch (error) {
+    result.audio_diagnostics = await audio(
+      'window.assignmentAudio && ({peak:window.assignmentAudio.peak,context:window.assignmentAudio.context.state,tracks:window.voyagerConversation.stream()?.getTracks().map(t=>({state:t.readyState,muted:t.muted})),outputPaused:document.getElementById("voice-output").paused})',
+    ).catch(() => null);
     result.status = 'rework';
     result.error = error.stack;
     throw error;

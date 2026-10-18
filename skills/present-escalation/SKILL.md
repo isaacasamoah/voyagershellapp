@@ -15,6 +15,12 @@ opening. Use familiar words and complete sentences. Give source-supported choice
 and consequences when needed; attribute recommendations. Keep hashes, long paths,
 internal labels and technical IDs in disclosed details unless the decision needs them.
 
+When the host requests `text` and `spoken` fields, put only the short opening
+in `text` and only the spoken version in `spoken`. Return plain text without
+Markdown, HTML, disclosure tags, IDs or duplicated source material. The app
+creates the source disclosure itself. Do not narrate administrative states such
+as “recorded” or “completed” unless they affect the human's actual decision.
+
 Preserve requirements, uncertainty and existing approvals. Distinguish permission,
 clarification, missing administration and status. Do not request approval already
 given. Ask for missing information rather than inventing options, deadlines,
