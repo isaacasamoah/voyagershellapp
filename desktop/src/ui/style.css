@@ -650,3 +650,15 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   outline: 1px solid #90b4c9;
   outline-offset: 1px;
 }
+
+#astronaut-front {
+  opacity: 0;
+}
+.rename-form label {
+  display: grid;
+  gap: 4px;
+}
+.rename-form input {
+  width: 100%;
+  min-width: 0;
+}

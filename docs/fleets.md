@@ -12,7 +12,7 @@ with a small indentation for each level. There is no extra group header.
 
 Click a Vessel card to open or restore its terminal on half the panel's display
 and minimise the other managed terminals. Its top-right **⋯** retains lifecycle
-and assignment actions. **Minimise** retains the terminal client. **Background**
+and assignment actions, including Rename. **Minimise** retains the terminal client. **Background**
 closes the client while keeping the agent runtime and capture.
 
 Use **+** opposite **Fleets**, enter its goal, then drag Vessel cards onto its canvas.
@@ -22,10 +22,13 @@ New descendants inherit their supervisor's Fleet unless explicitly moved.
 Moving a supervisor again carries its whole current branch, including descendants
 that had been placed elsewhere. None of these moves changes ranks or assignments.
 
-Click a Fleet name to surface its running vessels by rank. There is no Show all
-button or layout selector. Rank rows wrap to respect terminal minimum widths;
-a layout that cannot fit the display refuses rather than intentionally overlaps.
-Window placement precision and opening speed remain separate follow-up work.
+Click a Fleet name to surface its running vessels in rank order. Two use equal
+halves; three use a left half and two right quarters; four use quarters. More
+vessels use a grid. Shared edges are calculated once, without gaps. Terminal
+minimum sizes still apply. There is no layout selector.
+
+The Fleet menu offers Rename and Remove fleet. Renaming changes its label without
+changing membership. Vessel renaming preserves runtime, capture and identity.
 
 Removing a Fleet returns its members to Vessels; it does not stop or deregister
 them. Unregistered retained instances remain separately reopenable and do not

@@ -382,5 +382,47 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "type": "function",
+    "name": "voyager_rename",
+    "description": "Rename a Vessel for the owner. Identity, rank, work and capture remain unchanged.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_rename_fleet",
+    "description": "Rename a Fleet for the owner without changing membership or authority.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "fleet_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fleet_id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

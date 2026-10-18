@@ -55,6 +55,22 @@ fn rectangle(v: &Value) -> Result<[u32; 4]> {
     );
     Ok([coordinate("x")?, coordinate("y")?, width, height])
 }
+fn extents(conn: &impl Connection, id: u32, name: &[u8]) -> Result<[i64; 4]> {
+    let atom = conn.intern_atom(false, name)?.reply()?.atom;
+    let values: Vec<_> = conn
+        .get_property(false, id, atom, AtomEnum::CARDINAL, 0, 4)?
+        .reply()?
+        .value32()
+        .into_iter()
+        .flatten()
+        .map(i64::from)
+        .collect();
+    Ok(if values.len() == 4 {
+        [values[0], values[1], values[2], values[3]]
+    } else {
+        [0; 4]
+    })
+}
 pub fn apply(plan: &Value) -> Result<Value> {
     let entries = plan["windows"].as_array().context("missing windows")?;
     ensure!(
@@ -148,7 +164,23 @@ pub fn apply(plan: &Value) -> Result<Value> {
                 ],
             )?;
             conn.map_window(id)?.check()?;
-            send(id, b"_NET_MOVERESIZE_WINDOW", [0x2f00, x, y, width, height])?;
+            let gtk = extents(&conn, id, b"_GTK_FRAME_EXTENTS")?;
+            let frame = extents(&conn, id, b"_NET_FRAME_EXTENTS")?;
+            let client_x = i64::from(x as i32) + frame[0] - gtk[0];
+            let client_y = i64::from(y as i32) + frame[2] - gtk[2];
+            let client_width = i64::from(width) - frame[0] - frame[1] + gtk[0] + gtk[1];
+            let client_height = i64::from(height) - frame[2] - frame[3] + gtk[2] + gtk[3];
+            send(
+                id,
+                b"_NET_MOVERESIZE_WINDOW",
+                [
+                    0x2f0a,
+                    client_x as u32,
+                    client_y as u32,
+                    u32::try_from(client_width)?,
+                    u32::try_from(client_height)?,
+                ],
+            )?;
             send(id, b"_NET_ACTIVE_WINDOW", [2, 0, 0, 0, 0])?;
         }
     }
@@ -169,7 +201,9 @@ pub fn apply(plan: &Value) -> Result<Value> {
                 .value32()
                 .is_some_and(|mut values| values.any(|a| a == hidden_atom));
             let visible = attr.map_state == MapState::VIEWABLE && !hidden;
-            let actual = json!({"id":id,"visible":visible,"x":position.dst_x,"y":position.dst_y,"width":geometry.width,"height":geometry.height});
+            let gtk = extents(&conn, id, b"_GTK_FRAME_EXTENTS")?;
+            let frame = extents(&conn, id, b"_NET_FRAME_EXTENTS")?;
+            let actual = json!({"id":id,"visible":visible,"x":i64::from(position.dst_x)-frame[0]+gtk[0],"y":i64::from(position.dst_y)-frame[2]+gtk[2],"width":i64::from(geometry.width)+frame[0]+frame[1]-gtk[0]-gtk[1],"height":i64::from(geometry.height)+frame[2]+frame[3]-gtk[2]-gtk[3]});
             exact &= if entry["minimise"] == true {
                 !visible
             } else {
@@ -178,7 +212,7 @@ pub fn apply(plan: &Value) -> Result<Value> {
                         (actual[*key].as_i64().unwrap_or(i64::MAX)
                             - entry[*key].as_i64().unwrap_or(0))
                         .abs()
-                            <= 4
+                            <= 1
                     })
             };
             observed.push(actual);

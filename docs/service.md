@@ -78,6 +78,9 @@ independently owned native server as before.
 | `register-instance SESSION_ID` | Explicitly resume future capture of a removed instance, without importing history |
 | `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
 | `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
+| `rename SESSION NAME [--request-id ID]` | Change a display name without changing the runtime or launch receipt |
+| `rename-fleet FLEET NAME` | Rename an existing Fleet without moving members |
+| `voice app\|none\|SESSION [--request-id ID]` | Select voice, stopping participating voices first; native target must be docked |
 | `rank INSTANCE RANK [--request-id ID]` | Owner changes an agent rank without invalidating assignments |
 | `supervise TARGET SUPERVISOR\|none [--request-id ID]` | Owner sets or clears a direct assignment |
 | `capabilities [INSTANCE]` | Read permitted actions and the bound caller's scope |

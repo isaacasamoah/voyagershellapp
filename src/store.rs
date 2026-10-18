@@ -21,7 +21,7 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         let db = Connection::open(path)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        ensure!(version <= 2, "unsupported database schema version");
+        ensure!(version <= 3, "unsupported database schema version");
         db.execute_batch(
             "PRAGMA foreign_keys=ON;
             PRAGMA journal_mode=DELETE;
@@ -118,6 +118,15 @@ impl Store {
             ensure!(invalid == 0, "unsupported instance kind in migration");
             db.execute_batch("PRAGMA user_version=2; COMMIT;")?;
         }
+        if version < 3 {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                ALTER TABLE sessions ADD COLUMN name TEXT;
+                UPDATE sessions SET name=(SELECT name FROM workers WHERE workers.session_id=sessions.id);
+                PRAGMA user_version=3;
+                COMMIT;",
+            )?;
+        }
         let invalid: i64 = db.query_row("SELECT count(*) FROM sessions WHERE kind NOT IN ('codex','shell') OR (kind='codex' AND (rank IS NULL OR rank NOT IN ('admiral','commodore','captain','crew'))) OR (kind='shell' AND rank IS NOT NULL)", [], |r| r.get(0))?;
         ensure!(invalid == 0, "invalid instance kind or rank in database");
         Ok(Self(db))
@@ -159,7 +168,7 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,w.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
@@ -231,7 +240,7 @@ impl Store {
             params![launch, id, pid],
         )?;
         tx.execute(
-            "UPDATE sessions SET kind=?2,rank=CASE WHEN ?2='shell' THEN NULL ELSE 'crew' END WHERE id=?1",
+            "UPDATE sessions SET kind=?2,rank=CASE WHEN ?2='shell' THEN NULL ELSE 'crew' END,name=(SELECT name FROM workers WHERE workers.session_id=sessions.id) WHERE id=?1",
             params![id, metadata["kind"].as_str().unwrap_or("codex")],
         )?;
         tx.commit()?;

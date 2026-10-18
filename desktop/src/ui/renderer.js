@@ -11,6 +11,7 @@ const pendingActions = new Map();
 const expandedVessels = new Set();
 let fleetRequest;
 let lastState;
+const openMenus = new Set();
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -52,7 +53,8 @@ function renderState(value) {
     : value.docked && !value.seated
       ? 'docked'
       : 'floating';
-  $('connection').textContent = value.serviceError ? 'Offline' : 'Online';
+  $('connection').textContent = value.serviceError ? 'Offline' : '';
+  $('connection').hidden = !value.serviceError;
   $('avatar').title =
     value.platformError || value.dockError || (value.docked ? 'Master control' : '');
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
@@ -67,7 +69,7 @@ function renderState(value) {
     value.fleetData,
     value.fleetError,
   ]);
-  if (rows === lastRows) return;
+  if (openMenus.size || rows === lastRows) return;
   lastRows = rows;
   const active = value.sessions.filter((s) => s.removed_ms == null);
   const unregistered = value.sessions.filter(
@@ -103,6 +105,7 @@ function renderState(value) {
     if (s.rank) identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
     b.append(identity, dot);
     b.dataset.connected = String(status === 'Connected');
+    b.disabled = s.ownership !== 'managed' || s.worker_state !== 'running';
     b.onclick = async () => {
       document.body.dataset.arranging = 'true';
       b.disabled = true;
@@ -118,46 +121,19 @@ function renderState(value) {
     };
     const row = element('div', '', 'instance-row');
     row.append(b);
-    const menu = element('div', '', 'instance-menu');
-    const summary = element('button', '⋯');
-    summary.setAttribute('aria-label', `Actions for ${name}`);
-    menu.append(summary);
-    const actions = element('div', '', 'instance-actions');
-    actions.popover = 'auto';
-    actions.id = `actions-${s.id}`;
-    summary.setAttribute('aria-controls', actions.id);
-    actions.addEventListener('toggle', (event) => {
-      summary.setAttribute('aria-expanded', String(event.newState === 'open'));
-    });
-    summary.onclick = () => {
-      if (!actions.togglePopover()) return;
-      const anchor = summary.getBoundingClientRect();
-      const bounds = actions.getBoundingClientRect();
-      actions.style.left = `${Math.max(8, Math.min(innerWidth - bounds.width - 8, anchor.right - bounds.width))}px`;
-      actions.style.top = `${Math.max(8, Math.min(innerHeight - bounds.height - 8, anchor.bottom))}px`;
-    };
-    function addAction(label, call, context = () => []) {
-      const button = element('button', label);
-      button.onclick = async () => {
-        const key = JSON.stringify([s.id, label, ...context()]);
-        if (!pendingActions.has(key)) pendingActions.set(key, crypto.randomUUID());
-        for (const b of actions.querySelectorAll('button')) b.disabled = true;
-        button.textContent = 'Working…';
-        try {
-          const result = await call(pendingActions.get(key));
-          if (result?.error) throw Error(result.error);
-          pendingActions.delete(key);
-          if (actions.isConnected) actions.hidePopover();
-          showError('');
-        } catch (error) {
-          showError(error.message);
-        } finally {
-          button.textContent = label;
-          for (const b of actions.querySelectorAll('button')) b.disabled = false;
-        }
-      };
-      actions.append(button);
-    }
+    const { menu, actions, addAction } = actionMenu(name, s.id);
+    const rename = nameEditor(actions, name, (next, request) =>
+      api.renameInstance(s.id, next, request),
+    );
+    addAction(
+      'Rename',
+      () => {
+        rename.hidden = false;
+        rename.querySelector('input').focus();
+      },
+      () => [],
+      false,
+    );
     if (s.removed_ms == null) {
       if (s.kind === 'codex') {
         const rank = choiceField(
@@ -189,7 +165,9 @@ function renderState(value) {
       );
     }
     if (s.ownership === 'managed' && s.worker_state === 'running') {
-      addAction('Run in background', (request) => api.backgroundInstance(s.id, request));
+      if (s.window === 'open')
+        addAction('Run in background', (request) => api.backgroundInstance(s.id, request));
+      else addAction('Bring forward', () => api.surfaceInstance(s.id));
       addAction('Stop', (request) => api.stopInstance(s.id, request));
     }
     if (s.removed_ms == null) {
@@ -197,7 +175,6 @@ function renderState(value) {
       if (s.ownership === 'managed')
         addAction('Stop and remove', (request) => api.removeInstance(s.id, request, true));
     } else addAction('Register again', (request) => api.registerInstance(s.id, request));
-    menu.append(actions);
     row.append(menu);
     return row;
   }
@@ -242,18 +219,19 @@ function renderState(value) {
     const name = element('button', fleet.name, 'fleet-name');
     name.title = 'Surface this fleet';
     name.onclick = () => arrange(() => api.surfaceFleet(fleet.id), name);
-    const remove = element('button', '×', 'fleet-remove');
-    remove.setAttribute('aria-label', `Remove fleet ${fleet.name}`);
-    remove.title = 'Remove fleet; keep vessels running';
-    remove.onclick = async () => {
-      try {
-        const result = await api.removeFleet(fleet.id);
-        showError(result?.error);
-      } catch (error) {
-        showError(error.message);
-      }
-    };
-    heading.append(name, remove);
+    const { menu, actions, addAction } = actionMenu(fleet.name, fleet.id);
+    const rename = nameEditor(actions, fleet.name, (next) => api.renameFleet(fleet.id, next));
+    addAction(
+      'Rename',
+      () => {
+        rename.hidden = false;
+        rename.querySelector('input').focus();
+      },
+      () => [],
+      false,
+    );
+    addAction('Remove fleet', () => api.removeFleet(fleet.id));
+    heading.append(name, menu);
     const canvas = element('div', '', 'fleet-canvas');
     renderTree(canvas, fleet.id);
     section.append(heading, canvas);
@@ -263,12 +241,119 @@ function renderState(value) {
   $('fleets').replaceChildren(...fleetNodes);
   $('unregistered-sessions').replaceChildren(...unregistered.map(rowFor));
   $('unregistered').hidden = unregistered.length === 0;
-  if (!active.length) $('sessions').append(element('p', 'No vessels yet.', 'empty'));
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });
     }
   }
+}
+function actionMenu(name, key) {
+  const menu = element('div', '', 'instance-menu');
+  const summary = element('button', '⋯');
+  summary.setAttribute('aria-label', `Actions for ${name}`);
+  summary.setAttribute('aria-expanded', 'false');
+  const actions = element('div', '', 'instance-actions');
+  actions.popover = 'auto';
+  actions.id = `actions-${key}`;
+  summary.setAttribute('aria-controls', actions.id);
+  let observer;
+  function position() {
+    const anchor = summary.getBoundingClientRect();
+    const bounds = actions.getBoundingClientRect();
+    actions.style.left = `${Math.max(8, Math.min(innerWidth - bounds.width - 8, anchor.right - bounds.width))}px`;
+    actions.style.top = `${Math.max(8, Math.min(innerHeight - bounds.height - 8, anchor.bottom))}px`;
+  }
+  function visibility(open) {
+    if (open) {
+      openMenus.add(actions);
+      observer ||= new ResizeObserver(position);
+      observer.observe(actions);
+    } else {
+      openMenus.delete(actions);
+      observer?.disconnect();
+      renderState(lastState);
+    }
+    summary.setAttribute('aria-expanded', String(open));
+  }
+  actions.addEventListener('toggle', (event) => visibility(event.newState === 'open'));
+  summary.onclick = () => {
+    const open = actions.togglePopover();
+    visibility(open);
+    if (open) position();
+  };
+  function addAction(label, call, context = () => [], close = true) {
+    const button = element('button', label);
+    button.type = 'button';
+    button.onclick = async () => {
+      if (!close) {
+        call();
+        return;
+      }
+      const id = JSON.stringify([key, label, ...context()]);
+      if (!pendingActions.has(id)) pendingActions.set(id, crypto.randomUUID());
+      for (const node of actions.querySelectorAll('button')) node.disabled = true;
+      button.textContent = 'Working…';
+      try {
+        const result = await call(pendingActions.get(id));
+        if (result?.error) throw Error(result.error);
+        pendingActions.delete(id);
+        if (close && actions.isConnected) actions.hidePopover();
+        showError('');
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        button.textContent = label;
+        for (const node of actions.querySelectorAll('button')) node.disabled = false;
+      }
+    };
+    actions.append(button);
+  }
+  menu.append(summary, actions);
+  return { menu, actions, addAction };
+}
+function nameEditor(actions, current, save) {
+  const form = element('form', '', 'rename-form');
+  form.hidden = true;
+  const label = element('label', 'Name');
+  const input = element('input');
+  input.value = current;
+  input.required = true;
+  input.maxLength = 100;
+  input.setAttribute('aria-label', 'New name');
+  label.append(input);
+  const submit = element('button', 'Save');
+  submit.type = 'submit';
+  const cancel = element('button', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => {
+    form.hidden = true;
+  };
+  form.append(label, submit, cancel);
+  let request;
+  let previous;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    if (previous !== input.value) {
+      previous = input.value;
+      request = crypto.randomUUID();
+    }
+    submit.disabled = true;
+    cancel.disabled = true;
+    try {
+      const result = await save(input.value, request);
+      if (result?.error) throw Error(result.error);
+      showError('');
+      actions.hidePopover();
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      submit.disabled = false;
+      cancel.disabled = false;
+    }
+  };
+  actions.append(form);
+  return form;
 }
 api.onState(renderState);
 async function arrange(call, button) {
@@ -480,6 +565,7 @@ $('create-form').onsubmit = async (event) => {
     $('instance-name').value = '';
     $('instance-rank').value = 'crew';
     $('instance-supervisor').value = '';
+    if (result?.warning) showError(result.warning);
   } catch (error) {
     showError(error.message);
   } finally {

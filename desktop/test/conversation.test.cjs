@@ -197,3 +197,24 @@ test('animation receives current processing state and each new tool result once'
   assert.deepEqual(busy, [true, true, false]);
   assert.equal(beats, 1);
 });
+
+test('collapsed chat is inert and uncertain delivery can be checked with the same request', async () => {
+  const ui = rendererConversation();
+  await Promise.resolve();
+  const sent = [];
+  ui.api.chat = async (text, id) => {
+    sent.push({ text, id });
+    if (sent.length === 1) throw Error('Connection lost');
+    return { state: 'accepted' };
+  };
+  ui.nodes.get('chat-text').value = 'Keep the original message';
+  await ui.nodes.get('chat-form').onsubmit({ preventDefault() {} });
+  assert.equal(ui.nodes.get('chat-retry').hidden, false);
+  assert.equal(ui.nodes.get('chat-text').readOnly, true);
+  await ui.nodes.get('chat-form').onsubmit({ preventDefault() {} });
+  assert.deepEqual(sent[0], sent[1]);
+  assert.equal(ui.nodes.get('chat-retry').hidden, true);
+  ui.nodes.get('chat-expand').onclick();
+  assert.equal(ui.nodes.get('chat-disclosure').inert, true);
+  assert.equal(ui.nodes.get('chat-disclosure').attributes['aria-hidden'], 'true');
+});

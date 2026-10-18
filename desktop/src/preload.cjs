@@ -3,6 +3,8 @@ contextBridge.exposeInMainWorld(
   'voyager',
   Object.freeze({
     conversationReady: () => ipcRenderer.invoke('conversation-ready'),
+    selectAppVoice: () => ipcRenderer.invoke('voice-app'),
+    nativeVoice: (id, active) => ipcRenderer.invoke('voice-native', id, active),
     chat: (text, request) => ipcRenderer.invoke('conversation-send', text, request),
     startVoice: (sdp) => ipcRenderer.invoke('conversation-voice-start', sdp),
     stopVoice: () => ipcRenderer.invoke('conversation-voice-stop'),
@@ -23,6 +25,8 @@ contextBridge.exposeInMainWorld(
     createFleet: (name, request) => ipcRenderer.invoke('create-fleet', name, request),
     moveVessel: (id, fleet) => ipcRenderer.invoke('move-vessel', id, fleet),
     removeFleet: (id) => ipcRenderer.invoke('remove-fleet', id),
+    renameFleet: (id, name) => ipcRenderer.invoke('rename-fleet', id, name),
+    renameInstance: (id, name, request) => ipcRenderer.invoke('rename-instance', id, name, request),
     surfaceFleet: (id) => ipcRenderer.invoke('surface-fleet', id),
     panelContentHeight: (height) => ipcRenderer.invoke('panel-content-height', height),
     backgroundInstance: (id, request) => ipcRenderer.invoke('background-instance', id, request),

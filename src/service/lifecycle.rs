@@ -17,6 +17,38 @@ use std::{
 };
 
 impl Runtime {
+    pub(super) fn rename_instance(&mut self, request: &Value) -> Result<Value> {
+        let id = actions::request_id(request)?;
+        if let Some((inputs, receipt)) = self.store.operation(id)? {
+            ensure!(
+                inputs == *request,
+                "request_conflict: rename ID has different inputs"
+            );
+            return Ok(receipt);
+        }
+        ensure!(
+            self.store.request(id)?.is_none(),
+            "request_conflict: ID already names a task"
+        );
+        let session = string(request, "session_id")?;
+        let previous = self.store.session(session)?;
+        let name = actions::name(string(request, "name")?)?;
+        let transaction = self.store.0.unchecked_transaction()?;
+        self.store.0.execute(
+            "UPDATE sessions SET name=?2 WHERE id=?1",
+            rusqlite::params![session, name],
+        )?;
+        self.store.local(
+            session,
+            "session.renamed",
+            json!({"previous_name":previous["name"],"name":name,"request_id":id}),
+        )?;
+        let receipt = json!({"request_id":id,"session_id":session,"state":"completed","action":"rename","name":name,"event_seq":self.store.0.last_insert_rowid(),"actor":request["actor"]});
+        self.store.begin_operation(id, request, &receipt)?;
+        transaction.commit()?;
+        Ok(receipt)
+    }
+
     pub(super) fn create_operation(&mut self, request: &Value) -> Result<Value> {
         let id = actions::request_id(request)?;
         ensure!(
@@ -75,11 +107,7 @@ impl Runtime {
                 ["codex", "shell"].contains(&kind),
                 "unsupported: instance kind"
             );
-            let name = string(request, "name")?;
-            ensure!(
-                !name.trim().is_empty() && name.len() <= 100 && !name.chars().any(char::is_control),
-                "invalid_input: use a short name"
-            );
+            let name = actions::name(string(request, "name")?)?;
             (kind, Some(name), None, None)
         } else {
             let parent = string(request, "parent_id")?;

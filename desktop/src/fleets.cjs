@@ -4,6 +4,7 @@ function fleetActions(rpc) {
     create: (name, id) => rpc('create-fleet', id, name),
     move: (vessel, fleet) => rpc('move-vessel', vessel, fleet ?? 'none'),
     remove: (fleet) => rpc('remove-fleet', fleet),
+    rename: (fleet, name) => rpc('rename-fleet', fleet, name),
   };
 }
 module.exports = { fleetActions };

@@ -27,7 +27,7 @@ test('a supervisor branch includes its assigned descendants, not peers or remove
   );
   assert.throws(() => hierarchy.members(sessions, 'removed'), /registered/);
 });
-test('rank layout uses ordered rank rows and handles negative monitor origins', () => {
+test('fixed quarters preserve rank order and negative monitor origins', () => {
   const plan = vesselPlan(
     sessions,
     hierarchy.members(sessions, 'admiral').map((s) => s.id),
@@ -39,8 +39,8 @@ test('rank layout uses ordered rank rows and handles negative monitor origins', 
     },
   );
   assert.equal(plan.length, 4);
-  assert.deepEqual(plan[0], { session: 'admiral', x: -1920, y: 40, width: 1920, height: 250 });
-  assert.equal(plan[3].y, 790);
+  assert.deepEqual(plan[0], { session: 'admiral', x: -1920, y: 40, width: 960, height: 500 });
+  assert.equal(plan[3].y, 540);
 });
 test('rank rows wrap before a terminal minimum would overlap its neighbour', () => {
   const rows = Array.from({ length: 6 }, (_, i) => ({ ...base, id: String(i), rank: 'crew' }));
@@ -61,5 +61,17 @@ test('rank rows wrap before a terminal minimum would overlap its neighbour', () 
         { width: 592, height: 200 },
       ),
     /narrow/,
+  );
+});
+
+test('three vessels match a full-height left half and two flush right quarters', () => {
+  const { rectangles } = require('../src/layout.cjs');
+  assert.deepEqual(
+    rectangles([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { x: 0, y: 0, width: 3840, height: 2160 }),
+    [
+      { session: 'a', x: 0, y: 0, width: 1920, height: 2160 },
+      { session: 'b', x: 1920, y: 0, width: 1920, height: 1080 },
+      { session: 'c', x: 1920, y: 1080, width: 1920, height: 1080 },
+    ],
   );
 });

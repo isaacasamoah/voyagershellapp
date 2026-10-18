@@ -5,6 +5,9 @@
   const toggle = $('voice-toggle');
   const disclosure = $('conversation');
   const output = $('voice-output');
+  let docked = null;
+  let nativeSupported = false;
+  let vesselVoice = {};
   let peer;
   let microphone;
   let voiceClient;
@@ -14,12 +17,15 @@
   let lastSequence = 0;
   let thread;
   let requestId;
+  let pendingText;
   let uncertain = false;
   let issue = null;
   let initialized = false;
   let questionKey;
   function setOpen(open) {
     disclosure.dataset.open = String(open);
+    $('chat-disclosure').inert = !open;
+    $('chat-disclosure').setAttribute('aria-hidden', String(!open));
     $('chat-expand').textContent = open ? '⌃' : '⌄';
     $('chat-expand').setAttribute('aria-expanded', String(open));
     $('chat-expand').setAttribute('aria-label', open ? 'Hide conversation' : 'Show conversation');
@@ -30,7 +36,7 @@
   function feedback(message) {
     $('chat-status').textContent = message || '';
     $('chat-status').hidden = !message;
-    toggle.title = message || (status.voice === 'on' ? 'Stop voice' : 'Start voice');
+    if (!docked) toggle.title = message || (status.voice === 'on' ? 'Stop voice' : 'Start voice');
   }
   function releaseAudio() {
     microphone?.getTracks().forEach((track) => track.stop());
@@ -41,10 +47,22 @@
     voiceActivity.clear();
   }
   function render() {
-    toggle.disabled = changingVoice || status.phase !== 'ready';
-    toggle.setAttribute('aria-pressed', String(status.voice === 'on'));
-    toggle.setAttribute('aria-label', status.voice === 'on' ? 'Stop voice' : 'Start voice');
+    const active = docked
+      ? vesselVoice.target === docked && vesselVoice.state === 'on'
+      : status.voice === 'on';
+    toggle.disabled =
+      changingVoice ||
+      (docked ? !nativeSupported || vesselVoice.state === 'switching' : status.phase !== 'ready');
+    toggle.setAttribute('aria-pressed', String(active));
+    toggle.setAttribute('aria-label', active ? 'Stop voice' : 'Start voice');
+    if (docked)
+      toggle.title = !nativeSupported
+        ? 'Voice is unavailable for this vessel'
+        : vesselVoice.error || (active ? 'Stop vessel voice' : 'Start vessel voice');
     $('chat-send').disabled = status.phase !== 'ready' || status.busy || uncertain;
+    $('chat-text').readOnly = uncertain;
+    $('chat-retry').hidden = !uncertain;
+    $('chat-retry').disabled = status.phase !== 'ready';
     if (status.phase === 'failed')
       feedback('Voyager conversation is unavailable. Your vessels are unaffected.');
     else if (status.busy) feedback('Thinking…');
@@ -135,7 +153,16 @@
     for (const event of value.events || []) {
       if (event.seq <= lastSequence) continue;
       lastSequence = event.seq;
-      if (event.type === 'message') addMessage(event.data);
+      if (event.type === 'message') {
+        addMessage(event.data);
+        if (event.data.role === 'user' && event.data.id === requestId) {
+          uncertain = false;
+          issue = null;
+          requestId = null;
+          pendingText = null;
+          $('chat-text').value = '';
+        }
+      }
       if (initialized && event.type === 'tool') window.voyagerAstronaut?.toolBeat();
       if (event.type === 'turn-completed' && event.data.status !== 'completed') {
         issue = 'Voyager did not complete that reply. It was not retried.';
@@ -171,7 +198,8 @@
     return value;
   }
   async function startVoice(fixture = null) {
-    if (view !== 'avatar') throw Error('Voice belongs to the avatar.');
+    if (view !== 'avatar' || docked) throw Error('Voice belongs to the current dock.');
+    accepted(await api.selectAppVoice());
     output.muted = Boolean(fixture);
     peer = new RTCPeerConnection();
     const sender = peer.addTransceiver('audio', { direction: 'sendrecv' }).sender;
@@ -239,7 +267,15 @@
       issue = null;
       render();
       try {
-        if (peer || status.voice === 'on') {
+        if (docked) {
+          releaseAudio();
+          accepted(
+            await api.nativeVoice(
+              docked,
+              !(vesselVoice.target === docked && vesselVoice.state === 'on'),
+            ),
+          );
+        } else if (peer || status.voice === 'on') {
           releaseAudio();
           accepted(await api.stopVoice());
         } else await startVoice();
@@ -258,28 +294,42 @@
   }
   if (view === 'panel') {
     $('chat-expand').onclick = () => setOpen(disclosure.dataset.open !== 'true');
+    $('chat-retry').onclick = () => $('chat-form').requestSubmit();
     $('chat-form').onsubmit = async (event) => {
       event.preventDefault();
-      if (uncertain || status.busy) return;
-      const text = $('chat-text').value.trim();
+      if (status.busy && !uncertain) return;
+      const text = uncertain ? pendingText : $('chat-text').value.trim();
       if (!text) return;
       issue = null;
       setOpen(true);
       requestId ||= crypto.randomUUID();
       $('chat-send').disabled = true;
       try {
+        pendingText = text;
         accepted(await api.chat(text, requestId));
+        uncertain = false;
         requestId = null;
+        pendingText = null;
         $('chat-text').value = '';
       } catch (error) {
         uncertain = !['invalid_input', 'busy', 'not_found', 'forbidden'].includes(error.code);
-        if (!uncertain) requestId = null;
+        if (!uncertain) {
+          requestId = null;
+          pendingText = null;
+        }
         issue = error.message;
         feedback(`${issue}${uncertain ? ' Your message was not automatically retried.' : ''}`);
       }
       render();
     };
   }
+  api.onState?.((value) => {
+    docked = value.docked;
+    nativeSupported = value.sessions?.find((s) => s.id === docked)?.kind === 'codex';
+    vesselVoice = value.service?.voice || {};
+    if (docked) releaseAudio();
+    render();
+  });
   api.onConversation(update);
   api.conversationReady().then(update);
   window.voyagerConversation = {

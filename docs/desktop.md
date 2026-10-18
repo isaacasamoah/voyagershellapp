@@ -20,10 +20,11 @@ astronaut and “Let’s Go Together” below the agent list. Click again to col
 Drag the panel background to move it. Buttons remain clickable.
 
 At rest, Voyager stretches every 20–40 seconds. Its private conversation's
-active turn opens a book; tool results and a 3.6-second reading rhythm turn
+active turn opens a book; tool results and a 4.8-second reading rhythm turn
 pages. When processing ends, it puts the book away, stretches and returns to
-rest. These gestures use the [original artwork and timings](../desktop/assets/README.md).
-They indicate processing, not task success, and do not change docking opacity
+rest. These gestures use the [original artwork](../desktop/assets/README.md).
+Gesture holds and transitions run at 1.6 times the original duration, with eased
+crossfades. They indicate processing, not task success, and do not change docking opacity
 or input behavior. Reduced-motion mode uses static reading and resting poses.
 The animation currently follows the app conversation, not a docked Vessel's turn.
 
@@ -55,7 +56,7 @@ The floating and panel-seated astronaut keep their normal brightness. Hovering
 over the open panel makes its existing glass colours opaque for readability;
 leaving restores transparency, without changing its colour palette.
 
-The panel shows Online/Offline and project names with connection dots. Green
+The panel shows names with connection dots and reports Offline when needed. Green
 means connected; gray means disconnected, stopped or unknown. Tooltips and
 accessible labels retain the full status. No event feed, internal IDs,
 instructional footer is shown. A **+** opens the instance form; an instance card

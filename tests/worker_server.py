@@ -99,6 +99,11 @@ def handle(stream):
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
                 result = {'data': ['worker-thread'], 'nextCursor': None}
+            elif method == 'thread/realtime/stop':
+                send({'id': r['id'], 'result': {}})
+                if not (Path(policy['VOYAGER_STATE']) / 'voice-stop-unconfirmed').exists():
+                    event('thread/realtime/closed', {})
+                continue
             elif method == 'turn/start':
                 with lock:
                     counter += 1

@@ -46,7 +46,8 @@ fn main() -> Result<()> {
         Some("create" | "launch") => 5,
         Some("open") => 3,
         Some("background" | "stop-instance" | "remove" | "register-instance") => 2,
-        Some("rank" | "supervise") => 3,
+        Some("rank" | "supervise" | "rename") => 3,
+        Some("voice") => 2,
         Some("report" | "escalate") => 3,
         Some("adjudicate") => 5,
         Some("dock") => 2,
@@ -147,6 +148,8 @@ fn main() -> Result<()> {
                     "register-instance",
                     "rank",
                     "supervise",
+                    "rename",
+                    "voice",
                 ]
                 .contains(&op) =>
             {
@@ -195,6 +198,9 @@ fn main() -> Result<()> {
         [op, vessel, fleet] if op == "move-vessel" => {
             json!({"op":op,"session_id":vessel,"fleet_id":if fleet == "none" { serde_json::Value::Null } else { json!(fleet) }})
         }
+        [op, fleet, name] if op == "rename-fleet" => json!({"op":op,"fleet_id":fleet,"name":name}),
+        [op, target] if op == "voice" => json!({"op":op,"target":target}),
+        [op, session, name] if op == "rename" => json!({"op":op,"session_id":session,"name":name}),
         [op, fleet] if op == "remove-fleet" => json!({"op":op,"fleet_id":fleet}),
         [op] if op == "conversation" => json!({"op":"conversation","after":0}),
         [op, after] if op == "conversation" => {
@@ -299,9 +305,9 @@ fn main() -> Result<()> {
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
-            rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | capabilities [SESSION]\n\
-            fleets | create-fleet ID GOAL | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
-            conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
+            rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | rename SESSION NAME [--request-id ID] | capabilities [SESSION]\n\
+            fleets | create-fleet ID GOAL | rename-fleet FLEET NAME | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
+            voice app|none|SESSION [--request-id ID] | conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
             report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
             adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\
             dock SESSION --window-id W --terminal-pid P --client-pid P (holds connection) | undock GENERATION\n\
@@ -331,6 +337,8 @@ fn main() -> Result<()> {
         "register-instance",
         "rank",
         "supervise",
+        "rename",
+        "voice",
     ]
     .contains(&request["op"].as_str().unwrap_or(""))
     {

@@ -117,6 +117,7 @@ impl Fixture {
                                 let result=match request["method"].as_str().unwrap() {
                                     "initialize" => json!({"userAgent":"fixture"}),
                                     "thread/loaded/list" => json!({"data":["live-thread","other-thread"],"nextCursor":null}),
+                                    "thread/realtime/stop" => json!({}),
                                     "thread/read" => json!({"thread":metadata(p["threadId"].as_str().unwrap())}),
                                     "thread/resume" => {
                                         assert_eq!(p["excludeTurns"],true);
@@ -745,7 +746,7 @@ fn control_switch_stale_release_disconnect_and_capture_are_independent() {
     let a = dock_request(&session, 1, process_claim(std::process::id()));
     let (old, ack) = open_control(&f, &a);
     assert_eq!(ack["active"], true);
-    assert_eq!(ack["voice"]["state"], "unsupported");
+    assert_eq!(ack["voice"]["follows_dock"], true);
     assert_eq!(
         f.call(json!({"op":"status"}))["control"]["generation"],
         a["generation"]
@@ -812,7 +813,10 @@ fn control_switch_stale_release_disconnect_and_capture_are_independent() {
 fn control_release_is_durable_and_restart_never_restores_authority() {
     let mut f = Fixture::new();
     f.start();
-    assert_eq!(f.call(json!({"op":"status"}))["voice"]["state"], "disabled");
+    assert_eq!(
+        f.call(json!({"op":"status"}))["voice"]["follows_dock"],
+        false
+    );
     let session = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
     let a = dock_request(&session, 1, process_claim(std::process::id()));
     let (_socket, _) = open_control(&f, &a);
@@ -1116,7 +1120,7 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     store
         .local(&session, "before", json!({"marker":"PRESERVED"}))
         .unwrap();
-    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
+    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN name; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
     drop(store);
     assert!(Store::open(&path).is_err());
     let db = rusqlite::Connection::open(&path).unwrap();
@@ -1179,4 +1183,87 @@ fn owned_worker_steering_reuses_the_exact_turn_and_request_identity() {
     assert_eq!(idle["dispatch_mode"], "start");
     assert_ne!(idle["native_turn_id"], turn);
     f.call(json!({"op":"stop-instance","session_id":session}));
+}
+
+#[test]
+fn rename_preserves_identity_capture_history_and_request_receipts() {
+    let mut f = Fixture::new();
+    f.start();
+    let registered = f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let id = registered["session_id"].as_str().unwrap();
+    let before = f.call(json!({"op":"list"}))[0].clone();
+    let request = json!({"op":"rename","session_id":id,"request_id":"rename-visible","name":"  Navigation  "});
+    let receipt = f.call(request.clone());
+    assert_eq!(receipt["name"], "Navigation");
+    assert_eq!(f.call(request), receipt);
+    assert!(
+        client(
+            &f.dir,
+            json!({"op":"rename","session_id":id,"request_id":"rename-visible","name":"Another"})
+        )
+        .is_err()
+    );
+    assert!(
+        client(
+            &f.dir,
+            json!({"op":"rename","session_id":id,"request_id":"bad-name","name":"line\nbreak"})
+        )
+        .is_err()
+    );
+    let after = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(after["name"], "Navigation");
+    for key in [
+        "id",
+        "native_thread_id",
+        "capture",
+        "capture_generation",
+        "rank",
+    ] {
+        assert_eq!(before[key], after[key]);
+    }
+    let history = f.events();
+    assert_eq!(
+        history["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["type"] == "session.renamed")
+            .count(),
+        1
+    );
+    f.halt();
+    f.start();
+    assert_eq!(f.call(json!({"op":"list"}))[0]["name"], "Navigation");
+}
+
+#[test]
+fn version_two_names_move_to_sessions_without_changing_launch_inputs() {
+    let f = Fixture::new();
+    let path = f.dir.join("labels.sqlite");
+    let mut store = Store::open(&path).unwrap();
+    store
+        .begin_launch(
+            "original",
+            None,
+            "/synthetic",
+            None,
+            Some("Original launch"),
+        )
+        .unwrap();
+    let session = store
+        .register_worker("original", "fixture", &metadata("named"), 1234)
+        .unwrap();
+    store
+        .0
+        .execute_batch("ALTER TABLE sessions DROP COLUMN name; PRAGMA user_version=2;")
+        .unwrap();
+    let before = store.events(0).unwrap();
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.session(&session).unwrap()["name"], "Original launch");
+    assert_eq!(
+        store.launch("original").unwrap().unwrap()["name"],
+        "Original launch"
+    );
+    assert_eq!(store.events(0).unwrap(), before);
 }

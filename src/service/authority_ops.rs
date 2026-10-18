@@ -98,6 +98,8 @@ impl Runtime {
             result["owner_actions"] = json!([
                 "rank",
                 "supervise",
+                "rename",
+                "rename-fleet",
                 "remove",
                 "register-instance",
                 "dock",

@@ -35,7 +35,7 @@ test('idle stretch repeats only after resting and stops when the renderer closes
   const c = clock();
   c.advance(19999);
   assert.equal(c.frames.length, 0);
-  c.advance(3000);
+  c.advance(4000);
   assert.deepEqual(
     c.frames.map((f) => f.src),
     [
@@ -57,16 +57,16 @@ test('idle stretch repeats only after resting and stops when the renderer closes
 test('real busy transitions open the book, tool beats turn pages, completion stretches to rest', () => {
   const c = clock();
   c.astronaut.setBusy(true);
-  c.advance(1320);
+  c.advance(2112);
   assert.equal(c.frames.at(-1).src, 'book-frames/reading-1.png');
   c.astronaut.toolBeat();
-  c.advance(240);
+  c.advance(384);
   assert.equal(c.frames.at(-1).src, 'book-frames/reading-2.png');
-  c.advance(3840);
+  c.advance(5184);
   assert.equal(c.frames.at(-1).src, 'book-frames/reading-1.png');
   c.astronaut.setBusy(false);
   assert.equal(c.frames.at(-1).src, 'book-frames/book-away.png');
-  c.advance(4000);
+  c.advance(6000);
   assert.equal(c.frames.at(-1).src, 'idle.png');
   c.astronaut.stop();
 });
@@ -75,13 +75,13 @@ test('a quick completion and new turn during a gesture retain the latest busy st
   const c = clock();
   c.astronaut.setBusy(true);
   c.astronaut.setBusy(false);
-  c.advance(1320);
+  c.advance(2112);
   assert.equal(c.frames.at(-1).src, 'book-frames/book-away.png');
   c.astronaut.setBusy(true);
-  c.advance(6000);
+  c.advance(9000);
   assert.equal(c.frames.at(-1).src, 'book-frames/reading-1.png');
   c.astronaut.setBusy(false);
-  c.advance(4000);
+  c.advance(6000);
   assert.equal(c.frames.at(-1).src, 'idle.png');
   c.astronaut.stop();
 });

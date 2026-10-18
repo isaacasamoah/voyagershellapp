@@ -11,12 +11,14 @@ test('Fleet panel actions use the one service owner without writing local state'
   await fleets.create('Compiler', 'request');
   await fleets.move('vessel', 'fleet');
   await fleets.move('vessel', null);
+  await fleets.rename('fleet', 'Guide');
   await fleets.remove('fleet');
   assert.deepEqual(calls, [
     ['fleets'],
     ['create-fleet', 'request', 'Compiler'],
     ['move-vessel', 'vessel', 'fleet'],
     ['move-vessel', 'vessel', 'none'],
+    ['rename-fleet', 'fleet', 'Guide'],
     ['remove-fleet', 'fleet'],
   ]);
 });

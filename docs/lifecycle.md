@@ -9,6 +9,7 @@ See the [CLI reference](service.md#commands) for command syntax.
 | Action | Runtime | Native window | Registration |
 | --- | --- | --- | --- |
 | Create / launch | Starts an owned instance | Opens by default; `--background` skips it | Starts capture |
+| Rename | Unchanged | Unchanged | Same identity and capture; display name changes |
 | Open | Keeps the same runtime | Focuses or reopens its viewer | Unchanged |
 | Background | Keeps working | Closes the owned viewer | Capture continues |
 | Stop | Stops the owned runtime | Closes its viewer; `--runtime-only` skips explicit close | Retained |
@@ -81,7 +82,9 @@ phases advance between capture passes, keeping other instances responsive.
 JSON stays at protocol and storage boundaries.
 
 The private socket is locked, bounded and same-UID checked. SQLite migrations are transactional; version two adds agent authority while
-preserving existing lifecycle state; unsupported newer schemas are refused before writes.
+preserving existing lifecycle state. Version three moves display names into sessions;
+original launch names remain immutable inputs for retry receipts. Unsupported newer
+schemas are refused before writes.
 PTY ioctl calls use live descriptors and valid pointers. Post-fork setup uses
 async-signal-safe calls only; inherited hook descriptor nine is intentional.
 Uncertain or incomplete shell writes are never replayed, and human typeahead

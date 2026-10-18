@@ -52,6 +52,8 @@ pub(super) fn invoke(
         "voyager_background" => "background",
         "voyager_stop" => "stop-instance",
         "voyager_remove" => "remove",
+        "voyager_rename" => "rename",
+        "voyager_rename_fleet" => "rename-fleet",
         "voyager_rank" => "rank",
         "voyager_supervise" => "supervise",
         "voyager_shell" => "shell-exec",

@@ -38,17 +38,18 @@ function resumeThread(argv, server) {
   return /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(args[3]) ? args[3] : null;
 }
 
-async function identifyTerminal(pid, endpoint) {
+async function terminalSnapshot(pid) {
   const terminal = await processIdentity(pid);
+  const children = await Promise.all(
+    (await directChildren(pid)).map((child) => processIdentity(child).catch(() => null)),
+  );
+  return { terminal, children: children.filter(Boolean) };
+}
+async function identifyTerminal(pid, endpoint, snapshot) {
+  const { terminal, children } = snapshot || (await terminalSnapshot(pid));
   if (terminal.executable !== '/usr/bin/ghostty') return null;
   const matches = [];
-  for (const child of await directChildren(pid)) {
-    let frontend;
-    try {
-      frontend = await processIdentity(child);
-    } catch {
-      continue;
-    }
+  for (const frontend of children) {
     const nativeId =
       endpoint.kind === 'shell'
         ? JSON.stringify(frontend.argv.slice(1)) === JSON.stringify(endpoint.args)
@@ -111,6 +112,7 @@ function windowAt(windows, point, excludedIds = []) {
 
 module.exports = {
   processIdentity,
+  terminalSnapshot,
   identifyTerminal,
   resumeThread,
   resolveWindow,

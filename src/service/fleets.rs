@@ -1,4 +1,5 @@
 use super::{Runtime, string};
+use crate::actions;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{collections::HashSet, fs};
@@ -41,11 +42,7 @@ impl Runtime {
             "create-fleet" => {
                 let id = string(request, "request_id")?;
                 uuid::Uuid::parse_str(id)?;
-                let name = string(request, "name")?.trim();
-                ensure!(
-                    !name.is_empty() && name.len() <= 100 && !name.chars().any(char::is_control),
-                    "invalid_input: use a short fleet goal"
-                );
+                let name = actions::name(string(request, "name")?)?;
                 if let Some(existing) = data["fleets"]
                     .as_array()
                     .unwrap()
@@ -68,6 +65,29 @@ impl Runtime {
                     .as_array_mut()
                     .unwrap()
                     .push(json!({"id":id,"name":name}));
+            }
+            "rename-fleet" => {
+                let id = string(request, "fleet_id")?;
+                let name = actions::name(string(request, "name")?)?;
+                ensure!(ids.contains(id), "not_found: fleet");
+                ensure!(
+                    !data["fleets"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|f| f["id"] != id
+                            && f["name"]
+                                .as_str()
+                                .is_some_and(|n| n.eq_ignore_ascii_case(name))),
+                    "invalid_input: a fleet already uses that name"
+                );
+                let fleet = data["fleets"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|f| f["id"] == id)
+                    .unwrap();
+                fleet["name"] = json!(name);
             }
             "move-vessel" => {
                 let vessel = string(request, "session_id")?;

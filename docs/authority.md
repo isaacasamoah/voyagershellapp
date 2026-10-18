@@ -108,8 +108,8 @@ and a saved acknowledgement remains accepted. No message is replayed. Use a fres
 prototype state when trying this branch, or back up a closed service before an
 explicit upgrade.
 
-Native voice handoff and explicit human interruption are subsequent increments.
-The existing voice preference still reports its actual disabled/unsupported state.
+Explicit human interruption remains a subsequent increment. The separate
+[voice coordinator](voice.md) follows current control without changing rank.
 Ordinary terminal adoption and native Wayland discovery remain separate work.
 
 ## Checks
@@ -156,4 +156,5 @@ python3 experiments/native_steering.py
 
 Normal fixture tests exercise all four ranks and denied relationship cases. The
 real native tool journey uses the Captain/Crew pair. Neither establishes native
-Wayland discovery, other terminal applications, native voice or crash recovery.
+Wayland discovery, other terminal applications or crash recovery. Native voice
+has its own [adapter and proof limits](voice.md).

@@ -67,7 +67,8 @@ If Electron's binary download was skipped during installation, run
 There is no frontend framework or bundler. Main owns the state; the renderer
 receives a display snapshot and sends explicit user actions. Keep filesystem,
 process and service access in main, behind the isolated preload boundary. Never
-put native credentials or conversation text into the renderer.
+put native credentials or internal reasoning into the renderer. Intentional
+user-facing chat text crosses the named conversation boundary.
 
 The panel and astronaut are separate transparent windows so holding and pulling
 the astronaut can leave the panel in place. A seated astronaut is a child of the
@@ -81,7 +82,7 @@ the same CLI/service operations as an agent. Native popovers keep the scrolling
 instance list from clipping actions. Main never kills an agent directly. Clicking the docked astronaut reveals the panel
 at its saved position; it never moves the astronaut or releases control.
 See [the control contract](../docs/control.md) for events, exact-generation release,
-restart behavior and the unimplemented voice handoff. `test/control.test.cjs`
+restart behavior. The separate [voice contract](../docs/voice.md) covers handoff. `test/control.test.cjs`
 checks socket lifetime; `npm start -- --proof-control` exercises two existing
 native clients without model calls.
 
@@ -167,7 +168,7 @@ native_authority test separately checks native agent tool identity.
 
 [The panel contract](../docs/fleets.md) owns the terms and gestures.
 `src/ui/hierarchy.js` derives command branches; `src/fleets.cjs` routes collection actions to the Rust service independently
-of authority. `src/layout.cjs` calculates rank rows
+of authority. `src/layout.cjs` calculates fixed grid slots in rank order
 using native minimum sizes. The card surfaces a Vessel and its top-right menu
 retains lifecycle actions. Fleet canvases accept dragged Vessel cards.
 
@@ -186,3 +187,14 @@ pointer testing remains separate.
 `src/ui/conversation.js` presents chat and owns audio in the avatar renderer.
 The [conversation contract](../docs/harness-runtime.md) covers startup, privacy,
 CLI operations, lifecycle and the optional `--proof-conversation` check.
+
+## Polish and voice check
+
+`npm start -- --expanded --proof-polish` uses a fresh private `VOYAGER_STATE`.
+It creates real Bash and Codex vessels, exercises renaming and background/reopen,
+measures placement, and switches native/app voice through the real service.
+Codex must be signed in, Ghostty installed and microphone access available.
+The app audio input is silent test audio. Native CLI voice uses its actual audio
+host. The check removes only its created vessels and Fleet on success. Results
+remain in `polish-proof.json`; failed resources remain identifiable for cleanup.
+Physical dragging, audible quality and smoothness still require a user.

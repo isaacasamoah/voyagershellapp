@@ -40,6 +40,7 @@ mod conversation_tools;
 mod fleets;
 mod lifecycle;
 mod native;
+mod voice;
 use native::NativeCall;
 
 const REQUEST_LIMIT: u64 = 64 * 1024;
@@ -217,6 +218,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             &std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
             state,
         ),
+        voice: voice::Voice::new(),
         credentials: Credentials::new(),
         control: Control::new(&store)?,
         store,
@@ -390,6 +392,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
 }
 
 struct Runtime {
+    voice: voice::Voice,
     conversation: conversation::Conversation,
     credentials: Credentials,
     control: Control,
@@ -481,11 +484,19 @@ impl Runtime {
                 self.conversation.receipt(string(&request, "request_id")?)?
             }
             "conversation-send" | "conversation-voice-start" | "conversation-voice-stop" => {
+                if request["op"] == "conversation-voice-start" {
+                    ensure!(
+                        self.voice.permits_app() && self.control.session().is_none(),
+                        "forbidden: app voice is not the selected voice surface"
+                    );
+                }
                 self.conversation.request(&request)?
             }
-            "fleets" | "create-fleet" | "move-vessel" | "remove-fleet" => {
+            "fleets" | "create-fleet" | "rename-fleet" | "move-vessel" | "remove-fleet" => {
                 self.fleet_operation(&request)?
             }
+            "voice" => self.select_voice(&request)?,
+            "rename" => self.rename_instance(&request)?,
             "capabilities" => self.capabilities(&request)?,
             "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
@@ -516,7 +527,7 @@ impl Runtime {
                 receipt
             }
             "status" => {
-                json!({"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.voice.status(self.control.voice())})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -556,6 +567,25 @@ impl Runtime {
                             .get(session["native_thread_id"].as_str().unwrap())
                             .is_some_and(|(id, _)| session["id"] == *id)
                         || self.captures.contains_key(session["id"].as_str().unwrap());
+                    session["window"] = json!(if session["ownership"] != "managed" {
+                        "unknown"
+                    } else if let Some(viewer) = self
+                        .terminals
+                        .iter()
+                        .rev()
+                        .find(|t| session["id"] == t.session)
+                    {
+                        match viewer.window {
+                            Some(window) => match terminal::exists(window) {
+                                Ok(true) => "open",
+                                Ok(false) => "closed",
+                                Err(_) => "unknown",
+                            },
+                            None => "unknown",
+                        }
+                    } else {
+                        "closed"
+                    });
                     session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
@@ -580,6 +610,7 @@ impl Runtime {
                                     "worker_state",
                                     "capture",
                                     "ownership",
+                                    "window",
                                     "removed_ms",
                                 ]
                                 .contains(&key.as_str())
@@ -770,6 +801,7 @@ impl Runtime {
             }
         }
         self.observe_control()?;
+        self.observe_voice()?;
         self.advance_native()?;
         self.advance_creations()?;
         self.advance_operations()?;

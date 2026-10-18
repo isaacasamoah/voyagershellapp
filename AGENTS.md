@@ -57,3 +57,7 @@ The private conversation's tool catalog is `src/service/conversation-tools.json`
 the app owner, Vessel rank and no-tools escalation presenter distinct. The model
 may explain evidence; only an actual human reply may be routed as an answer,
 unchanged and bound to its original request. Recheck pending sources before speech.
+
+Voice selection belongs in `src/service/voice.rs`; native terminal input belongs
+in `src/terminal.rs`. Read `docs/voice.md` before editing either boundary. Native
+input must target verified process and PTY identity, never desktop keyboard focus.

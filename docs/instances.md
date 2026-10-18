@@ -2,7 +2,11 @@
 
 Open Voyager, click **+** above Instances, choose **Codex** or **Terminal · Bash**,
 enter a name and folder, select an agent rank (Crew by default), then choose **Create and open**. A real Ghostty window
-opens; the new instance is already registered and capturing. No preparation
+opens; the new instance is already registered and capturing. The desktop places
+it on the left half of the panel's display and minimises other managed viewers.
+While Electron is running, it also places newly observed Voyager-owned viewers
+opened through the CLI or agent tools. Headless CLI use has no panel display to
+follow and retains the terminal's native placement. No preparation
 prompt, manually copied conversation ID or dock step is required for creation.
 
 Dock the astronaut onto that window to select the human command surface.
@@ -38,8 +42,8 @@ directory. This is not an OS service installer or crash/reboot supervisor.
 
 ## Lifecycle controls
 
-Use **⋯** beside an instance for **Run in background**, **Stop**, **Remove** or
-**Stop and remove**. Removed but running owned instances appear under
+Use **⋯** beside an instance for **Rename**, **Run in background**, **Stop**, **Remove** or
+**Stop and remove**. After backgrounding, the menu offers **Bring forward**. Removed but running owned instances appear under
 **Unregistered**, with **Register again**, its reopenable card and **Stop** available.
 
 The [lifecycle contract](lifecycle.md) defines each action's effects, defaults,

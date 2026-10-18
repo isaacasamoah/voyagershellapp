@@ -74,23 +74,16 @@ is safe to repeat. `list` and `status` stay read-only.
 Control generations express freshness; bound instance credentials establish the
 agent caller. Undocked agents return to their rank and direct assignment scope.
 Accepted work continues. Ordinary authorized input steers an active native turn
-without interruption. Explicit human replacement, supervisor preemption and
-voice takeover remain later work. This prototype does not isolate hostile
+without interruption. Explicit human replacement, supervisor preemption remain later work. Native voice follows the separate [voice contract](voice.md). This prototype does not isolate hostile
 processes sharing the same OS user.
 
-## Voice preference
+## Voice
 
-Set `VOYAGER_VOICE_FOLLOWS_DOCK=1` when starting the Rust service to request voice
-following. `0` (the default) leaves it disabled. Other values are rejected. The
-setting is read at service startup; there is no settings UI yet.
-
-**Automatic voice handoff is not implemented.** Enabled status says `unsupported`
-with reason `native_client_voice_control_unproved`. The docked avatar's tooltip
-reports this. No audio start/stop calls are sent or microphone claimed. Codex
-0.162.1's installed experimental schema exposes thread realtime start/stop and
-audio transport; it does not establish control of an existing terminal client's
-recording/playback. The next voice experiment must prove client activation and
-acknowledged stop-before-start without replacing native voice.
+Voice follows docking by default. Docking Codex selects its native CLI voice;
+undocking stops it. The floating soundwave selects the app conversation.
+`VOYAGER_VOICE_FOLLOWS_DOCK=0` disables automatic activation. Voice handoffs wait
+for acknowledged stop before starting the destination. See [voice](voice.md) for
+supported surfaces, failure behavior and the manual soundwave control.
 
 ## Proof and limits
 

@@ -13,6 +13,7 @@ const { fleetActions } = require('./fleets.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
+  terminalSnapshot,
   identifyTerminal,
   resolveWindow,
   registeredSession,
@@ -114,28 +115,39 @@ async function discoverTerminals() {
       external: true,
     });
   }
-  for (const session of sessions.filter(
+  const managed = sessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
-  )) {
-    const info = await rpc('attach-info', session.id);
-    endpoints.push({
-      server: session.server,
-      executable: await fs.realpath(info.executable),
-      external: false,
-      kind: session.kind,
-      nativeId: session.native_thread_id,
-      args: info.args,
-    });
-  }
-  const found = [];
-  for (const endpoint of endpoints) {
-    for (const pid of new Set(windows.map((w) => w.pid))) {
-      try {
-        const record = await identifyTerminal(pid, endpoint);
-        if (record) found.push(record);
-      } catch {}
-    }
-  }
+  );
+  endpoints.push(
+    ...(await Promise.all(
+      managed.map(async (session) => {
+        const info = await rpc('attach-info', session.id);
+        return {
+          server: session.server,
+          executable: await fs.realpath(info.executable),
+          external: false,
+          kind: session.kind,
+          nativeId: session.native_thread_id,
+          args: info.args,
+        };
+      }),
+    )),
+  );
+  const found = (
+    await Promise.all(
+      [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
+        const snapshot = await terminalSnapshot(pid).catch(() => null);
+        if (!snapshot || snapshot.terminal.executable !== '/usr/bin/ghostty') return [];
+        return (
+          await Promise.all(
+            endpoints.map((endpoint) =>
+              identifyTerminal(pid, endpoint, snapshot).catch(() => null),
+            ),
+          )
+        ).filter(Boolean);
+      }),
+    )
+  ).flat();
   records = found;
 }
 function windowBehindAvatar(stack, point) {
@@ -204,6 +216,7 @@ function sendState() {
         ownership,
         capture,
         worker_state,
+        window,
         removed_ms,
         rank,
         supervisor_id,
@@ -216,6 +229,7 @@ function sendState() {
         ownership,
         capture,
         worker_state,
+        window,
         removed_ms,
         rank,
         supervisor_id,
@@ -511,6 +525,9 @@ function follow() {
   });
   placeAvatar(anchor.x - avatarSize / 2, anchor.y - avatarSize / 2);
 }
+const placedWindows = new Set();
+let presentationReady = false;
+let creating = 0;
 async function refresh() {
   if (busy) return;
   busy = true;
@@ -585,6 +602,28 @@ async function refresh() {
     else resizePanel();
   }
   sendState();
+  const opened = records.flatMap((record) => {
+    const session = registeredSession(record, sessions);
+    const window = windows.find((w) => w.pid === record.pid);
+    return session?.ownership === 'managed' && session.removed_ms == null && window
+      ? [{ id: session.id, key: `${window.id}:${record.start}` }]
+      : [];
+  });
+  if (!presentationReady) {
+    opened.forEach((item) => placedWindows.add(item.key));
+    presentationReady = true;
+  } else if (!creating && !arranging && !dragging) {
+    const next = opened.find((item) => !placedWindows.has(item.key));
+    if (next) {
+      placedWindows.add(next.key);
+      try {
+        await surface([next.id], true);
+      } catch (error) {
+        dockError = `Window placement failed: ${error.message}`;
+        sendState();
+      }
+    }
+  }
 }
 let arranging = false;
 async function surface(ids, single = false) {
@@ -592,7 +631,6 @@ async function surface(ids, single = false) {
   if (arranging) throw Error('Windows are being arranged.');
   arranging = true;
   try {
-    sessions = await rpc('list', '--include-removed');
     if (
       single &&
       sessions.some(
@@ -610,14 +648,20 @@ async function surface(ids, single = false) {
     let targets = vesselPlan(sessions, ids, area);
     if (!targets.length) throw Error('This instance is not running.');
     windows = await inventory();
-    await discoverTerminals();
-    for (const target of targets) {
-      if (!records.some((r) => registeredSession(r, sessions)?.id === target.session))
-        await rpc('open', target.session, 'ghostty');
+    const hasViewer = (target) =>
+      records.some(
+        (r) =>
+          registeredSession(r, sessions)?.id === target.session &&
+          windows.some((w) => w.pid === r.pid),
+      );
+    if (targets.some((target) => !hasViewer(target))) await discoverTerminals();
+    const missing = targets.filter((target) => !hasViewer(target));
+    if (missing.length) {
+      await Promise.all(missing.map((target) => rpc('open', target.session, 'ghostty')));
+      sessions = await rpc('list', '--include-removed');
+      windows = await inventory();
+      await discoverTerminals();
     }
-    sessions = await rpc('list', '--include-removed');
-    windows = await inventory();
-    await discoverTerminals();
     const minimum = { width: 1, height: 1 };
     for (const record of records) {
       if (!targets.some((t) => registeredSession(record, sessions)?.id === t.session)) continue;
@@ -638,16 +682,18 @@ async function surface(ids, single = false) {
       const session = registeredSession(record, sessions);
       if (!session || session.ownership !== 'managed' || session.removed_ms != null) continue;
       const w = windows.find((w) => w.pid === record.pid);
+      if (!w) continue;
       const match = resolveWindow(w, windows, [record], live, false);
       if (match.error) throw Error(match.error);
       const target = targets.find((t) => t.session === session.id);
       const entry = { id: w.id, pid: record.pid, start: record.start, minimise: !target };
       if (target) {
         const origin = screen.dipToScreenPoint({ x: target.x, y: target.y });
-        Object.assign(entry, origin, {
-          width: Math.round(target.width * display.scaleFactor),
-          height: Math.round(target.height * display.scaleFactor),
+        const edge = screen.dipToScreenPoint({
+          x: target.x + target.width,
+          y: target.y + target.height,
         });
+        Object.assign(entry, origin, { width: edge.x - origin.x, height: edge.y - origin.y });
       }
       plan.push(entry);
     }
@@ -683,12 +729,16 @@ async function surface(ids, single = false) {
         2,
       ),
     );
+    for (const entry of plan) {
+      const record = records.find((r) => r.pid === entry.pid);
+      if (record) placedWindows.add(`${entry.id}:${record.start}`);
+    }
     if (result.state !== 'confirmed')
       throw Error('The desktop adjusted some window sizes. Try a smaller fleet.');
     return result;
   } finally {
     arranging = false;
-    await refresh();
+    sendState();
   }
 }
 function createWindow(width, height) {
@@ -757,6 +807,15 @@ app.whenReady().then(async () => {
       }
     });
   handle('conversation-ready', [avatarWin, panelWin], () => conversation.snapshot());
+  handle('voice-app', [avatarWin], () => {
+    if (binding) throw Error('Voice belongs to the docked vessel.');
+    return rpc('voice', 'app');
+  });
+  handle('voice-native', [avatarWin], (id, active) => {
+    if (typeof active !== 'boolean' || !binding || binding.session.id !== id)
+      throw Error('The docked vessel changed.');
+    return rpc('voice', active ? id : 'none');
+  });
   handle('conversation-send', [panelWin], (text, request) => conversation.send(text, request));
   handle('conversation-voice-start', [avatarWin], (sdp) => conversation.startVoice(sdp));
   handle('conversation-voice-stop', [avatarWin], () => conversation.stopVoice());
@@ -771,9 +830,19 @@ app.whenReady().then(async () => {
     return result.canceled ? null : result.filePaths[0];
   });
   handle('create-instance', [panelWin], async (input) => {
-    const result = await createInstance(input);
-    await refresh();
-    return result;
+    creating++;
+    try {
+      const result = await createInstance(input);
+      await refresh();
+      try {
+        await surface([result.session], true);
+      } catch (error) {
+        return { ...result, warning: `Created, but placement failed: ${error.message}` };
+      }
+      return result;
+    } finally {
+      creating--;
+    }
   });
   handle('panel-content-height', [panelWin], (height) => {
     if (!Number.isInteger(height) || height < 0 || height > 20000)
@@ -810,6 +879,10 @@ app.whenReady().then(async () => {
   );
   handle('move-vessel', [panelWin], (id, fleet) => fleetAction(() => fleets.move(id, fleet)));
   handle('remove-fleet', [panelWin], (id) => fleetAction(() => fleets.remove(id)));
+  handle('rename-fleet', [panelWin], (id, name) => fleetAction(() => fleets.rename(id, name)));
+  handle('rename-instance', [panelWin], (id, name, request) =>
+    authorityAction(() => rpc('rename', id, name, '--request-id', request)),
+  );
   async function instanceAction(id, request, op, flags = []) {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
     if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
@@ -963,6 +1036,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-polish') ||
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
     process.argv.includes('--proof-authority') ||
@@ -971,17 +1045,19 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-fleets')
-        ? '../test/fleets-proof.cjs'
-        : process.argv.includes('--proof-authority')
-          ? '../test/authority-proof.cjs'
-          : process.argv.includes('--proof-lifecycle')
-            ? '../test/lifecycle-proof.cjs'
-            : process.argv.includes('--proof-control')
-              ? '../test/control-proof.cjs'
-              : process.argv.includes('--proof-registration')
-                ? '../test/registration-proof.cjs'
-                : '../test/live-proof.cjs',
+      process.argv.includes('--proof-polish')
+        ? '../test/polish-proof.cjs'
+        : process.argv.includes('--proof-fleets')
+          ? '../test/fleets-proof.cjs'
+          : process.argv.includes('--proof-authority')
+            ? '../test/authority-proof.cjs'
+            : process.argv.includes('--proof-lifecycle')
+              ? '../test/lifecycle-proof.cjs'
+              : process.argv.includes('--proof-control')
+                ? '../test/control-proof.cjs'
+                : process.argv.includes('--proof-registration')
+                  ? '../test/registration-proof.cjs'
+                  : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -1014,17 +1090,19 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-fleets')
-            ? 'fleets-proof.json'
-            : process.argv.includes('--proof-authority')
-              ? 'authority-proof.json'
-              : process.argv.includes('--proof-lifecycle')
-                ? 'lifecycle-proof.json'
-                : process.argv.includes('--proof-control')
-                  ? 'control-proof.json'
-                  : process.argv.includes('--proof-registration')
-                    ? 'registration-proof.json'
-                    : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-polish')
+            ? 'polish-proof.json'
+            : process.argv.includes('--proof-fleets')
+              ? 'fleets-proof.json'
+              : process.argv.includes('--proof-authority')
+                ? 'authority-proof.json'
+                : process.argv.includes('--proof-lifecycle')
+                  ? 'lifecycle-proof.json'
+                  : process.argv.includes('--proof-control')
+                    ? 'control-proof.json'
+                    : process.argv.includes('--proof-registration')
+                      ? 'registration-proof.json'
+                      : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(

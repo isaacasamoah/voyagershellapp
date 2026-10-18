@@ -8,7 +8,7 @@ The panel bottom always shows a subtle chat composer. Messages expand above it;
 the small chevron hides or shows that history. The soundwave icon,
 opposite the avatar's status dot, starts or stops voice. Opening the app does not
 activate the microphone. Voice can remain active while the panel is hidden.
-The composer placeholder is **'sup?**. The avatar reads while the private
+The composer placeholder is **sup?**. The avatar reads while the private
 conversation processes a turn, turns pages on tool results and stretches back
 to rest afterward. [Gesture timing and artwork](desktop.md#appearance-and-gestures)
 come from the original Voyager Shell app.
@@ -143,6 +143,6 @@ fleets.json format is retained. The panel uses named CLI actions through
 `desktop/src/fleets.cjs`; it does not edit that file. Fleet membership remains
 presentation data and grants no authority.
 
-Native voice takeover between the app and docked terminal agents is the next
-increment after this user trial. Desktop thinking mode, collaboration and shared
-knowledge are later work.
+The [voice coordinator](voice.md) switches between this private conversation and
+the docked native Codex client. Docked audio never uses this private runtime.
+Desktop thinking mode, collaboration and shared knowledge are later work.

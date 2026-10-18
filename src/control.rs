@@ -118,8 +118,8 @@ pub struct Control {
 impl Control {
     pub fn new(store: &Store) -> Result<Self> {
         let voice_follows_dock = match std::env::var("VOYAGER_VOICE_FOLLOWS_DOCK").as_deref() {
-            Ok("1") => true,
-            Ok("0") | Err(std::env::VarError::NotPresent) => false,
+            Ok("1") | Err(std::env::VarError::NotPresent) => true,
+            Ok("0") => false,
             _ => anyhow::bail!("VOYAGER_VOICE_FOLLOWS_DOCK must be 0 or 1"),
         };
         store.0.execute_batch("CREATE TABLE IF NOT EXISTS control (singleton INTEGER PRIMARY KEY CHECK(singleton=1), attachment TEXT NOT NULL);")?;
@@ -152,7 +152,7 @@ impl Control {
     }
 
     pub fn voice(&self) -> Value {
-        json!({"follows_dock":self.voice_follows_dock,"state":if self.voice_follows_dock {"unsupported"} else {"disabled"},"reason":if self.voice_follows_dock {Some("native_client_voice_control_unproved")} else {None}})
+        json!({"follows_dock":self.voice_follows_dock})
     }
 
     pub fn session(&self) -> Option<&str> {

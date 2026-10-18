@@ -36,8 +36,8 @@ function createAstronaut({
         return;
       }
       const [src, hold, fade] = steps[index];
-      frame(src, fade);
-      wait(hold + fade, () => next(index + 1));
+      frame(src, fade * 1.6);
+      wait((hold + fade) * 1.6, () => next(index + 1));
     }
     next(0);
   }
@@ -64,7 +64,7 @@ function createAstronaut({
     } else if (scene !== target) {
       play(busy ? [['book-frames/book-out.png', 560, 260]] : finish, () => settle(target));
     } else if (busy) {
-      wait(3600, turnPage);
+      wait(4800, turnPage);
     } else {
       wait(20000 + random() * 20000, () => play(stretch, () => settle('idle')));
     }
@@ -116,7 +116,7 @@ async function mountAstronaut() {
       front.src = `../../assets/${src}`;
       avatar.dataset.gesture = src;
       void front.offsetWidth;
-      front.style.transition = `opacity ${ms}ms ease-in-out`;
+      front.style.transition = `opacity ${ms}ms cubic-bezier(.45, 0, .25, 1)`;
       front.style.opacity = '1';
       fadeTimer = setTimeout(() => {
         back.src = front.src;

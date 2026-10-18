@@ -129,7 +129,7 @@
               <div id="unregistered-sessions"></div>
             </section>
             <section id="conversation" aria-label="Voyager conversation" data-open="false">
-              <div class="chat-disclosure">
+              <div id="chat-disclosure" class="chat-disclosure" inert aria-hidden="true">
                 <div>
                   <div id="chat-messages" role="log" aria-live="polite"></div>
                   <div id="chat-questions" aria-label="Questions for you"></div>
@@ -139,7 +139,7 @@
                 <input
                   id="chat-text"
                   aria-label="Message Voyager"
-                  placeholder="'sup?"
+                  placeholder="sup?"
                   maxlength="8192"
                   autocomplete="off"
                 />
@@ -155,6 +155,7 @@
                 </button>
               </form>
               <p id="chat-status" role="status" hidden></p>
+              <button id="chat-retry" type="button" hidden>Check message</button>
             </section>
             <p id="tagline">Let’s Go Together</p>
           </div>
@@ -169,13 +170,7 @@
         aria-expanded="false"
       >
         <img id="astronaut-back" src="../../assets/idle.png" alt="" draggable="false" />
-        <img
-          id="astronaut-front"
-          src="../../assets/idle.png"
-          alt=""
-          draggable="false"
-          style="opacity: 0"
-        />
+        <img id="astronaut-front" src="../../assets/idle.png" alt="" draggable="false" />
         <span id="indicator" aria-hidden="true"></span>
       </button>
       <button id="voice-toggle" aria-label="Start voice" title="Start voice" aria-pressed="false">

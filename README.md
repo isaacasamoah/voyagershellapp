@@ -27,7 +27,7 @@ is our starting point, and we’d love to build toward it with other developers.
   the others. Rank rows start collapsed; separate Fleets collect related vessels
   through drag/drop. The panel and canvases size to their visible content.
   See [Vessels and fleets](docs/fleets.md).
-- **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
+- **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
 - Docking selects the human control attachment. Undocking or closing Electron
   leaves agents and capture running. The terminal marker fades until hovered.
@@ -44,8 +44,8 @@ The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
-Explicit supervisor preemption, automatic terminal voice handoff, knowledge extraction and
-shared graphs are later work. Voyager is an experimental prototype.
+Explicit supervisor preemption, knowledge extraction and shared graphs are later
+work. Voyager is an experimental prototype.
 
 ## Talk to Voyager
 
@@ -54,6 +54,8 @@ bar at the panel bottom, or press the avatar's soundwave to use voice. Named
 service tools manage Vessels and Fleets. Escalations and replies use the same chat,
 with the original request available behind disclosure.
 The conversation stays separate from terminal sessions and Vessel capture.
+Docking selects native Codex voice by default; undocking stops it. The floating
+soundwave uses the private app conversation. [Voice setup and limits](docs/voice.md).
 Closing Electron stops voice while the runtime and work continue.
 [Conversation setup and current limits](docs/harness-runtime.md).
 

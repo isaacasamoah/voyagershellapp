@@ -694,6 +694,30 @@ fn fleet_service_owns_membership_and_preserves_existing_files_and_authority() {
             & 0o777,
         0o600
     );
+    let renamed = s.owner(json!({"op":"rename-fleet","fleet_id":b,"name":"Manual"}));
+    assert!(
+        renamed["fleets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["id"] == b && f["name"] == "Manual")
+    );
+    assert_eq!(
+        s.raw(
+            Some(&credential),
+            json!({"op":"rename-fleet","fleet_id":b,"name":"Forbidden"})
+        )["code"],
+        "forbidden"
+    );
+    assert_eq!(s.raw(Some(&credential),json!({"op":"rename","session_id":crew,"name":"Forbidden","request_id":"forbidden-rename"}))["code"],"forbidden");
+    assert!(
+        s.raw(
+            None,
+            json!({"op":"rename-fleet","fleet_id":b,"name":"Compiler"})
+        )
+        .get("error")
+        .is_none()
+    );
     let saved = fs::read(s.dir.join("fleets.json")).unwrap();
     assert!(
         s.raw(

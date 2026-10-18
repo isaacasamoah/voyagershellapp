@@ -52,6 +52,7 @@ struct Provider {
     lines: Receiver<std::result::Result<Value, String>>,
     updates: Sender<Update>,
     next_id: u64,
+    voice_closures: u64,
     state: std::path::PathBuf,
     thread_id: Option<String>,
     human_inputs: HashMap<String, String>,
@@ -73,6 +74,9 @@ impl Provider {
             .is_some_and(|id| Some(id) == self.thread_id.as_deref())
         {
             let params = &value["params"];
+            if value["method"] == "thread/realtime/closed" {
+                self.voice_closures += 1;
+            }
             if ["item/started", "item/completed"]
                 .iter()
                 .any(|method| value["method"] == *method)
@@ -198,6 +202,7 @@ impl Provider {
     }
 
     fn rpc(&mut self, method: &str, params: Value) -> Result<Value> {
+        let closures = self.voice_closures;
         self.next_id += 1;
         let id = self.next_id;
         self.write(&json!({"id":id,"method":method,"params":params}))?;
@@ -210,6 +215,15 @@ impl Provider {
             if value["id"] == id {
                 if let Some(error) = value.get("error") {
                     bail!("{method}: {error}");
+                }
+                if method == "thread/realtime/stop" {
+                    while self.voice_closures == closures {
+                        let note = self
+                            .lines
+                            .recv_timeout(deadline.saturating_duration_since(Instant::now()))?
+                            .map_err(anyhow::Error::msg)?;
+                        self.forward(note)?;
+                    }
                 }
                 return Ok(value["result"].clone());
             }
@@ -445,6 +459,7 @@ impl Conversation {
                     lines,
                     updates: updates_tx.clone(),
                     next_id: 0,
+                    voice_closures: 0,
                     state: state.clone(),
                     thread_id: None,
                     human_inputs: HashMap::new(),
@@ -751,6 +766,40 @@ impl Conversation {
         self.status["voice"] = json!("off");
     }
 
+    pub(super) fn quiesce_voice(&mut self) -> Result<String> {
+        self.receipts.retain(|_, (input, receipt)| {
+            input["op"] != "voice-handoff" || receipt["state"] == "pending"
+        });
+        ensure!(
+            self.receipts.len() < 512,
+            "Conversation request limit reached; inspect completed work before restarting"
+        );
+        let id = format!("voice-stop:{}", uuid::Uuid::new_v4());
+        let state = if self.status["phase"] == "ready" {
+            "pending"
+        } else {
+            "completed"
+        };
+        self.receipts.insert(
+            id.clone(),
+            (
+                json!({"op":"voice-handoff"}),
+                json!({"request_id":id,"state":state}),
+            ),
+        );
+        if state == "pending" {
+            self.calls
+                .as_ref()
+                .context("conversation stopped")?
+                .send(Call {
+                    id: id.clone(),
+                    method: "thread/realtime/stop",
+                    params: json!({}),
+                })?;
+        }
+        self.status["voice"] = json!("off");
+        Ok(id)
+    }
     pub(super) fn attach(&mut self, client: &str, stream: UnixStream) -> Result<Value> {
         ensure!(self.lease.is_none(), "busy: another desktop owns voice");
         ensure!(

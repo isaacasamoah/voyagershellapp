@@ -32,6 +32,11 @@ impl Trial {
     fn call(&self, input: Value) -> Value {
         client(&self.state, input).unwrap()
     }
+    fn select_voice(&self) {
+        let request = uuid::Uuid::new_v4().to_string();
+        self.call(json!({"op":"voice","target":"app","request_id":request}));
+        wait(|| self.call(json!({"op":"operation","request_id":request}))["state"] == "completed");
+    }
     fn ready(&self) {
         wait(|| self.call(json!({"op":"status"}))["conversation"]["phase"] == "ready");
     }
@@ -171,6 +176,7 @@ fn voice_lease_disconnect_stops_voice_without_stopping_conversation() {
         .unwrap();
     assert!(reply.contains("active"));
     assert!(client(&trial.state,json!({"op":"conversation-voice-start","request_id":"bad","client_id":"other","sdp":"offer"})).is_err());
+    trial.select_voice();
     trial.call(json!({"op":"conversation-voice-start","request_id":"voice","client_id":"desktop","sdp":"offer"}));
     wait(|| trial.call(json!({"op":"status"}))["conversation"]["voice"] == "on");
     for input in [
@@ -285,6 +291,7 @@ fn conversation_tools_use_real_service_actions_and_preserve_human_escalation_ans
     BufReader::new(lease.try_clone().unwrap())
         .read_line(&mut attached)
         .unwrap();
+    trial.select_voice();
     trial.call(json!({"op":"conversation-voice-start","request_id":"start-question-voice","client_id":"voice-test","sdp":"fixture"}));
     wait(|| trial.call(json!({"op":"status"}))["conversation"]["voice"] == "on");
     trial.call(json!({"op":"conversation-voice-activity","client_id":"voice-test","speaker":"human","active":true}));
@@ -353,4 +360,39 @@ fn conversation_tools_use_real_service_actions_and_preserve_human_escalation_ans
         ),
     );
     assert_eq!(trial.call(json!({"op":"list"})), json!([]));
+}
+
+#[test]
+fn participating_voice_requires_native_closure_not_just_a_stop_acknowledgement() {
+    let trial = Trial::start(FIXTURE);
+    trial.ready();
+    let created = trial.call(json!({"op":"create","kind":"codex","name":"Voice participant","cwd":trial.state,"request_id":"voice-vessel","open":false}));
+    finish(&trial, created);
+    trial.select_voice();
+    assert_eq!(
+        trial.call(json!({"op":"status"}))["voice"]["state"],
+        "ready"
+    );
+    fs::write(trial.state.join("voice-stop-unconfirmed"), "").unwrap();
+    trial.call(json!({"op":"voice","target":"app","request_id":"unconfirmed-stop"}));
+    let start = Instant::now();
+    trial.call(json!({"op":"status"}));
+    assert!(start.elapsed() < Duration::from_millis(300));
+    let deadline = Instant::now() + Duration::from_secs(12);
+    let result = loop {
+        let result = trial.call(json!({"op":"operation","request_id":"unconfirmed-stop"}));
+        if result["state"] != "pending" {
+            break result;
+        }
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(result["state"], "uncertain", "{result}");
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("stop did not complete")
+    );
+    assert!(client(&trial.state, json!({"op":"conversation-voice-start","request_id":"refused","client_id":"none","sdp":"fixture"})).is_err());
 }
