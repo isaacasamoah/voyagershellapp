@@ -52,7 +52,9 @@ alternative.
 This is an overlay **over** text, not an image between the terminal's text and
 background. The browser reference can render those layers together; an external
 window cannot. The avatar's hover area is reserved for grabbing once activated.
-The floating and panel-seated astronaut keep their normal brightness. Hovering
+The floating and panel-seated astronaut keep their normal brightness. The seated
+astronaut stays above the panel when it reopens or receives focus; it shares the
+panel's glass underneath instead of showing through it from behind. Hovering
 over the open panel makes its existing glass colours opaque for readability;
 leaving restores transparency, without changing its colour palette.
 

@@ -1,0 +1,160 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { execFile, spawn } = require('node:child_process');
+const { createInterface } = require('node:readline');
+const { promisify } = require('node:util');
+const { screen } = require('electron');
+const { windowAt } = require('../src/binding.cjs');
+const exec = promisify(execFile);
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+exports.run = async ({
+  avatarWin,
+  panelWin,
+  setExpanded,
+  inventory,
+  stateDir,
+  rpc,
+  refresh,
+  dock,
+  undock,
+  getState,
+}) => {
+  const observations = [];
+  const file = path.join(stateDir, 'visibility-proof.json');
+  const save = (verdict, error) =>
+    fs.writeFile(
+      file,
+      JSON.stringify(
+        {
+          verdict,
+          observations,
+          error,
+          limits: [
+            'Native pointer and window proof on GNOME/XWayland; no voice or model turn is started.',
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+  const pointer = spawn('python3', [path.join(__dirname, 'native-pointer.py')], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+  });
+  const replies = createInterface({ input: pointer.stdout });
+  let vessel;
+  async function input(value) {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error('Native pointer did not acknowledge')), 4000);
+      replies.once('line', (line) => {
+        clearTimeout(timer);
+        const reply = JSON.parse(line);
+        if (reply.error) reject(Error(reply.error));
+        else resolve();
+      });
+      pointer.stdin.write(`${JSON.stringify(value)}\n`);
+    });
+  }
+  async function move(point) {
+    const physical = screen.dipToScreenPoint(point);
+    await input(['move', physical.x, physical.y, screen.getDisplayNearestPoint(point).scaleFactor]);
+  }
+  async function clickAvatar() {
+    const bounds = avatarWin.getBounds();
+    await move({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+    await input(['button', true]);
+    await input(['button', false]);
+    await delay(450);
+  }
+  try {
+    await save('running');
+    await setExpanded(false);
+    const area = (screen.getAllDisplays().find((d) => !d.internal) || screen.getPrimaryDisplay())
+      .workArea;
+    avatarWin.setPosition(area.x + 200, area.y + 64);
+    const avatarId = avatarWin.getNativeWindowHandle().readUInt32LE();
+    const panelId = panelWin.getNativeWindowHandle().readUInt32LE();
+    async function check(label) {
+      await delay(250);
+      const stack = await inventory();
+      const w = stack.find((w) => w.id === avatarId);
+      assert(w?.visible, `${label}: avatar must be mapped`);
+      const top = windowAt(stack, { x: w.x + w.width / 2, y: w.y + w.height / 2 });
+      const style = await avatarWin.webContents.executeJavaScript(
+        `({opacity:getComputedStyle(document.getElementById('avatar')).opacity,state:document.getElementById('avatar').dataset.state,seated:document.body.dataset.seated,gesture:document.getElementById('avatar').dataset.gesture})`,
+      );
+      observations.push({ label, top: top?.id, avatar: avatarId, panel: panelId, style });
+      await fs.writeFile(
+        path.join(stateDir, `${label}.png`),
+        (await avatarWin.webContents.capturePage()).toPNG(),
+      );
+      if (process.env.VOYAGER_VISIBILITY_CAPTURE_SCRIPT)
+        await exec('python3', [
+          process.env.VOYAGER_VISIBILITY_CAPTURE_SCRIPT,
+          process.env.VOYAGER_VISIBILITY_MONITOR,
+          path.join(stateDir, `${label}-desktop.png`),
+        ]);
+      assert.equal(
+        style.opacity,
+        '1',
+        `${label}: panel and standalone avatar must not use terminal fade`,
+      );
+      assert.equal(top?.id, avatarId, `${label}: native panel must not cover the astronaut`);
+    }
+    await check('standalone');
+    for (let i = 0; i < 3; i++) {
+      await clickAvatar();
+      assert(panelWin.isVisible(), 'Native click should open the panel');
+      await check(`reopened-${i}`);
+      const p = panelWin.getBounds();
+      await move({ x: p.x + 24, y: p.y + p.height - 60 });
+      await delay(350);
+      assert.equal(
+        await panelWin.webContents.executeJavaScript(`document.body.dataset.panelHovered`),
+        'true',
+      );
+      await check(`hovered-${i}`);
+      await input(['button', true]);
+      await input(['button', false]);
+      await check(`focused-${i}`);
+      await clickAvatar();
+      assert(!panelWin.isVisible(), 'Native click should hide the panel');
+      await check(`collapsed-${i}`);
+    }
+    const created = await rpc(
+      'create',
+      'shell',
+      'visibility-shell',
+      'Visibility terminal',
+      stateDir,
+    );
+    vessel = created.session_id;
+    await refresh();
+    const ownWindow = getState().windows.find((w) => w.title === 'Visibility terminal');
+    assert(ownWindow, 'Disposable native terminal must be mapped');
+    assert(await dock(ownWindow.id));
+    await delay(350);
+    assert.equal(
+      await avatarWin.webContents.executeJavaScript(
+        `getComputedStyle(document.getElementById('avatar')).opacity`,
+      ),
+      '0.3',
+    );
+    undock();
+    await setExpanded(true);
+    await check('returned-from-terminal');
+    await clickAvatar();
+    await check('returned-collapsed');
+    await clickAvatar();
+    await check('returned-reopened');
+    await save('pass');
+    console.log('Native panel visibility journey passed.');
+  } catch (error) {
+    await save('rework', error.stack);
+    throw error;
+  } finally {
+    pointer.stdin.end();
+    replies.close();
+    if (vessel) await rpc('remove', vessel, '--stop');
+  }
+};

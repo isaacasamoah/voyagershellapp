@@ -198,3 +198,17 @@ The app audio input is silent test audio. Native CLI voice uses its actual audio
 host. The check removes only its created vessels and Fleet on success. Results
 remain in `polish-proof.json`; failed resources remain identifiable for cleanup.
 Physical dragging, audible quality and smoothness still require a user.
+
+## Native panel visibility check
+
+`npm start -- --proof-visibility` exercises real pointer clicks on GNOME/XWayland.
+Use a fresh private `VOYAGER_STATE` and `VOYAGER_VOICE_FOLLOWS_DOCK=0`. Python 3
+with PyGObject and a graphical GNOME session are required. The check moves the
+pointer, toggles and focuses the panel, checks native stacking and opacity, then
+returns from docking to its own disposable Bash terminal. It removes that
+terminal afterward. It does not start voice or submit a model turn.
+
+Renderer-injected clicks are insufficient here: explicitly focusing the avatar
+first hides the native ordering bug. Results stay in `visibility-proof.json`.
+Optional `VOYAGER_VISIBILITY_CAPTURE_SCRIPT` and `VOYAGER_VISIBILITY_MONITOR` name
+a local Python monitor-capture helper and connector for desktop screenshots.

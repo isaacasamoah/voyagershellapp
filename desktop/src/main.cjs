@@ -293,6 +293,10 @@ function placeAvatar(x, y) {
 function setSeated(value) {
   seated = value;
   if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
+  raiseSeatedAvatar();
+}
+function raiseSeatedAvatar() {
+  if (expanded && seated && !dragging) avatarWin.moveTop();
 }
 async function setExpanded(value) {
   expanded = value;
@@ -306,7 +310,6 @@ async function setExpanded(value) {
     placePanel();
     sendState();
     panelWin.showInactive();
-    avatarWin.moveTop();
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
     const deadline = performance.now() + 2000;
     while (expanded && seated) {
@@ -314,6 +317,7 @@ async function setExpanded(value) {
       if (!expanded || !seated) return;
       if (mapped) {
         avatarWin.setParentWindow(panelWin);
+        raiseSeatedAvatar();
         return;
       }
       if (performance.now() >= deadline) throw Error('The desktop did not show the panel');
@@ -775,6 +779,7 @@ app.whenReady().then(async () => {
   candidateWin = createWindow(100, 100);
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
+  panelWin.on('focus', raiseSeatedAvatar);
   panelWin.on('move', () => {
     if (!expanded || !seated || dragging) return;
     const panel = panelWin.getBounds();
@@ -1038,6 +1043,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-visibility') ||
     process.argv.includes('--proof-polish') ||
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
@@ -1047,19 +1053,21 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-polish')
-        ? '../test/polish-proof.cjs'
-        : process.argv.includes('--proof-fleets')
-          ? '../test/fleets-proof.cjs'
-          : process.argv.includes('--proof-authority')
-            ? '../test/authority-proof.cjs'
-            : process.argv.includes('--proof-lifecycle')
-              ? '../test/lifecycle-proof.cjs'
-              : process.argv.includes('--proof-control')
-                ? '../test/control-proof.cjs'
-                : process.argv.includes('--proof-registration')
-                  ? '../test/registration-proof.cjs'
-                  : '../test/live-proof.cjs',
+      process.argv.includes('--proof-visibility')
+        ? '../test/visibility-proof.cjs'
+        : process.argv.includes('--proof-polish')
+          ? '../test/polish-proof.cjs'
+          : process.argv.includes('--proof-fleets')
+            ? '../test/fleets-proof.cjs'
+            : process.argv.includes('--proof-authority')
+              ? '../test/authority-proof.cjs'
+              : process.argv.includes('--proof-lifecycle')
+                ? '../test/lifecycle-proof.cjs'
+                : process.argv.includes('--proof-control')
+                  ? '../test/control-proof.cjs'
+                  : process.argv.includes('--proof-registration')
+                    ? '../test/registration-proof.cjs'
+                    : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -1092,19 +1100,21 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-polish')
-            ? 'polish-proof.json'
-            : process.argv.includes('--proof-fleets')
-              ? 'fleets-proof.json'
-              : process.argv.includes('--proof-authority')
-                ? 'authority-proof.json'
-                : process.argv.includes('--proof-lifecycle')
-                  ? 'lifecycle-proof.json'
-                  : process.argv.includes('--proof-control')
-                    ? 'control-proof.json'
-                    : process.argv.includes('--proof-registration')
-                      ? 'registration-proof.json'
-                      : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-visibility')
+            ? 'visibility-proof.json'
+            : process.argv.includes('--proof-polish')
+              ? 'polish-proof.json'
+              : process.argv.includes('--proof-fleets')
+                ? 'fleets-proof.json'
+                : process.argv.includes('--proof-authority')
+                  ? 'authority-proof.json'
+                  : process.argv.includes('--proof-lifecycle')
+                    ? 'lifecycle-proof.json'
+                    : process.argv.includes('--proof-control')
+                      ? 'control-proof.json'
+                      : process.argv.includes('--proof-registration')
+                        ? 'registration-proof.json'
+                        : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(
