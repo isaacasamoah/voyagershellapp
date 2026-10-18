@@ -312,7 +312,10 @@ exports.run = async ({
     await save('pass');
     console.log('Polish and voice native journey passed.');
   } catch (error) {
-    await save('rework', error.stack);
+    const detail = await ui(`document.getElementById('instance-error').textContent`).catch(
+      () => 'Renderer unavailable',
+    );
+    await save('rework', `${error.stack}\nPanel: ${detail}`);
     throw error;
   }
 };

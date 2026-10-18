@@ -645,6 +645,8 @@ async function surface(ids, single = false) {
     const display = screen.getDisplayMatching(panelWin.getBounds());
     const area = { ...display.workArea };
     if (single) area.width = Math.floor(area.width / 2);
+    if (ids.some((id) => !sessions.some((session) => session.id === id)))
+      sessions = await rpc('list', '--include-removed');
     let targets = vesselPlan(sessions, ids, area);
     if (!targets.length) throw Error('This instance is not running.');
     windows = await inventory();
