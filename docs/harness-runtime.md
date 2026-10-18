@@ -99,3 +99,15 @@ Voice request shapes were generated from the installed binary using
 `codex app-server generate-json-schema --experimental`; the authentication-path
 choice was checked against the unmodified realtime source at upstream revision
 `83086188ae0614bd882818ff1aa23f3194962012` (`rust-v0.163.0`).
+
+## Escalation presentation follow-up
+
+`skills/present-escalation/SKILL.md` is a draft presentation skill for this runtime.
+It takes an original escalation and supplied writing guidance, and explains the
+issue without changing its meaning or approving it. A separate live model trial
+used it with recorded requests; the normal application does not load it yet.
+
+The proposed integration presents human questions in the same conversation and
+binds explicit replies to the existing service adjudication operation. Voice
+scheduling and stale-request removal still need an integrated desktop test.
+The skill grants no service permissions and never substitutes for service policy.
