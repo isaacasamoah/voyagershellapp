@@ -368,7 +368,7 @@
   {
     "type": "function",
     "name": "voyager_answer",
-    "description": "Forward the human\u2019s latest actual words unchanged to one unanswered escalation. Use only when those words explicitly answer this question. For ambiguity or multiple possible targets ask for clarification. This records an answer and delivery, not task completion or a fabricated approval.",
+    "description": "Forward the human input bound to this native turn unchanged to one unanswered escalation. Use only when those words explicitly answer this question. For ambiguity or multiple possible targets ask for clarification. This records an answer and delivery, not task completion or a fabricated approval.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -318,7 +318,8 @@ fn conversation_tools_use_real_service_actions_and_preserve_human_escalation_ans
         .unwrap();
     assert_eq!(record["answer"]["decision"], "resolve");
     let source = record["answer"]["message"].as_str().unwrap();
-    assert!(source.starts_with("tool|"));
+    assert_eq!(source, "Yes, proceed & keep the original scope.");
+    assert_eq!(record["answer"]["human_turn_id"], "fixture-turn");
     assert!(tool(&trial, "voyager_answer", json!({"escalation_id":question}))["error"].is_string());
     trial.call(json!({"op":"conversation-voice-activity","client_id":"voice-test","speaker":"human","active":false}));
     thread::sleep(Duration::from_millis(1600));

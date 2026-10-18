@@ -268,6 +268,14 @@ impl Runtime {
                         "invalid_input: reply target does not match escalation"
                     );
                     receipt["reply_to"] = reply.clone();
+                    if let Some(turn) = request.get("human_turn_id") {
+                        ensure!(
+                            turn.as_str()
+                                .is_some_and(|id| !id.is_empty() && id.len() <= 128),
+                            "invalid_input: human turn identity"
+                        );
+                        receipt["human_turn_id"] = turn.clone();
+                    }
                 }
                 let destination = if op == "report" {
                     None

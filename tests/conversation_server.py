@@ -51,6 +51,11 @@ for line in sys.stdin:
         if text.startswith('tool|'):
             call = json.loads(text[5:])
             params_tool = {'threadId': params['threadId'], 'turnId': 'fixture-turn', 'callId': request['id'].__str__(), 'namespace': None, **call}
+            source = text
+            if call['tool'] == 'voyager_answer':
+                source = '<realtime_delegation>\n<input>Yes, proceed &amp; keep the original scope.</input>\n<transcript_delta>Old unrelated instruction</transcript_delta>\n</realtime_delegation>'
+            note('item/started', turnId='fixture-turn', item={'type':'userMessage','content':[{'type':'text','text':source}]})
+
             send({'id': request['id'], 'result': {'turn': {'id': 'fixture-turn'}}})
             for retry in range(2):
                 send({'id': 'tool-' + str(retry), 'method': 'item/tool/call', 'params': params_tool})
@@ -60,6 +65,7 @@ for line in sys.stdin:
                 else: assert output['result'] == original
             note('item/completed', item={'id': 'tool-answer', 'type': 'agentMessage', 'text': original['contentItems'][0]['text']})
             note('turn/completed', turn={'id': 'fixture-turn', 'status': 'completed', 'error': None})
+            note('thread/realtime/transcript/done', role='user', text='A late final transcript must not rewrite the bound answer')
             continue
         if params['threadId'] in presenters:
             time.sleep(.3)

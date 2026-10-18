@@ -14,7 +14,7 @@ pub(super) fn invoke(
     name: &str,
     args: &Value,
     id: &str,
-    human: Option<&str>,
+    human: Option<(&str, &str)>,
 ) -> Result<Value> {
     let definitions = definitions()?;
     let spec = definitions
@@ -64,7 +64,8 @@ pub(super) fn invoke(
         "voyager_remove_fleet" => "remove-fleet",
         "voyager_escalations" => "escalations",
         "voyager_answer" => {
-            let words = human.context("invalid_input: no human reply is available")?;
+            let (turn, words) =
+                human.context("invalid_input: no human input is bound to this native turn")?;
             ensure!(!words.trim().is_empty(), "invalid_input: empty human reply");
             let questions = exchange(state, json!({"op":"escalations"}), false)?;
             let question = questions
@@ -77,7 +78,7 @@ pub(super) fn invoke(
                 question["answered"] == false,
                 "invalid_input: escalation already answered"
             );
-            request = json!({"session_id":question["session_id"],"request_id":id,"reply_to":question["request_id"],"message":words,"decision":"resolve"});
+            request = json!({"session_id":question["session_id"],"request_id":id,"reply_to":question["request_id"],"message":words,"human_turn_id":turn,"decision":"resolve"});
             "adjudicate"
         }
         _ => bail!("unsupported Voyager tool"),

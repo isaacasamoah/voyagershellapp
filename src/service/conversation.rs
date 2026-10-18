@@ -15,6 +15,23 @@ use std::{
     time::{Duration, Instant},
 };
 
+fn human_input(text: &str) -> Option<String> {
+    let words = if text.contains("<realtime_delegation>") {
+        text.split_once("<input>")?
+            .1
+            .split_once("</input>")?
+            .0
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&")
+    } else {
+        text.to_owned()
+    };
+    (!words.trim().is_empty() && words.len() <= crate::events::TEXT_LIMIT).then_some(words)
+}
+
 struct Call {
     id: String,
     method: &'static str,
@@ -37,7 +54,7 @@ struct Provider {
     next_id: u64,
     state: std::path::PathBuf,
     thread_id: Option<String>,
-    human: Option<String>,
+    human_inputs: HashMap<String, String>,
     tool_results: HashMap<String, (Value, Value)>,
     presentations: HashMap<String, (String, String, Instant)>,
 }
@@ -51,6 +68,40 @@ impl Provider {
     }
 
     fn forward(&mut self, value: Value) -> Result<()> {
+        if value["params"]["threadId"]
+            .as_str()
+            .is_some_and(|id| Some(id) == self.thread_id.as_deref())
+        {
+            let params = &value["params"];
+            if ["item/started", "item/completed"]
+                .iter()
+                .any(|method| value["method"] == *method)
+                && params["item"]["type"] == "userMessage"
+            {
+                if let (Some(turn), Some(content)) = (
+                    params["turnId"].as_str(),
+                    params["item"]["content"].as_array(),
+                ) {
+                    let texts: Vec<_> = content
+                        .iter()
+                        .filter_map(|part| part["text"].as_str())
+                        .collect();
+                    let text = texts
+                        .iter()
+                        .find(|text| text.contains("<realtime_delegation>"))
+                        .copied()
+                        .or_else(|| texts.first().copied());
+                    if let Some(words) = text.and_then(human_input) {
+                        self.human_inputs.insert(turn.into(), words);
+                    }
+                }
+            }
+            if value["method"] == "turn/completed" {
+                if let Some(turn) = params["turn"]["id"].as_str() {
+                    self.human_inputs.remove(turn);
+                }
+            }
+        }
         if let Some(thread) = value["params"]["threadId"].as_str() {
             if let Some((_, text, _)) = self.presentations.get_mut(thread) {
                 if value["method"] == "item/completed"
@@ -122,14 +173,18 @@ impl Provider {
                         params["tool"].as_str().context("tool name")?,
                         &params["arguments"],
                         &uuid::Uuid::new_v4().to_string(),
-                        self.human.as_deref(),
+                        params["turnId"].as_str().and_then(|turn| {
+                            self.human_inputs
+                                .get(turn)
+                                .map(|words| (turn, words.as_str()))
+                        }),
                     )
                 })();
                 let reply = super::conversation_tools::reply(result);
                 self.tool_results
                     .insert(call.into(), (params.clone(), reply.clone()));
                 self.updates.send(Update::Tool(
-                    json!({"call_id":call,"name":params["tool"],"success":reply["success"]}),
+                    json!({"call_id":call,"native_turn_id":params["turnId"],"name":params["tool"],"success":reply["success"]}),
                 ))?;
                 reply
             };
@@ -137,11 +192,6 @@ impl Provider {
         } else if value.get("id").is_some() && value.get("method").is_some() {
             self.write(&json!({"id":value["id"],"error":{"code":-32601,"message":"Voyager conversation does not execute tools or approvals"}}))?;
         } else if value.get("method").is_some() {
-            if value["method"] == "thread/realtime/transcript/done"
-                && value["params"]["role"] == "user"
-            {
-                self.human = value["params"]["text"].as_str().map(str::to_owned);
-            }
             self.updates.send(Update::Note(value))?;
         }
         Ok(())
@@ -227,9 +277,6 @@ impl Provider {
                             continue;
                         }
                         call.method = "thread/realtime/appendSpeech";
-                    }
-                    if call.method == "turn/start" {
-                        self.human = call.params["input"][0]["text"].as_str().map(str::to_owned);
                     }
                     if call.method == "turn/start" {
                         if let Ok(questions) =
@@ -400,7 +447,7 @@ impl Conversation {
                     next_id: 0,
                     state: state.clone(),
                     thread_id: None,
-                    human: None,
+                    human_inputs: HashMap::new(),
                     tool_results: HashMap::new(),
                     presentations: HashMap::new(),
                 };
