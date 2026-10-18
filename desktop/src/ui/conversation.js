@@ -129,12 +129,14 @@
     renderQuestions(value);
     const previousVoice = status.voice;
     status = value.status;
+    window.voyagerAstronaut?.setBusy(status.phase === 'ready' && Boolean(status.busy));
     if (status.phase === 'failed' || (previousVoice === 'on' && status.voice === 'off'))
       releaseAudio();
     for (const event of value.events || []) {
       if (event.seq <= lastSequence) continue;
       lastSequence = event.seq;
       if (event.type === 'message') addMessage(event.data);
+      if (initialized && event.type === 'tool') window.voyagerAstronaut?.toolBeat();
       if (event.type === 'turn-completed' && event.data.status !== 'completed') {
         issue = 'Voyager did not complete that reply. It was not retried.';
         feedback(issue);

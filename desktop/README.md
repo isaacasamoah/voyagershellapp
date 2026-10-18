@@ -1,8 +1,9 @@
 # Voyager desktop
 
 A small Electron client of the Rust service. It displays local agent connections
-and a draggable astronaut; it does not run an agent, emulate a terminal or handle
-model conversations.
+and a draggable astronaut. Rust owns the agent runtimes and private model
+conversation; Electron presents chat and carries microphone and playback audio.
+It does not emulate a terminal.
 
 See the [desktop guide](../docs/desktop.md) for setup, gestures and the limits of
 the current Ghostty XWayland adapter. The first version runs on Fedora; macOS and
@@ -57,6 +58,7 @@ If Electron's binary download was skipped during installation, run
 | `src/control.cjs`                        | Persistent attachment socket, acknowledgement and connection loss             |
 | `src/preload.cjs`                        | The renderer's small, allowlisted IPC API                                     |
 | `src/ui/renderer.js`                     | Agent rows, pointer input and local sound cues                                |
+| `src/ui/astronaut.js`                    | Idle stretches, processing gestures and tool page turns                       |
 | `src/ui/authority.js`                    | Rank labels and eligible supervisor choices                                   |
 | `src/ui/index.html`, `style.css`         | The glass interface and accessibility labels                                  |
 | `src/ui/candidate.html`, `candidate.css` | Passive outline around a possible docking target                              |

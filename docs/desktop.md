@@ -19,6 +19,14 @@ continuous curved glass panel, with rainbow VOYAGER lettering above the seated
 astronaut and “Let’s Go Together” below the agent list. Click again to collapse.
 Drag the panel background to move it. Buttons remain clickable.
 
+At rest, Voyager stretches every 20–40 seconds. Its private conversation's
+active turn opens a book; tool results and a 3.6-second reading rhythm turn
+pages. When processing ends, it puts the book away, stretches and returns to
+rest. These gestures use the [original artwork and timings](../desktop/assets/README.md).
+They indicate processing, not task success, and do not change docking opacity
+or input behavior. Reduced-motion mode uses static reading and resting poses.
+The animation currently follows the app conversation, not a docked Vessel's turn.
+
 When the astronaut is docked to a terminal, clicking it toggles the panel where
 you last left it. The astronaut stays at the terminal and control is unchanged.
 The panel does not follow it. Pressing and pulling releases terminal control;

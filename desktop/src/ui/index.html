@@ -139,7 +139,7 @@
                 <input
                   id="chat-text"
                   aria-label="Message Voyager"
-                  placeholder="Message Voyager"
+                  placeholder="'sup?"
                   maxlength="8192"
                   autocomplete="off"
                 />
@@ -168,7 +168,14 @@
         aria-label="Voyager. Click for vessels. Hold to lift, then drag onto a terminal."
         aria-expanded="false"
       >
-        <img src="../../assets/idle.png" alt="" draggable="false" />
+        <img id="astronaut-back" src="../../assets/idle.png" alt="" draggable="false" />
+        <img
+          id="astronaut-front"
+          src="../../assets/idle.png"
+          alt=""
+          draggable="false"
+          style="opacity: 0"
+        />
         <span id="indicator" aria-hidden="true"></span>
       </button>
       <button id="voice-toggle" aria-label="Start voice" title="Start voice" aria-pressed="false">
@@ -181,6 +188,7 @@
     <script src="authority.js"></script>
     <script src="hierarchy.js"></script>
     <script src="renderer.js"></script>
+    <script src="astronaut.js"></script>
     <script src="conversation.js"></script>
   </body>
 </html>

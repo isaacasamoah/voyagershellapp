@@ -120,6 +120,7 @@ function rendererConversation() {
     context,
   );
   return {
+    window: context.window,
     nodes,
     calls,
     api,
@@ -176,4 +177,23 @@ test('uncertain chat input is retained without automatically sending another mes
   assert.equal(ui.nodes.get('chat-text').value, 'Keep my exact decision');
   assert.equal(ui.nodes.get('chat-send').disabled, true);
   assert.match(ui.nodes.get('chat-status').textContent, /not automatically retried/);
+});
+
+test('animation receives current processing state and each new tool result once', async () => {
+  const ui = rendererConversation();
+  await Promise.resolve();
+  const busy = [];
+  let beats = 0;
+  ui.window.voyagerAstronaut = { setBusy: (value) => busy.push(value), toolBeat: () => beats++ };
+  await ui.update({
+    status: { phase: 'ready', busy: true, voice: 'off' },
+    events: [{ seq: 1, type: 'tool' }],
+  });
+  await ui.update({
+    status: { phase: 'ready', busy: true, voice: 'off' },
+    events: [{ seq: 1, type: 'tool' }],
+  });
+  await ui.update({ status: { phase: 'ready', busy: false, voice: 'off' } });
+  assert.deepEqual(busy, [true, true, false]);
+  assert.equal(beats, 1);
 });
