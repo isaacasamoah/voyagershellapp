@@ -9,6 +9,7 @@
   let microphone;
   let voiceClient;
   let changingVoice = false;
+  const voiceActivity = new Map();
   let status = { phase: 'starting', voice: 'off' };
   let lastSequence = 0;
   let thread;
@@ -37,6 +38,7 @@
     peer?.close();
     peer = null;
     voiceClient = null;
+    voiceActivity.clear();
   }
   function render() {
     toggle.disabled = changingVoice || status.phase !== 'ready';
@@ -193,13 +195,19 @@
       const activity = {
         'input_audio_buffer.speech_started': ['human', true],
         'input_audio_buffer.speech_stopped': ['human', false],
+        'output_audio_buffer.started': ['assistant', true],
+        'output_audio_buffer.stopped': ['assistant', false],
+        'output_audio_buffer.cleared': ['assistant', false],
         'response.audio.delta': ['assistant', true],
         'response.output_audio.delta': ['assistant', true],
         'response.audio.done': ['assistant', false],
         'response.output_audio.done': ['assistant', false],
         'response.done': ['assistant', false],
       }[type];
-      if (activity) api.voiceActivity(...activity);
+      if (activity && voiceActivity.get(activity[0]) !== activity[1]) {
+        voiceActivity.set(...activity);
+        api.voiceActivity(...activity);
+      }
     };
     await peer.setLocalDescription(await peer.createOffer());
     const result = accepted(await api.startVoice(peer.localDescription.sdp));

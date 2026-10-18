@@ -332,6 +332,9 @@ impl Runtime {
                 .transpose()?
                 .unwrap_or(Value::Null);
             receipt["answered"] = json!(answered);
+            let session = self.store.session(string(&receipt, "session_id")?)?;
+            receipt["registered"] = json!(session["removed_ms"].is_null());
+            receipt["source_name"] = session["name"].clone();
             output.push(receipt);
         }
         Ok(json!(output))

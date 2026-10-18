@@ -699,13 +699,6 @@ impl Runtime {
                 .as_array()
                 .cloned()
                 .context("owner escalations")?;
-            for question in &mut questions {
-                if let Some(id) = question["session_id"].as_str() {
-                    let session = self.store.session(id)?;
-                    question["source_name"] = session["name"].clone();
-                    question["registered"] = json!(session["removed_ms"].is_null());
-                }
-            }
             questions.retain(|q| q["registered"] == true);
             self.conversation.questions(questions);
         }

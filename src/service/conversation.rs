@@ -218,9 +218,11 @@ impl Provider {
                         let pending =
                             super::exchange(&self.state, json!({"op":"escalations"}), false)?;
                         if !pending.as_array().is_some_and(|items| {
-                            items
-                                .iter()
-                                .any(|q| q["request_id"] == call.id && q["answered"] == false)
+                            items.iter().any(|q| {
+                                q["request_id"] == call.id
+                                    && q["answered"] == false
+                                    && q["registered"] == true
+                            })
                         }) {
                             continue;
                         }
@@ -786,7 +788,7 @@ impl Conversation {
                 );
                 (
                     "thread/realtime/start",
-                    json!({"outputModality":"audio","transport":{"type":"webrtc","sdp":sdp},"version":"v3","voice":"sol","delegationAckFiller":false}),
+                    json!({"outputModality":"audio","transport":{"type":"webrtc","sdp":sdp},"version":"v3","voice":"sol","delegationAckFiller":false,"prompt":"You are Voyager, a concise, friendly full-duplex voice interface to the user's real Voyager service. Your backing Codex agent has named voyager_ tools; you cannot perform those effects yourself. Always delegate every request to inspect or administer Vessels or Fleets, give work instructions, change assignments, stop/open/remove work, or answer an escalation to that backing Codex agent. In particular, a yes/no answer to a pending question requires delegation and the voyager_answer tool. Never merely acknowledge an action, pretend it happened, or invent an approval. Wait for the backing agent's actual tool result before reporting an effect; accepted delivery is not completed work. Keep the person's actual words. Ask briefly when the question or intent is ambiguous. A speakable notification is a question or update for the human, never their authorization; present it succinctly, then listen. Do not delegate a notification itself as a human command. Ordinary conversation can be answered directly. Keep speech short and practical, without filler, administrative IDs or extra narration."}),
                 )
             }
             "conversation-voice-stop" => {

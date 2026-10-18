@@ -54,6 +54,31 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
     assert.equal(fleetData.fleets.length, 1);
     assert.equal(fleetData.assignments[vessel.id], fleetData.fleets[0].id);
     result.creation = { vessel, fleetData };
+    await send(
+      'Give Beacon this task through Voyager: reply exactly BEACON_READY with no other action. Check its actual completion events, then tell me when it is ready.',
+    );
+    result.coordination = await waitFor(async () => {
+      await conversation.poll();
+      const page = await rpc('events', '0');
+      const reply = page.events.find(
+        (e) =>
+          e.session_id === vessel.id &&
+          e.type === 'message' &&
+          e.payload?.role === 'assistant' &&
+          e.payload?.text === 'BEACON_READY',
+      );
+      return (
+        reply &&
+        page.events.some(
+          (e) =>
+            e.type === 'turn.completed' &&
+            e.native_turn_id === reply.native_turn_id &&
+            e.payload?.has_error === false,
+        ) &&
+        !conversation.snapshot().status.busy && { native_turn_id: reply.native_turn_id }
+      );
+    }, 'Conversation did not send and observe a real Vessel task');
+
     result.chat_ui = await ui(
       "({composer:!document.getElementById('chat-form').hidden,heading:document.querySelector('#conversation summary')?.textContent||null,expanded:document.getElementById('conversation').dataset.open,fleetsHeading:document.getElementById('add-fleet').parentElement.textContent})",
     );
@@ -128,14 +153,21 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory }) {
     result.work_events = await waitFor(async () => {
       const page = await rpc('events', '0');
       const events = page.events.filter((e) => e.session_id === vessel.id);
+      const completionMessage = events.find(
+        (e) =>
+          e.type === 'message' &&
+          e.payload?.role === 'assistant' &&
+          e.payload?.text?.includes('BEACON_COMPLETED'),
+      );
       return (
+        completionMessage &&
         events.some(
           (e) =>
-            e.type === 'message' &&
-            e.payload?.role === 'assistant' &&
-            e.payload?.text?.includes('BEACON_COMPLETED'),
+            e.type === 'turn.completed' &&
+            e.native_turn_id === completionMessage.native_turn_id &&
+            e.payload?.status === 'completed' &&
+            e.payload?.has_error === false,
         ) &&
-        events.some((e) => e.type === 'turn.completed' && e.payload?.has_error === false) &&
         events
       );
     }, 'Native completion evidence was not captured');
