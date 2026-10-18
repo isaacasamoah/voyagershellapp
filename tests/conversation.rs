@@ -321,6 +321,17 @@ fn conversation_tools_use_real_service_actions_and_preserve_human_escalation_ans
     assert_eq!(source, "Yes, proceed & keep the original scope.");
     assert_eq!(record["answer"]["human_turn_id"], "fixture-turn");
     assert!(tool(&trial, "voyager_answer", json!({"escalation_id":question}))["error"].is_string());
+    let missing = tool(
+        &trial,
+        "voyager_answer",
+        json!({"escalation_id":"no-input"}),
+    );
+    assert!(
+        missing["error"]
+            .as_str()
+            .unwrap()
+            .contains("no human input is bound")
+    );
     trial.call(json!({"op":"conversation-voice-activity","client_id":"voice-test","speaker":"human","active":false}));
     thread::sleep(Duration::from_millis(1600));
     let methods = fs::read_to_string(trial.state.join("conversation-methods.jsonl")).unwrap();

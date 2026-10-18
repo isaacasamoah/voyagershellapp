@@ -121,8 +121,10 @@ if rewriting fails the source remains available. This thread cannot approve or
 reply. The conversation's `voyager_answer` tool forwards the human input bound to the current native turn
 unchanged, binds the original request and records an ordinary `resolve`
 answer. The receipt keeps the human turn ID. Missing current-turn input refuses;
-it never falls back to a previous chat message or waits on an unrelated final
-voice transcript. It does not fabricate an approval decision. Ambiguous targets need a
+it never falls back to a previous chat message. For voice this is Codex’s
+accepted delegation input; the finalized transcript can arrive later and differ
+slightly. The current adapter decodes Codex’s realtime input wrapper and refuses
+a missing or unsupported current-turn input. It does not fabricate an approval decision. Ambiguous targets need a
 clarifying question. Answer delivery and the agent's work completion stay separate.
 
 Pending explanations are spoken once when app voice is active and quiet. The

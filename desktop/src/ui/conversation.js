@@ -78,7 +78,9 @@
   }
   function renderQuestions(value) {
     if (view !== 'panel') return;
-    const pending = (value.questions || []).filter((q) => !q.answered);
+    const pending = (value.questions || []).filter(
+      (q) => !q.answered || (q.answer && q.answer.delivery !== 'accepted'),
+    );
     const key = JSON.stringify([pending, value.presentations]);
     if (questionKey === key) return;
     const previous = $('chat-questions').dataset.ids || '';
@@ -95,7 +97,13 @@
         card.append(source);
         const presentation = value.presentations?.[question.request_id];
         const text = document.createElement('p');
-        text.textContent = presentation?.text || 'A question is being prepared…';
+        text.textContent = question.answered
+          ? {
+              recorded: 'Your answer is saved. Waiting for delivery.',
+              failed: 'Your answer is saved, but could not be delivered.',
+              uncertain: 'Your answer is saved. Delivery is unconfirmed.',
+            }[question.answer?.delivery] || 'Your answer is saved.'
+          : presentation?.text || 'A question is being prepared…';
         card.append(text);
         const details = document.createElement('details');
         const summary = document.createElement('summary');

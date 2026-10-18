@@ -153,6 +153,19 @@ test('quiet composer expands for new messages, remains collapsed on repeat polls
   );
   await ui.update({ questions: [{ ...question, answered: true }], presentations: {} });
   assert.equal(ui.nodes.get('chat-questions').children.length, 0);
+  await ui.update({
+    questions: [{ ...question, answered: true, answer: { delivery: 'uncertain' } }],
+    presentations: {},
+  });
+  assert.match(
+    ui.nodes.get('chat-questions').children[0].children[1].textContent,
+    /Delivery is unconfirmed/,
+  );
+  await ui.update({
+    questions: [{ ...question, answered: true, answer: { delivery: 'accepted' } }],
+    presentations: {},
+  });
+  assert.equal(ui.nodes.get('chat-questions').children.length, 0);
 });
 test('uncertain chat input is retained without automatically sending another message', async () => {
   const ui = rendererConversation();

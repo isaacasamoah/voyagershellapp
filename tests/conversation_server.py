@@ -54,7 +54,8 @@ for line in sys.stdin:
             source = text
             if call['tool'] == 'voyager_answer':
                 source = '<realtime_delegation>\n<input>Yes, proceed &amp; keep the original scope.</input>\n<transcript_delta>Old unrelated instruction</transcript_delta>\n</realtime_delegation>'
-            note('item/started', turnId='fixture-turn', item={'type':'userMessage','content':[{'type':'text','text':source}]})
+            if call['arguments'].get('escalation_id') != 'no-input':
+                note('item/started', turnId='fixture-turn', item={'type':'userMessage','content':[{'type':'text','text':source}]})
 
             send({'id': request['id'], 'result': {'turn': {'id': 'fixture-turn'}}})
             for retry in range(2):
