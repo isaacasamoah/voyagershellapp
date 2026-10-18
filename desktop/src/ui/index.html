@@ -105,17 +105,22 @@
             <p id="instance-error" role="alert" hidden></p>
             <p id="authority-feedback" role="status"></p>
             <div id="sessions" aria-label="Your vessels"></div>
-            <button id="add-fleet" type="button">+ Add fleet</button>
+            <div class="instances-heading">
+              <span>Fleets</span
+              ><button id="add-fleet" type="button" aria-label="New fleet" title="New fleet">
+                +
+              </button>
+            </div>
             <form id="fleet-form" hidden>
               <input
                 id="fleet-name"
-                aria-label="Fleet name"
+                aria-label="Fleet goal"
                 maxlength="100"
-                placeholder="Topic or shared goal"
+                placeholder="Fleet goal"
                 required
               />
-              <button type="submit">Create fleet</button>
-              <button id="cancel-fleet" type="button">Cancel</button>
+              <button type="submit" aria-label="Create fleet" title="Create fleet">↑</button>
+              <button id="cancel-fleet" type="button" aria-label="Cancel fleet">×</button>
             </form>
             <p id="fleet-error" role="alert" hidden></p>
             <div id="fleets" aria-label="Your fleets"></div>
@@ -123,28 +128,34 @@
               <div class="instances-heading">Unregistered vessels</div>
               <div id="unregistered-sessions"></div>
             </section>
-            <section id="escalations" hidden aria-label="Questions for you">
-              <div class="instances-heading">Questions for you</div>
-              <p id="escalation-error" role="status" hidden></p>
-              <div id="escalation-list"></div>
-            </section>
-            <details id="conversation" aria-label="Talk to Voyager">
-              <summary>
-                Talk to Voyager<span id="chat-unread" hidden aria-label="New reply"> ·</span>
-              </summary>
-              <div id="chat-messages" role="log" aria-live="polite"></div>
+            <section id="conversation" aria-label="Voyager conversation" data-open="false">
+              <div class="chat-disclosure">
+                <div>
+                  <div id="chat-messages" role="log" aria-live="polite"></div>
+                  <div id="chat-questions" aria-label="Questions for you"></div>
+                </div>
+              </div>
               <form id="chat-form">
                 <input
                   id="chat-text"
                   aria-label="Message Voyager"
-                  placeholder="What's on your mind?"
+                  placeholder="Message Voyager"
                   maxlength="8192"
                   autocomplete="off"
                 />
                 <button id="chat-send" aria-label="Send message" title="Send">↑</button>
+                <button
+                  id="chat-expand"
+                  type="button"
+                  aria-label="Show conversation"
+                  aria-expanded="false"
+                  title="Show conversation"
+                >
+                  ⌄
+                </button>
               </form>
               <p id="chat-status" role="status" hidden></p>
-            </details>
+            </section>
             <p id="tagline">Let’s Go Together</p>
           </div>
         </div>

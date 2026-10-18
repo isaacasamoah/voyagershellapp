@@ -365,8 +365,7 @@ textarea {
   font-size: 10px;
   color: #42566a;
 }
-.instance-actions label,
-.escalation label {
+.instance-actions label {
   display: grid;
   gap: 4px;
   padding: 6px;
@@ -378,40 +377,27 @@ textarea {
   max-width: calc(100vw - 16px);
   -webkit-app-region: no-drag;
 }
-#escalations {
-  min-height: 100px;
-  max-height: 280px;
-  overflow: auto;
-  -webkit-app-region: no-drag;
-}
-.escalation {
-  display: grid;
-  gap: 6px;
-  padding: 9px 0;
-  border-top: 1px solid #ffffff9c;
-}
-.escalation p,
-#authority-feedback,
-#escalation-error {
+#authority-feedback {
   margin: 0;
   font-size: 11px;
-  line-height: 1.5;
 }
-.question-text {
+.chat-question {
+  margin: 9px 0;
+  padding-top: 9px;
+  border-top: 1px solid #7a9bac25;
+}
+.chat-question p {
+  margin: 6px 0;
+  line-height: 1.5;
   white-space: pre-wrap;
+}
+.chat-question details {
+  font-size: 10px;
+  color: #527080;
+}
+.chat-question details p {
   user-select: text;
   overflow-wrap: anywhere;
-}
-.escalation textarea {
-  min-height: 58px;
-  resize: vertical;
-}
-.escalation button {
-  justify-self: end;
-  border: 1px solid #ffffffc0;
-  border-radius: 5px;
-  padding: 7px;
-  background: #ffffffa0;
 }
 #authority-feedback:empty {
   display: none;
@@ -447,13 +433,6 @@ textarea {
   border: 0;
   background: transparent;
   padding: 6px;
-}
-#add-fleet {
-  align-self: flex-start;
-  background: transparent;
-  border: 0;
-  padding: 2px 4px;
-  font-size: 11px;
 }
 #fleet-form,
 .fleet-heading {
@@ -570,17 +549,59 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   border-top: 1px solid #7a9bac25;
   padding-top: 10px;
 }
-#conversation summary {
-  cursor: pointer;
-  color: #48606d;
-  font-size: 11px;
-  list-style: none;
+.chat-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 180ms ease,
+    opacity 180ms ease;
 }
-#conversation summary::before {
-  content: '› ';
+.chat-disclosure > div {
+  min-height: 0;
+  overflow: hidden;
 }
-#conversation[open] summary::before {
-  content: '⌄ ';
+#conversation[data-open='true'] .chat-disclosure {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+#chat-expand {
+  border: 0;
+  background: transparent;
+  width: 20px;
+  padding: 0;
+  color: #607d8c;
+}
+#fleet-form {
+  height: auto;
+  opacity: 1;
+  interpolate-size: allow-keywords;
+  overflow: hidden;
+  transition:
+    height 180ms ease,
+    opacity 180ms ease,
+    display 180ms allow-discrete;
+}
+#fleet-form[hidden] {
+  display: none;
+  height: 0;
+  opacity: 0;
+}
+#fleet-name {
+  flex: 1;
+  min-width: 0;
+}
+@starting-style {
+  #fleet-form:not([hidden]) {
+    height: 0;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-disclosure,
+  #fleet-form {
+    transition: none;
+  }
 }
 #chat-messages {
   max-height: 220px;

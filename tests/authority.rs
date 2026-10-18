@@ -650,3 +650,64 @@ fn restart_reconciles_coordination_without_replay_or_downgrading_saved_acknowled
         6
     );
 }
+
+#[test]
+fn fleet_service_owns_membership_and_preserves_existing_files_and_authority() {
+    let s = Service::start();
+    let captain = s.create("fleet-captain", "codex", Some("captain"));
+    let crew = s.create("fleet-crew", "codex", None);
+    s.supervise(&crew, Some(&captain));
+    let a = uuid::Uuid::new_v4().to_string();
+    let b = uuid::Uuid::new_v4().to_string();
+    s.owner(json!({"op":"create-fleet","request_id":a,"name":"Compiler"}));
+    s.owner(json!({"op":"create-fleet","request_id":b,"name":"Docs"}));
+    s.owner(json!({"op":"create-fleet","request_id":a,"name":"Compiler"}));
+    assert_eq!(
+        s.owner(json!({"op":"fleets"}))["fleets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let credential = s.context("fleet-crew");
+    assert_eq!(s.raw(Some(&credential),json!({"op":"create-fleet","request_id":uuid::Uuid::new_v4().to_string(),"name":"Unpermitted"}))["code"],"forbidden");
+    s.owner(json!({"op":"move-vessel","session_id":crew,"fleet_id":b}));
+    let moved = s.owner(json!({"op":"move-vessel","session_id":captain,"fleet_id":a}));
+    assert_eq!(moved["assignments"][&captain], a);
+    assert!(moved["assignments"].get(&crew).is_none());
+    let rows = s.owner(json!({"op":"list"}));
+    assert_eq!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == crew)
+            .unwrap()["supervisor_id"],
+        captain
+    );
+    let data = s.owner(json!({"op":"remove-fleet","fleet_id":a}));
+    assert!(data["assignments"].get(&captain).is_none());
+    assert_eq!(
+        fs::metadata(s.dir.join("fleets.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+    let saved = fs::read(s.dir.join("fleets.json")).unwrap();
+    assert!(
+        s.raw(
+            None,
+            json!({"op":"move-vessel","session_id":"unknown","fleet_id":b})
+        )
+        .get("error")
+        .is_some()
+    );
+    assert_eq!(fs::read(s.dir.join("fleets.json")).unwrap(), saved);
+    fs::write(s.dir.join("fleets.json"), "{broken").unwrap();
+    assert!(s.raw(None,json!({"op":"create-fleet","request_id":uuid::Uuid::new_v4().to_string(),"name":"Preserved"})).get("error").is_some());
+    assert_eq!(
+        fs::read_to_string(s.dir.join("fleets.json")).unwrap(),
+        "{broken"
+    );
+}

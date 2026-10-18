@@ -21,13 +21,6 @@ function authorityActions(rpc, getSessions) {
         throw Error('Choose a supervisor.');
       return rpc('supervise', id, supervisor ?? 'none', '--request-id', request);
     },
-    adjudicate(id, escalation, decision, message, request) {
-      target(id, request);
-      actionRequest(escalation);
-      if (!['accept', 'revise', 'resolve'].includes(decision)) throw Error('Choose a response.');
-      if (typeof message !== 'string' || !message.trim()) throw Error('Enter a response.');
-      return rpc('adjudicate', id, request, decision, message, '--reply-to', escalation);
-    },
   };
 }
 module.exports = { authorityActions };

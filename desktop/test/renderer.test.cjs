@@ -152,49 +152,6 @@ test('a rejected rank change keeps the same request on an explicit retry', async
   assert.notEqual(requests[1][2], requests[2][2]);
 });
 
-test('owner questions keep answer identity after a lost reply and retire from service state', async () => {
-  const ui = renderer();
-  const calls = [];
-  ui.api.adjudicateEscalation = async (...args) => {
-    calls.push(args);
-    return { error: 'Lost reply.' };
-  };
-  const entry = {
-    request_id: 'question',
-    session_id: 'one',
-    message: 'May I proceed?',
-    delivery: 'recorded',
-    answered: false,
-  };
-  ui.update({ escalations: [entry] });
-  assert.equal(ui.nodes.get('escalations').hidden, false);
-  const form = ui.nodes.get('escalation-list').children[0];
-  form.querySelectorAll('textarea')[0].value = 'Proceed.';
-  await form.onsubmit({ preventDefault() {} });
-  await form.onsubmit({ preventDefault() {} });
-  assert.equal(calls[0][4], calls[1][4]);
-  assert.equal(ui.nodes.get('authority-feedback').textContent, '');
-  ui.api.adjudicateEscalation = async () => ({ delivery: 'failed' });
-  await form.onsubmit({ preventDefault() {} });
-  assert.equal(
-    ui.nodes.get('authority-feedback').textContent,
-    'Response recorded. Delivery failed.',
-  );
-  ui.update({ escalations: [{ ...entry, answered: true }] });
-  assert.equal(ui.nodes.get('escalations').hidden, true);
-  ui.update({ escalations: [{ ...entry, answered: true, answer: { delivery: 'uncertain' } }] });
-  assert.equal(ui.nodes.get('escalations').hidden, false);
-  const answered = ui.nodes.get('escalation-list').children[0];
-  assert.equal(answered.querySelectorAll('textarea').length, 0);
-  assert.match(
-    answered.querySelectorAll('p').at(-1).textContent,
-    /Response recorded. Delivery uncertain/,
-  );
-  ui.update({ escalations: [{ ...entry, answered: true, answer: { delivery: 'accepted' } }] });
-  assert.equal(ui.nodes.get('escalations').hidden, true);
-  assert.equal(ui.nodes.get('authority-feedback').textContent, 'Response delivered.');
-});
-
 test('rank rows start collapsed and expand without a duplicate group header', async () => {
   const ui = renderer();
   const requests = [];

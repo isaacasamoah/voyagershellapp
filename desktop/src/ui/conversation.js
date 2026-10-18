@@ -15,6 +15,15 @@
   let requestId;
   let uncertain = false;
   let issue = null;
+  let initialized = false;
+  let questionKey;
+  function setOpen(open) {
+    disclosure.dataset.open = String(open);
+    $('chat-expand').textContent = open ? '⌃' : '⌄';
+    $('chat-expand').setAttribute('aria-expanded', String(open));
+    $('chat-expand').setAttribute('aria-label', open ? 'Hide conversation' : 'Show conversation');
+    $('chat-expand').title = open ? 'Hide conversation' : 'Show conversation';
+  }
   const messages = [];
 
   function feedback(message) {
@@ -63,7 +72,41 @@
     });
     $('chat-messages').replaceChildren(...nodes);
     if (nearBottom) $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
-    $('chat-unread').hidden = disclosure.open;
+    if (initialized) setOpen(true);
+  }
+  function renderQuestions(value) {
+    if (view !== 'panel') return;
+    const pending = (value.questions || []).filter((q) => !q.answered);
+    const key = JSON.stringify([pending, value.presentations]);
+    if (questionKey === key) return;
+    const previous = $('chat-questions').dataset.ids || '';
+    questionKey = key;
+    const ids = pending.map((q) => q.request_id);
+    $('chat-questions').dataset.ids = JSON.stringify(ids);
+    $('chat-questions').replaceChildren(
+      ...pending.map((question) => {
+        const card = document.createElement('article');
+        card.className = 'chat-question';
+        card.dataset.request = question.request_id;
+        const source = document.createElement('strong');
+        source.textContent = question.source_name || 'A vessel';
+        card.append(source);
+        const presentation = value.presentations?.[question.request_id];
+        const text = document.createElement('p');
+        text.textContent = presentation?.text || 'A question is being prepared…';
+        card.append(text);
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Original';
+        details.append(summary);
+        const original = document.createElement('p');
+        original.textContent = question.message;
+        details.append(original);
+        card.append(details);
+        return card;
+      }),
+    );
+    if (initialized && ids.some((id) => !previous.includes(id))) setOpen(true);
   }
   async function update(value) {
     if (thread && value.status.thread_id && thread !== value.status.thread_id) {
@@ -73,6 +116,7 @@
       releaseAudio();
     }
     thread = value.status.thread_id || thread;
+    renderQuestions(value);
     const previousVoice = status.voice;
     status = value.status;
     if (status.phase === 'failed' || (previousVoice === 'on' && status.voice === 'off'))
@@ -107,6 +151,7 @@
         if (view === 'avatar') await api.stopVoice();
       }
     }
+    initialized = true;
     render();
   }
   function accepted(value) {
@@ -137,7 +182,25 @@
         api.stopVoice();
       }
     };
-    peer.createDataChannel('oai-events');
+    const channel = peer.createDataChannel('oai-events');
+    channel.onmessage = (event) => {
+      let type;
+      try {
+        type = JSON.parse(event.data).type;
+      } catch {
+        return;
+      }
+      const activity = {
+        'input_audio_buffer.speech_started': ['human', true],
+        'input_audio_buffer.speech_stopped': ['human', false],
+        'response.audio.delta': ['assistant', true],
+        'response.output_audio.delta': ['assistant', true],
+        'response.audio.done': ['assistant', false],
+        'response.output_audio.done': ['assistant', false],
+        'response.done': ['assistant', false],
+      }[type];
+      if (activity) api.voiceActivity(...activity);
+    };
     await peer.setLocalDescription(await peer.createOffer());
     const result = accepted(await api.startVoice(peer.localDescription.sdp));
     voiceClient = result.client_id;
@@ -176,15 +239,14 @@
     window.addEventListener('beforeunload', releaseAudio);
   }
   if (view === 'panel') {
-    disclosure.addEventListener('toggle', () => {
-      if (disclosure.open) $('chat-unread').hidden = true;
-    });
+    $('chat-expand').onclick = () => setOpen(disclosure.dataset.open !== 'true');
     $('chat-form').onsubmit = async (event) => {
       event.preventDefault();
       if (uncertain || status.busy) return;
       const text = $('chat-text').value.trim();
       if (!text) return;
       issue = null;
+      setOpen(true);
       requestId ||= crypto.randomUUID();
       $('chat-send').disabled = true;
       try {

@@ -7,9 +7,6 @@ let audio;
 let lastRows;
 let creating = false;
 let currentSessions = [];
-let lastEscalations;
-let lastAnswer;
-const escalationDrafts = new Map();
 const pendingActions = new Map();
 const expandedVessels = new Set();
 let fleetRequest;
@@ -62,7 +59,6 @@ function renderState(value) {
   if (view !== 'panel') return;
   currentSessions = value.sessions;
   updateCreationAuthority();
-  renderEscalations(value);
   if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
   const rows = JSON.stringify([
     value.sessions,
@@ -443,111 +439,6 @@ function updateCreationAuthority() {
     }),
   );
   select.value = choices.some((s) => s.id === selected) ? selected : '';
-}
-function renderEscalations(value) {
-  const entries = value.escalations || [];
-  const answered = entries.find((entry) => entry.request_id === lastAnswer && entry.answer);
-  if (answered) $('authority-feedback').textContent = responseStatus(answered.answer.delivery);
-  const key = JSON.stringify([
-    entries,
-    value.escalationError,
-    value.sessions.map((s) => [s.id, s.name]),
-  ]);
-  if (key === lastEscalations) return;
-  lastEscalations = key;
-  const pending = authority.visibleEscalations(entries);
-  $('escalations').hidden = !pending.length && !value.escalationError;
-  $('escalation-error').textContent = value.escalationError || '';
-  $('escalation-error').hidden = !value.escalationError;
-  $('escalation-list').replaceChildren(
-    ...pending.map((entry) => {
-      const card = element('form', '', 'escalation');
-      const sender = value.sessions.find((s) => s.id === entry.session_id);
-      card.append(element('strong', sender ? instanceName(sender) : 'An instance'));
-      card.append(element('p', entry.message, 'question-text'));
-      const delivery = {
-        recorded: 'Recorded for you',
-        accepted: 'Delivered',
-        failed: 'Delivery failed',
-        uncertain: 'Delivery uncertain',
-      };
-      if (entry.answered) {
-        card.append(element('p', responseStatus(entry.answer?.delivery), 'form-hint'));
-        return card;
-      }
-      card.append(element('p', delivery[entry.delivery] || 'Delivery pending', 'form-hint'));
-      const draft = escalationDrafts.get(entry.request_id) || { decision: 'resolve', message: '' };
-      const decision = choiceField(
-        card,
-        'Response',
-        [
-          ['resolve', 'Answer question'],
-          ['accept', 'Accept result'],
-          ['revise', 'Request changes'],
-        ],
-        draft.decision,
-      );
-      const label = element('label', 'Your response');
-      const answer = element('textarea', '');
-      answer.required = true;
-      answer.value = draft.message;
-      label.append(answer);
-      card.append(label);
-      const saveDraft = () =>
-        escalationDrafts.set(entry.request_id, { decision: decision.value, message: answer.value });
-      answer.oninput = saveDraft;
-      decision.onchange = saveDraft;
-      const submit = element('button', 'Send response');
-      submit.type = 'submit';
-      card.append(submit);
-      card.onsubmit = async (event) => {
-        event.preventDefault();
-        const message = answer.value.trim();
-        if (!message) return;
-        const key = JSON.stringify([
-          'adjudicate',
-          entry.session_id,
-          entry.request_id,
-          decision.value,
-          message,
-        ]);
-        if (!pendingActions.has(key)) pendingActions.set(key, crypto.randomUUID());
-        for (const field of card.elements) field.disabled = true;
-        submit.textContent = 'Sending…';
-        try {
-          const result = await api.adjudicateEscalation(
-            entry.session_id,
-            entry.request_id,
-            decision.value,
-            message,
-            pendingActions.get(key),
-          );
-          if (result?.error && result.state !== 'completed') throw Error(result.error);
-          pendingActions.delete(key);
-          escalationDrafts.delete(entry.request_id);
-          lastAnswer = entry.request_id;
-          $('authority-feedback').textContent = responseStatus(result?.delivery);
-          showError('');
-        } catch (error) {
-          showError(error.message);
-        } finally {
-          for (const field of card.elements) field.disabled = false;
-          submit.textContent = 'Send response';
-        }
-      };
-      return card;
-    }),
-  );
-}
-function responseStatus(delivery) {
-  return (
-    {
-      recorded: 'Response recorded. Awaiting delivery.',
-      accepted: 'Response delivered.',
-      failed: 'Response recorded. Delivery failed.',
-      uncertain: 'Response recorded. Delivery uncertain.',
-    }[delivery] || 'Response recorded.'
-  );
 }
 function showCreate(open) {
   if (creating) return;

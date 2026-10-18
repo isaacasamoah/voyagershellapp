@@ -190,6 +190,12 @@ fn main() -> Result<()> {
                 json!({"op":"dock","session_id":session,"generation":uuid::Uuid::new_v4().to_string(),"window_id":window_id.ok_or_else(||anyhow::anyhow!("dock requires --window-id"))?,"terminal":process(terminal_pid)?,"frontend":process(client_pid)?}),
             );
         }
+        [op] if op == "fleets" => json!({"op":"fleets"}),
+        [op, id, name] if op == "create-fleet" => json!({"op":op,"request_id":id,"name":name}),
+        [op, vessel, fleet] if op == "move-vessel" => {
+            json!({"op":op,"session_id":vessel,"fleet_id":if fleet == "none" { serde_json::Value::Null } else { json!(fleet) }})
+        }
+        [op, fleet] if op == "remove-fleet" => json!({"op":op,"fleet_id":fleet}),
         [op] if op == "conversation" => json!({"op":"conversation","after":0}),
         [op, after] if op == "conversation" => {
             json!({"op":"conversation","after":after.parse::<u64>()?})
@@ -294,6 +300,7 @@ fn main() -> Result<()> {
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | capabilities [SESSION]\n\
+            fleets | create-fleet ID GOAL | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
             conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
             report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
             adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\
@@ -335,6 +342,11 @@ fn main() -> Result<()> {
     if let Some(generation) = control {
         request["control_generation"] = json!(generation);
     }
+    let operation = if request["op"] == "conversation-send" {
+        "conversation-operation"
+    } else {
+        "operation"
+    };
     let mut receipt = service::client(&state, request)?;
     while receipt["state"] == "pending" {
         let id = receipt["request_id"]
@@ -342,7 +354,7 @@ fn main() -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("pending receipt has no request ID"))?
             .to_owned();
         std::thread::sleep(Duration::from_millis(250));
-        receipt = service::client(&state, json!({"op":"operation","request_id":id}))?;
+        receipt = service::client(&state, json!({"op":operation,"request_id":id}))?;
     }
     println!("{}", serde_json::to_string_pretty(&receipt)?);
     if ["partial", "uncertain", "cancelled", "failed"]

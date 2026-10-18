@@ -49,8 +49,10 @@ shared graphs are later work. Voyager is an experimental prototype.
 
 ## Talk to Voyager
 
-Voyager starts a private Codex runtime with the service. Reveal **Talk to Voyager**
-at the panel bottom to type, or press the avatar's soundwave to use voice.
+Voyager starts a private Codex runtime with the service. Type in the subtle chat
+bar at the panel bottom, or press the avatar's soundwave to use voice. Named
+service tools manage Vessels and Fleets. Escalations and replies use the same chat,
+with the original request available behind disclosure.
 The conversation stays separate from terminal sessions and Vessel capture.
 Closing Electron stops voice while the runtime and work continue.
 [Conversation setup and current limits](docs/harness-runtime.md).

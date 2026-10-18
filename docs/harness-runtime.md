@@ -4,7 +4,8 @@ The Rust service starts its own Codex app server by default. It has no terminal,
 Vessel rank or worker registration. Electron connects the existing glass avatar
 and panel to this private conversation.
 
-Click **Talk to Voyager** at the panel bottom to reveal chat. The soundwave icon,
+The panel bottom always shows a subtle chat composer. Messages expand above it;
+the small chevron hides or shows that history. The soundwave icon,
 opposite the avatar's status dot, starts or stops voice. Opening the app does not
 activate the microphone. Voice can remain active while the panel is hidden.
 
@@ -42,7 +43,11 @@ Vessel capture or shared knowledge.
 thread handles provider RPCs; the service loop remains available for other work.
 The main service owns requests, observations and private conversation state.
 Shell and subagent tools are disabled for this runtime, and its sandbox is
-read-only. It has no Voyager orchestration tools or public internal-reasoning API.
+read-only. It has named Voyager tools and no public internal-reasoning API. Tool calls use
+the same private service operations as the CLI and panel. The runtime acts for the
+local owner; it does not gain a worker rank or pass that authority to Vessels.
+The bundled `conversation-tools.json` defines the exact tool inputs. Native call
+IDs retain their first result; repeats do not repeat an effect.
 
 Owner CLI operations are explicit:
 
@@ -93,9 +98,36 @@ audible playback and interruption still require a real user trial on this build.
 The standalone experiment window and Rust example were replaced by this shared
 implementation. Their historical source remains in Git at `8cfd225`.
 
-## Next increment
+## Tools and escalations
 
-The draft `skills/present-escalation/SKILL.md` was tried with recorded questions.
-Loading it for live escalations, replacing the separate response form with chat,
-binding human answers and scheduling current voice notifications remain separate
-work. The skill grants no permissions and does not alter service policy.
+Named tools cover service status, Vessel creation, instructions, lifecycle,
+captured events, operation receipts, rank/assignments, shell commands and Fleet
+creation/membership. Resolve live IDs; do not route by display name alone. Creating
+opens Ghostty by default unless background work was requested. Sending to a busy
+Vessel steers its current turn. Neither acceptance nor a launch receipt proves
+completion. Ordinary instance callers cannot access the private conversation.
+
+Owner escalations are presented inside chat. A separate ephemeral thread with no
+Voyager tools applies `skills/present-escalation/SKILL.md` and the configured
+writing guidelines. The concise explanation has the original behind disclosure;
+if rewriting fails the source remains available. This thread cannot approve or
+reply. The conversation's `voyager_answer` tool forwards the latest actual human
+words unchanged, binds the original request and records an ordinary `resolve`
+answer. It does not fabricate an approval decision. Ambiguous targets need a
+clarifying question. Answer delivery and the agent's work completion stay separate.
+
+Pending explanations are spoken once when app voice is active and quiet. The
+current owner request is checked again before appendSpeech. Answered or removed
+sources are skipped; uncertain speech is not replayed. Renderer speech-activity
+events defer notification speech during a human or assistant utterance. Realtime
+transport, microphone and turn-taking still need native/user proof; the scheduler
+is not a claim of sample-accurate audio arbitration.
+
+Fleet metadata now has one writer in `service/fleets.rs`. The existing private
+fleets.json format is retained. The panel uses named CLI actions through
+`desktop/src/fleets.cjs`; it does not edit that file. Fleet membership remains
+presentation data and grants no authority.
+
+Native voice takeover between the app and docked terminal agents is the next
+increment after this user trial. Desktop thinking mode, collaboration and shared
+knowledge are later work.

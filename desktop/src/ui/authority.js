@@ -12,10 +12,6 @@ const authority = (() => {
           : ranks.indexOf(s.rank) === ranks.indexOf(rank) - 1),
     );
   }
-  const visibleEscalations = (entries) =>
-    entries.filter(
-      (entry) => !entry.answered || (entry.answer && entry.answer.delivery !== 'accepted'),
-    );
-  return { ranks, rankName, supervisors, visibleEscalations };
+  return { ranks, rankName, supervisors };
 })();
 if (typeof module !== 'undefined') module.exports = authority;

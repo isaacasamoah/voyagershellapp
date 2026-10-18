@@ -30,7 +30,7 @@ test('supervisor choices include only adjacent registered ranks and exclude self
   );
   assert.deepEqual(supervisors(sessions, 'codex', 'crew', 'captain'), []);
 });
-test('authority IPC operations preserve request IDs and route answers to an escalation', async () => {
+test('authority IPC operations preserve request IDs through the service', async () => {
   const calls = [];
   const actions = authorityActions(
     async (...args) => calls.push(args),
@@ -39,12 +39,10 @@ test('authority IPC operations preserve request IDs and route answers to an esca
   await actions.rank('crew', 'captain', 'rank-one');
   await actions.supervise('crew', 'captain', 'assign-one');
   await actions.supervise('crew', null, 'clear-one');
-  await actions.adjudicate('crew', 'question-one', 'resolve', 'Proceed.', 'answer-one');
   assert.deepEqual(calls, [
     ['rank', 'crew', 'captain', '--request-id', 'rank-one'],
     ['supervise', 'crew', 'captain', '--request-id', 'assign-one'],
     ['supervise', 'crew', 'none', '--request-id', 'clear-one'],
-    ['adjudicate', 'crew', 'answer-one', 'resolve', 'Proceed.', '--reply-to', 'question-one'],
   ]);
 });
 test('bad renderer input and removed targets never reach the service', () => {
@@ -57,14 +55,6 @@ test('bad renderer input and removed targets never reach the service', () => {
   assert.throws(() => actions.rank('removed-captain', 'crew', 'request'), /registered/);
   assert.throws(() => actions.supervise('crew', {}, 'request'), /supervisor/);
   assert.throws(() => actions.supervise('crew', null, ''), /request/);
-  assert.throws(
-    () => actions.adjudicate('crew', 'question', 'resolve', ' ', 'request'),
-    /response/,
-  );
-  assert.throws(
-    () => actions.adjudicate('crew', 'question', 'ignore', 'Text', 'request'),
-    /response/,
-  );
   assert.equal(calls, 0);
 });
 test('authority service rejection propagates without presenting a local state change', async () => {
@@ -97,11 +87,9 @@ test('preload exposes explicit authority actions with no generic RPC escape hatc
   });
   api.rankInstance('crew', 'captain', 'rank');
   api.superviseInstance('crew', null, 'assign');
-  api.adjudicateEscalation('crew', 'question', 'resolve', 'Yes', 'answer');
   assert.deepEqual(calls, [
     ['rank-instance', 'crew', 'captain', 'rank'],
     ['supervise-instance', 'crew', null, 'assign'],
-    ['adjudicate-escalation', 'crew', 'question', 'resolve', 'Yes', 'answer'],
   ]);
   assert.equal(api.rpc, undefined);
 });

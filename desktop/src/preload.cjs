@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld(
     chat: (text, request) => ipcRenderer.invoke('conversation-send', text, request),
     startVoice: (sdp) => ipcRenderer.invoke('conversation-voice-start', sdp),
     stopVoice: () => ipcRenderer.invoke('conversation-voice-stop'),
+    voiceActivity: (speaker, active) =>
+      ipcRenderer.invoke('conversation-voice-activity', speaker, active),
     onConversation: (callback) => {
       const listener = (_event, value) => callback(value);
       ipcRenderer.on('conversation', listener);
@@ -30,8 +32,6 @@ contextBridge.exposeInMainWorld(
     rankInstance: (id, rank, request) => ipcRenderer.invoke('rank-instance', id, rank, request),
     superviseInstance: (id, supervisor, request) =>
       ipcRenderer.invoke('supervise-instance', id, supervisor, request),
-    adjudicateEscalation: (id, escalation, decision, message, request) =>
-      ipcRenderer.invoke('adjudicate-escalation', id, escalation, decision, message, request),
     quit: () => ipcRenderer.invoke('quit-ui'),
     onDockSound: (callback) => {
       ipcRenderer.on('dock-sound', (_event, action) => callback(action));

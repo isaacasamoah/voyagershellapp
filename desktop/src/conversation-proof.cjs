@@ -37,9 +37,7 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }
   panelWin.show();
   panelWin.focus();
   await delay(200);
-  await panelWin.webContents.executeJavaScript(
-    `document.getElementById('conversation').open=true;document.getElementById('chat-text').focus()`,
-  );
+  await panelWin.webContents.executeJavaScript(`document.getElementById('chat-text').focus()`);
   await panelWin.webContents.insertText('Reply exactly: Voyager is ready to chat.');
   panelWin.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
   panelWin.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });

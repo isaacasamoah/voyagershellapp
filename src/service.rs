@@ -36,6 +36,8 @@ use std::{
 
 mod authority_ops;
 mod conversation;
+mod conversation_tools;
+mod fleets;
 mod lifecycle;
 mod native;
 use native::NativeCall;
@@ -96,6 +98,10 @@ pub fn client(state: &Path, mut request: Value) -> Result<Value> {
         request["credential"] =
             serde_json::from_slice(&bytes).context("forbidden: invalid instance context")?;
     }
+    exchange(state, request, instance)
+}
+
+fn exchange(state: &Path, request: Value, instance: bool) -> Result<Value> {
     let mut stream = UnixStream::connect(state.join(if instance {
         "instances.sock"
     } else {
@@ -470,11 +476,15 @@ impl Runtime {
                 request["after"].as_u64().unwrap_or(0),
                 request["client_id"].as_str(),
             ),
+            "conversation-voice-activity" => self.conversation.voice_activity(&request)?,
             "conversation-operation" => {
                 self.conversation.receipt(string(&request, "request_id")?)?
             }
             "conversation-send" | "conversation-voice-start" | "conversation-voice-stop" => {
                 self.conversation.request(&request)?
+            }
+            "fleets" | "create-fleet" | "move-vessel" | "remove-fleet" => {
+                self.fleet_operation(&request)?
             }
             "capabilities" => self.capabilities(&request)?,
             "escalations" => self.escalations()?,
@@ -672,6 +682,22 @@ impl Runtime {
 
     fn observe(&mut self) -> Result<()> {
         self.conversation.observe();
+        if self.conversation.questions_due() {
+            let mut questions = self
+                .escalations()?
+                .as_array()
+                .cloned()
+                .context("owner escalations")?;
+            for question in &mut questions {
+                if let Some(id) = question["session_id"].as_str() {
+                    let session = self.store.session(id)?;
+                    question["source_name"] = session["name"].clone();
+                    question["registered"] = json!(session["removed_ms"].is_null());
+                }
+            }
+            questions.retain(|q| q["registered"] == true);
+            self.conversation.questions(questions);
+        }
         for index in (0..self.terminals.len()).rev() {
             if self.terminals[index].child.try_wait()?.is_some()
                 && self.terminals[index]

@@ -47,13 +47,17 @@ function conversationClient(stateDir, publish) {
   let clientId;
   let status = { phase: 'starting', voice: 'off' };
   const events = [];
+  let questions = [];
+  let presentations = {};
   const request = (input) => exchange(stateDir, input);
   function update(page) {
     status = page.status;
     cursor = page.cursor;
+    questions = page.questions || [];
+    presentations = page.presentations || {};
     for (const event of page.events) events.push(event);
     if (events.length > 256) events.splice(0, events.length - 256);
-    publish({ status, events });
+    publish({ status, events, questions, presentations });
   }
   async function poll() {
     if (polling) return;
@@ -70,7 +74,7 @@ function conversationClient(stateDir, publish) {
       lease?.close();
       lease = null;
       status = { phase: 'failed', voice: 'off', error: error.message };
-      publish({ status, events });
+      publish({ status, events, questions, presentations });
     } finally {
       polling = false;
     }
@@ -94,7 +98,7 @@ function conversationClient(stateDir, publish) {
   }
   return {
     poll,
-    snapshot: () => ({ status, events }),
+    snapshot: () => ({ status, events, questions, presentations }),
     send(text, requestId) {
       if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 8192)
         throw Error('Enter a message under 8192 bytes.');
@@ -121,6 +125,12 @@ function conversationClient(stateDir, publish) {
         lease = null;
         throw error;
       }
+    },
+    voiceActivity(speaker, active) {
+      if (!lease) return;
+      if (!['human', 'assistant'].includes(speaker) || typeof active !== 'boolean')
+        throw Error('Invalid voice activity.');
+      return request({ op: 'conversation-voice-activity', client_id: clientId, speaker, active });
     },
     async stopVoice() {
       if (!lease) return;

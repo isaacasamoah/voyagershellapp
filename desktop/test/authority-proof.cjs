@@ -192,7 +192,7 @@ exports.run = async ({
     await wait(
       async () => {
         await refresh();
-        return ui("document.querySelectorAll('.escalation textarea').length");
+        return ui("document.querySelectorAll('.chat-question').length");
       },
       (n) => n === 1,
       'Owner question did not appear',
@@ -201,7 +201,7 @@ exports.run = async ({
       .capturePage()
       .then((image) => fs.writeFile(path.join(stateDir, 'authority-panel.png'), image.toPNG()));
     await ui(
-      "(async()=>{const form=document.querySelector('.escalation');form.querySelector('textarea').value='Reply exactly OWNER_DECISION_42. No other action is needed.';form.querySelector('textarea').dispatchEvent(new Event('input'));await form.onsubmit({preventDefault(){}});})()",
+      "(async()=>{document.getElementById('chat-text').value='Answer the pending question from the test vessel: Reply exactly OWNER_DECISION_42. No other action is needed.';await document.getElementById('chat-form').onsubmit({preventDefault(){}});})()",
     );
     const answered = await wait(
       () => rpc('escalations'),
@@ -212,7 +212,7 @@ exports.run = async ({
       'Owner answer not delivered',
     );
     observations.push({
-      action: 'owner escalation and panel adjudication',
+      action: 'owner escalation and chat response',
       question,
       answer: answered.find((e) => e.request_id === question.request_id),
     });

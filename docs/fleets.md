@@ -15,7 +15,7 @@ and minimise the other managed terminals. Its top-right **⋯** retains lifecycl
 and assignment actions. **Minimise** retains the terminal client. **Background**
 closes the client while keeping the agent runtime and capture.
 
-Choose **Add fleet**, enter a name, then drag Vessel cards onto its canvas.
+Use **+** opposite **Fleets**, enter its goal, then drag Vessel cards onto its canvas.
 Dragging a supervisor carries its assigned descendants. Each Vessel appears in
 one Fleet or in the main Vessels list. Drag back to that list to leave a Fleet.
 New descendants inherit their supervisor's Fleet unless explicitly moved.
@@ -42,8 +42,9 @@ it does not infer height from the number of registered instances.
 ## Implementation and checks
 
 `desktop/src/ui/hierarchy.js` derives rank branches and inherited membership.
-`desktop/src/fleets.cjs` serialises atomic, private writes to fleets.json in the
-existing state directory. It stores Fleet names and explicit membership roots;
+`service/fleets.rs` serialises atomic, private writes to fleets.json in the
+existing state directory. The CLI, conversation tools and desktop all use that
+one service owner through named actions. It stores Fleet names and explicit membership roots;
 corrupt settings refuse edits and remain preserved. These are local presentation
 settings, separate from the service's authoritative rank and lifecycle data.
 The renderer uses named preload actions; it never reads state files directly.
@@ -52,8 +53,9 @@ The existing Rust window helper applies identified presentation plans. Surfacing
 minimising and Fleet membership do not move docking authority. Dedicated Ghostty
 XWayland remains the supported terminal surface.
 
-`npm test` checks persistence, repeated creation, concurrent edits, subtree moves,
-future descendants, removal, invalid data and collapsed rank rows.
+Cargo tests cover private persistence, repeated creation, branch moves, removal,
+invalid data and authority. Desktop tests cover named routing, inherited membership
+and collapsed rank rows.
 `npm start -- --expanded --proof-fleets` exercises the actual desktop panel with
 an existing Captain hierarchy and empty Fleet settings. It creates a temporary
 Fleet, delivers programmatic drag/drop events, checks measured native panel

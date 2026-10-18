@@ -9,8 +9,7 @@ const { conversationClient } = require('./conversation.cjs');
 const { authorityActions } = require('./authority.cjs');
 const { vesselPlan } = require('./layout.cjs');
 const hierarchy = require('./ui/hierarchy.js');
-const { fleetStore } = require('./fleets.cjs');
-const { visibleEscalations } = require('./ui/authority.js');
+const { fleetActions } = require('./fleets.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
@@ -44,13 +43,11 @@ let avatarWin,
   seated = false,
   dragging = null,
   binding = null;
-const fleets = fleetStore(path.join(stateDir, 'fleets.json'), () => rpc('list'));
+const fleets = fleetActions(rpc);
 let fleetData = { fleets: [], assignments: {} },
   fleetError = null,
   measuredPanelHeight = 372;
 let sessions = [],
-  escalations = [],
-  escalationError = null,
   selected = null,
   windows = [],
   records = [];
@@ -228,8 +225,6 @@ function sendState() {
     service,
     fleetData,
     fleetError,
-    escalations,
-    escalationError,
     serviceError,
     platformError,
     dockError,
@@ -528,12 +523,6 @@ async function refresh() {
     service = nextService;
     sessions = nextSessions;
     try {
-      escalations = await rpc('escalations');
-      escalationError = null;
-    } catch {
-      escalationError = 'Questions could not be loaded.';
-    }
-    try {
       fleetData = await fleets.read();
       fleetError = null;
     } catch (error) {
@@ -771,6 +760,9 @@ app.whenReady().then(async () => {
   handle('conversation-send', [panelWin], (text, request) => conversation.send(text, request));
   handle('conversation-voice-start', [avatarWin], (sdp) => conversation.startVoice(sdp));
   handle('conversation-voice-stop', [avatarWin], () => conversation.stopVoice());
+  handle('conversation-voice-activity', [avatarWin], (speaker, active) =>
+    conversation.voiceActivity(speaker, active),
+  );
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
@@ -853,11 +845,6 @@ app.whenReady().then(async () => {
   );
   handle('supervise-instance', [panelWin], (id, supervisor, request) =>
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
-  );
-  handle('adjudicate-escalation', [panelWin], (id, escalation, decision, message, request) =>
-    authorityAction(() =>
-      authorityActionsForInstance.adjudicate(id, escalation, decision, message, request),
-    ),
   );
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;

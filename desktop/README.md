@@ -155,7 +155,7 @@ It makes no model requests. The separate ignored Rust native test in the
 `npm start -- --proof-authority` requires a fresh private VOYAGER_STATE, the built
 Rust binaries, installed Codex and a graphical session. It creates real Captain,
 Crew and Bash instances through the panel, checks creation defaults, changes an
-assignment, exercises dock/undock authority and answers an owner escalation.
+assignment, exercises dock/undock authority and answers an owner escalation through chat.
 It records authority-proof.json and authority-panel.png in that private state,
 then stops its own instances and service. It makes native model calls. Physical
 drag quality and sound remain a separate user check. The ignored Rust
@@ -164,8 +164,8 @@ native_authority test separately checks native agent tool identity.
 ## Vessels and fleets
 
 [The panel contract](../docs/fleets.md) owns the terms and gestures.
-`src/ui/hierarchy.js` derives command branches; `src/fleets.cjs` persists local
-collections independently of authority. `src/layout.cjs` calculates rank rows
+`src/ui/hierarchy.js` derives command branches; `src/fleets.cjs` routes collection actions to the Rust service independently
+of authority. `src/layout.cjs` calculates rank rows
 using native minimum sizes. The card surfaces a Vessel and its top-right menu
 retains lifecycle actions. Fleet canvases accept dragged Vessel cards.
 

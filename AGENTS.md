@@ -35,7 +35,8 @@ Read `docs/authority.md` before changing that boundary. Native voice and explici
 preemptive override remain separate from rank and ordinary steering.
 
 Rank presentation derives from service assignments in `desktop/src/ui/hierarchy.js`.
-Fleet membership is separate, local presentation data in `desktop/src/fleets.cjs`.
+Fleet membership is separate, local presentation data owned by `src/service/fleets.rs`;
+`desktop/src/fleets.cjs` only calls its named service actions.
 Cell geometry belongs in `desktop/src/layout.cjs`; native placement uses
 `src/window_layout.rs`. Read `docs/fleets.md` before changing these boundaries.
 Minimise retains the terminal; background closes it. Neither changes authority.
@@ -50,3 +51,9 @@ Vessel identity, capture and authority. Provider work must not block the service
 loop; losing a desktop voice lease stops audio, not the runtime. Keep internal
 reasoning unavailable to instance callers. Evidence and account data stay outside
 the repository.
+
+The private conversation's tool catalog is `src/service/conversation-tools.json`;
+`conversation_tools.rs` maps those named operations to the existing service. Keep
+the app owner, Vessel rank and no-tools escalation presenter distinct. The model
+may explain evidence; only an actual human reply may be routed as an answer,
+unchanged and bound to its original request. Recheck pending sources before speech.
