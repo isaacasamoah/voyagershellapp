@@ -190,6 +190,16 @@ fn main() -> Result<()> {
                 json!({"op":"dock","session_id":session,"generation":uuid::Uuid::new_v4().to_string(),"window_id":window_id.ok_or_else(||anyhow::anyhow!("dock requires --window-id"))?,"terminal":process(terminal_pid)?,"frontend":process(client_pid)?}),
             );
         }
+        [op] if op == "conversation" => json!({"op":"conversation","after":0}),
+        [op, after] if op == "conversation" => {
+            json!({"op":"conversation","after":after.parse::<u64>()?})
+        }
+        [op, id, text] if op == "chat" => {
+            json!({"op":"conversation-send","request_id":id,"text":text})
+        }
+        [op, id] if op == "chat-operation" => {
+            json!({"op":"conversation-operation","request_id":id})
+        }
         [op] if ["capabilities", "escalations"].contains(&op.as_str()) => json!({"op":op}),
         [op, session] if op == "capabilities" => json!({"op":op,"session_id":session}),
         [op, session, rank] if op == "rank" => json!({"op":op,"session_id":session,"rank":rank}),
@@ -284,6 +294,7 @@ fn main() -> Result<()> {
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | capabilities [SESSION]\n\
+            conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
             report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
             adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\
             dock SESSION --window-id W --terminal-pid P --client-pid P (holds connection) | undock GENERATION\n\

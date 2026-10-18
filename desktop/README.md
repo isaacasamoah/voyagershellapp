@@ -177,3 +177,10 @@ An empty canvas starts at one row and grows with its visible cards.
 branches and cell geometry. `--proof-fleets` exercises programmatic drag/drop and
 native sizing on an existing hierarchy, without agent/model launches. Physical
 pointer testing remains separate.
+
+## Conversation
+
+`src/conversation.cjs` owns the named service calls and voice lease.
+`src/ui/conversation.js` presents chat and owns audio in the avatar renderer.
+The [conversation contract](../docs/harness-runtime.md) covers startup, privacy,
+CLI operations, lifecycle and the optional `--proof-conversation` check.

@@ -42,7 +42,11 @@ Minimise retains the terminal; background closes it. Neither changes authority.
 Panel size follows rendered content through ResizeObserver, capped to the display.
 Do not reintroduce Vessel-count estimates or duplicate supervisor group headers.
 
-The opt-in private-runtime experiment lives in `examples/harness-runtime/` and
-`desktop/experiments/harness/`; its contract is `docs/harness-runtime.md`.
-It has no public service action for internal reasoning and does not change normal
-startup. Keep its test evidence and account data outside the repository.
+The service-owned private conversation lives in `src/service/conversation.rs`.
+Its desktop boundary is `desktop/src/conversation.cjs`; microphone/playback and
+progressive chat belong in `desktop/src/ui/conversation.js`. Read
+`docs/harness-runtime.md` before changing these boundaries. It is separate from
+Vessel identity, capture and authority. Provider work must not block the service
+loop; losing a desktop voice lease stops audio, not the runtime. Keep internal
+reasoning unavailable to instance callers. Evidence and account data stay outside
+the repository.

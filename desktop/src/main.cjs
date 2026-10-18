@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
+const { conversationClient } = require('./conversation.cjs');
 const { authorityActions } = require('./authority.cjs');
 const { vesselPlan } = require('./layout.cjs');
 const hierarchy = require('./ui/hierarchy.js');
@@ -62,6 +63,12 @@ const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let controlConnection = null;
+const conversation = conversationClient(stateDir, (value) => {
+  for (const client of [avatarWin, panelWin]) {
+    if (client && !client.isDestroyed()) client.webContents.send('conversation', value);
+  }
+});
+let conversationTimer;
 let layer = '';
 let dockHovered = false,
   panelHovered = false,
@@ -716,9 +723,7 @@ function createWindow(width, height) {
   });
   client.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   client.webContents.on('will-navigate', (event) => event.preventDefault());
-  client.webContents.session.setPermissionRequestHandler((_web, _permission, callback) =>
-    callback(false),
-  );
+
   client.on('closed', () => app.quit());
   return client;
 }
@@ -734,6 +739,20 @@ app.whenReady().then(async () => {
     const panel = panelWin.getBounds();
     setBoundsIfChanged(avatarWin, { x: panel.x + 100, y: panel.y + 36 });
   });
+  const localAvatar = (contents, details) =>
+    contents === avatarWin.webContents && details.isMainFrame;
+  avatarWin.webContents.session.setPermissionCheckHandler(
+    (contents, permission, origin, details) =>
+      permission === 'media' && details.mediaType === 'audio' && localAvatar(contents, details),
+  );
+  avatarWin.webContents.session.setPermissionRequestHandler(
+    (contents, permission, callback, details) =>
+      callback(
+        permission === 'media' &&
+          localAvatar(contents, details) &&
+          details.mediaTypes?.every((type) => type === 'audio'),
+      ),
+  );
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
@@ -745,9 +764,13 @@ app.whenReady().then(async () => {
           dockError = 'Couldn’t connect to this terminal.';
           sendState();
         }
-        return { error: error.message };
+        return { error: error.message, code: error.code };
       }
     });
+  handle('conversation-ready', [avatarWin, panelWin], () => conversation.snapshot());
+  handle('conversation-send', [panelWin], (text, request) => conversation.send(text, request));
+  handle('conversation-voice-start', [avatarWin], (sdp) => conversation.startVoice(sdp));
+  handle('conversation-voice-stop', [avatarWin], () => conversation.stopVoice());
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
@@ -920,6 +943,8 @@ app.whenReady().then(async () => {
     console.error(error.message);
   }
   await refresh();
+  await conversation.poll();
+  conversationTimer = setInterval(() => conversation.poll(), 250);
   if (process.argv.includes('--expanded')) await setExpanded(true);
   if (
     !globalShortcut.register('Control+Alt+V', () => {
@@ -929,6 +954,25 @@ app.whenReady().then(async () => {
     })
   )
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
+  if (process.argv.includes('--proof-conversation')) {
+    require('./conversation-proof.cjs')
+      .run({
+        panelWin,
+        avatarWin,
+        conversation,
+        rpc,
+        directory: process.env.VOYAGER_CONVERSATION_PROOF_DIR,
+        screen,
+      })
+      .catch(async (error) => {
+        console.error(error);
+        if (process.env.VOYAGER_CONVERSATION_PROOF_DIR)
+          await fs.writeFile(
+            path.join(process.env.VOYAGER_CONVERSATION_PROOF_DIR, 'error.txt'),
+            error.stack,
+          );
+      });
+  }
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
@@ -1025,6 +1069,8 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   controlConnection?.close();
+  conversation.close();
+  clearInterval(conversationTimer);
   globalShortcut.unregisterAll();
   clearInterval(timer);
   clearInterval(dragTimer);

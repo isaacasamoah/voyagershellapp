@@ -35,6 +35,7 @@ use std::{
 };
 
 mod authority_ops;
+mod conversation;
 mod lifecycle;
 mod native;
 use native::NativeCall;
@@ -206,6 +207,10 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     let codex = server.as_deref().map(Codex::connect).transpose()?;
     Credentials::clear_stale(state)?;
     let mut runtime = Runtime {
+        conversation: conversation::Conversation::start(
+            &std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
+            state,
+        ),
         credentials: Credentials::new(),
         control: Control::new(&store)?,
         store,
@@ -300,6 +305,12 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                         request["control_generation"] =
                             runtime.control.current()["generation"].clone();
                     }
+                    if request["op"] == "conversation-attach" {
+                        let result = runtime
+                            .conversation
+                            .attach(string(&request, "client_id")?, stream.try_clone()?)?;
+                        return Ok(Some((result, false)));
+                    }
                     if request["op"] == "dock" {
                         runtime.ensure_connected(string(&request, "session_id")?)?;
                         let peer =
@@ -373,6 +384,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
 }
 
 struct Runtime {
+    conversation: conversation::Conversation,
     credentials: Credentials,
     control: Control,
     store: Store,
@@ -454,6 +466,16 @@ impl Runtime {
             "rank" | "supervise" | "report" | "adjudicate" | "escalate" => {
                 self.authority_operation(&request)?
             }
+            "conversation" => self.conversation.snapshot(
+                request["after"].as_u64().unwrap_or(0),
+                request["client_id"].as_str(),
+            ),
+            "conversation-operation" => {
+                self.conversation.receipt(string(&request, "request_id")?)?
+            }
+            "conversation-send" | "conversation-voice-start" | "conversation-voice-stop" => {
+                self.conversation.request(&request)?
+            }
             "capabilities" => self.capabilities(&request)?,
             "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
@@ -484,7 +506,7 @@ impl Runtime {
                 receipt
             }
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -649,6 +671,7 @@ impl Runtime {
     }
 
     fn observe(&mut self) -> Result<()> {
+        self.conversation.observe();
         for index in (0..self.terminals.len()).rev() {
             if self.terminals[index].child.try_wait()?.is_some()
                 && self.terminals[index]

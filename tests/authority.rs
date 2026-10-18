@@ -212,6 +212,19 @@ fn creation_defaults_owner_coordination_and_terminal_refusal_are_real_boundary_c
     let ca = s.context("captain");
     let cr = s.context("crew");
     let terminal = s.context("shell");
+    for actor in [&a, &ca, &cr, &terminal] {
+        assert_eq!(
+            s.raw(Some(actor), json!({"op":"conversation"}))["code"],
+            "forbidden"
+        );
+        assert_eq!(
+            s.raw(
+                Some(actor),
+                json!({"op":"conversation-send","request_id":"private","text":"hello"})
+            )["code"],
+            "forbidden"
+        );
+    }
     let request = json!({"op":"create","kind":"codex","request_id":"omitted-rank","cwd":s.dir,"name":"default report","open":false});
     assert_eq!(s.raw(Some(&a), request.clone())["code"], "forbidden");
     assert!(!s.dir.join("contexts/omitted-rank.json").exists());

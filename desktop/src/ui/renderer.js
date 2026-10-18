@@ -45,6 +45,7 @@ function renderState(value) {
   $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
   document.body.dataset.seated = String(value.seated);
+  document.body.dataset.docked = String(Boolean(value.docked && !value.seated));
   document.body.dataset.panelHovered = String(value.panelHovered);
   $('avatar').dataset.hovered = String(value.dockHovered);
   document.body.dataset.connected = String(!value.serviceError);
@@ -56,13 +57,7 @@ function renderState(value) {
       : 'floating';
   $('connection').textContent = value.serviceError ? 'Offline' : 'Online';
   $('avatar').title =
-    value.platformError ||
-    value.dockError ||
-    (value.docked && value.service?.voice?.state === 'unsupported'
-      ? 'Master control · automatic voice is not available yet'
-      : value.docked
-        ? 'Master control'
-        : '');
+    value.platformError || value.dockError || (value.docked ? 'Master control' : '');
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
   currentSessions = value.sessions;

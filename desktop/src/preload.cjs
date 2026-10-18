@@ -2,6 +2,15 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld(
   'voyager',
   Object.freeze({
+    conversationReady: () => ipcRenderer.invoke('conversation-ready'),
+    chat: (text, request) => ipcRenderer.invoke('conversation-send', text, request),
+    startVoice: (sdp) => ipcRenderer.invoke('conversation-voice-start', sdp),
+    stopVoice: () => ipcRenderer.invoke('conversation-voice-stop'),
+    onConversation: (callback) => {
+      const listener = (_event, value) => callback(value);
+      ipcRenderer.on('conversation', listener);
+      return () => ipcRenderer.removeListener('conversation', listener);
+    },
     toggle: () => ipcRenderer.invoke('toggle'),
     beginDrag: (x, y) => ipcRenderer.invoke('begin-drag', x, y),
     endDrag: () => ipcRenderer.invoke('end-drag'),

@@ -44,15 +44,16 @@ The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 
-Explicit supervisor preemption, automatic native voice, knowledge extraction and
+Explicit supervisor preemption, automatic terminal voice handoff, knowledge extraction and
 shared graphs are later work. Voyager is an experimental prototype.
 
-## Separate conversation experiment
+## Talk to Voyager
 
-An opt-in [private runtime and Electron voice experiment](docs/harness-runtime.md)
-proved terminal-free text requests and a WebRTC audio round trip with one
-ChatGPT-authenticated Codex account. Human voice acceptance and integration into
-normal service startup remain pending; this is separate from terminal docking.
+Voyager starts a private Codex runtime with the service. Reveal **Talk to Voyager**
+at the panel bottom to type, or press the avatar's soundwave to use voice.
+The conversation stays separate from terminal sessions and Vessel capture.
+Closing Electron stops voice while the runtime and work continue.
+[Conversation setup and current limits](docs/harness-runtime.md).
 
 ## Try it
 

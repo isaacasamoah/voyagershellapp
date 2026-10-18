@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; media-src 'self' blob:; connect-src 'none'"
     />
     <title>Voyager</title>
     <link rel="stylesheet" href="style.css" />
@@ -128,6 +128,23 @@
               <p id="escalation-error" role="status" hidden></p>
               <div id="escalation-list"></div>
             </section>
+            <details id="conversation" aria-label="Talk to Voyager">
+              <summary>
+                Talk to Voyager<span id="chat-unread" hidden aria-label="New reply"> ·</span>
+              </summary>
+              <div id="chat-messages" role="log" aria-live="polite"></div>
+              <form id="chat-form">
+                <input
+                  id="chat-text"
+                  aria-label="Message Voyager"
+                  placeholder="What's on your mind?"
+                  maxlength="8192"
+                  autocomplete="off"
+                />
+                <button id="chat-send" aria-label="Send message" title="Send">↑</button>
+              </form>
+              <p id="chat-status" role="status" hidden></p>
+            </details>
             <p id="tagline">Let’s Go Together</p>
           </div>
         </div>
@@ -143,9 +160,16 @@
         <img src="../../assets/idle.png" alt="" draggable="false" />
         <span id="indicator" aria-hidden="true"></span>
       </button>
+      <button id="voice-toggle" aria-label="Start voice" title="Start voice" aria-pressed="false">
+        <svg viewBox="0 0 20 16" aria-hidden="true">
+          <path d="M2 6v4M6 3v10M10 1v14M14 3v10M18 6v4" />
+        </svg>
+      </button>
+      <audio id="voice-output" autoplay></audio>
     </main>
     <script src="authority.js"></script>
     <script src="hierarchy.js"></script>
     <script src="renderer.js"></script>
+    <script src="conversation.js"></script>
   </body>
 </html>
