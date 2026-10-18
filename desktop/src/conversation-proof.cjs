@@ -55,7 +55,9 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }
           event.data.text === 'Voyager is ready to chat.',
       );
   });
-  result.text_events = conversation.snapshot().events;
+  result.text_events = conversation
+    .snapshot()
+    .events.filter((event) => ['message', 'turn-completed'].includes(event.type));
   const fixture = (await fs.readFile(process.env.VOYAGER_CONVERSATION_PROOF_AUDIO)).toString(
     'base64',
   );
