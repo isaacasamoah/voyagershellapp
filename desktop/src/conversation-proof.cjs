@@ -88,6 +88,14 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }
     path.join(directory, 'avatar.png'),
     (await avatarWin.webContents.capturePage()).toPNG(),
   );
+  if (process.env.VOYAGER_CONVERSATION_PROOF_TOOLS === '1')
+    result.assignment = await require('./assignment-proof.cjs').run({
+      panelWin,
+      avatarWin,
+      conversation,
+      rpc,
+      directory,
+    });
   await fs.writeFile(path.join(directory, 'proof.json'), JSON.stringify(result, null, 2));
   console.log(`Conversation proof passed: ${directory}`);
   return result;

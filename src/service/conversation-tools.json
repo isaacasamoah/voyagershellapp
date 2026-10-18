@@ -13,7 +13,7 @@
   {
     "type": "function",
     "name": "voyager_vessels",
-    "description": "List registered Vessels with exact IDs, names, kind, rank, assignment, runtime and window state. Resolve targets by ID, never guess.",
+    "description": "List registered Vessels with exact IDs, names, kind, rank, assignment, runtime and capture state. Resolve targets by ID, never guess.",
     "inputSchema": {
       "type": "object",
       "properties": {},

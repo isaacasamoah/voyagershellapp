@@ -95,6 +95,13 @@ checks icon placement and measures decoded WebRTC return audio. The audio input
 is a generated fixture and playback is silent during this test. Human microphone,
 audible playback and interruption still require a real user trial on this build.
 
+Set `VOYAGER_CONVERSATION_PROOF_TOOLS=1` and
+`VOYAGER_ASSIGNMENT_PROOF_AUDIO` to an explicit test-answer WAV to extend the
+proof through a real Codex Vessel, Fleet tools, agent-originated escalation,
+rewriting, notification audio and bound spoken reply. It uses only its fresh
+state and removes its test Vessel/Fleet afterward. Results remain private.
+
+
 The standalone experiment window and Rust example were replaced by this shared
 implementation. Their historical source remains in Git at `8cfd225`.
 

@@ -605,6 +605,17 @@ impl Runtime {
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
             "events" => {
                 let mut page = self.store.events(request["after"].as_i64().unwrap_or(0))?;
+                if let Some(target) = request.get("session_id") {
+                    let id = target.as_str().context("invalid_input: event session ID")?;
+                    ensure!(
+                        self.can_read(&request["actor"], id)?,
+                        "forbidden: event target outside caller scope"
+                    );
+                    page["events"]
+                        .as_array_mut()
+                        .context("event page")?
+                        .retain(|event| event["session_id"] == id);
+                }
                 if !authority::is_owner(&request["actor"]) {
                     let mut permitted = Vec::new();
                     for event in page["events"].as_array().context("events missing")? {
