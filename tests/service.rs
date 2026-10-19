@@ -182,8 +182,11 @@ impl Fixture {
         self.start_with_voice("0");
     }
     fn start_with_voice(&mut self, voice: &str) {
+        self.start_with_binary(voice, Path::new(env!("CARGO_BIN_EXE_voyager")));
+    }
+    fn start_with_binary(&mut self, voice: &str, binary: &Path) {
         self.service = Some(
-            Command::new(env!("CARGO_BIN_EXE_voyager"))
+            Command::new(binary)
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
                     "VOYAGER_CODEX_BIN",
@@ -882,6 +885,48 @@ fn closing_terminal_releases_control_without_stopping_external_server() {
             .iter()
             .any(|e| e["payload"]["reason"] == "terminal_closed")
     );
+}
+
+#[test]
+fn replaced_service_binary_keeps_shell_viewer_and_worker_cli_paths_usable() {
+    let mut f = Fixture::new();
+    let binary = f.dir.join("voyager");
+    fs::copy(env!("CARGO_BIN_EXE_voyager"), &binary).unwrap();
+    f.start_with_binary("0", &binary);
+    let replacement = f.dir.join("replacement");
+    fs::copy(env!("CARGO_BIN_EXE_voyager"), &replacement).unwrap();
+    fs::rename(replacement, &binary).unwrap();
+    let running = fs::read_link(format!("/proc/{}/exe", f.service.as_ref().unwrap().id())).unwrap();
+    assert!(running.to_string_lossy().ends_with(" (deleted)"));
+    let receipt = f.call(json!({"op":"create","open":false,"kind":"shell","request_id":"shell-after-rebuild","name":"Workbench","cwd":f.dir}));
+    let session = &receipt["session_id"];
+    let info = f.call(json!({"op":"attach-info","session_id":session}));
+    assert_eq!(info["executable"], binary.to_str().unwrap());
+    wait(|| f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true);
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"cli-after-rebuild","command":"\"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > cli.json"}));
+    wait(|| {
+        fs::read_to_string(f.dir.join("cli.json"))
+            .is_ok_and(|s| serde_json::from_str::<Value>(&s).is_ok())
+    });
+    let worker = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"worker-after-rebuild","name":"Agent","cwd":f.dir}));
+    assert_eq!(worker["runtime"], "running");
+    fs::remove_file(&binary).unwrap();
+    let open = f.call(json!({"op":"open","session_id":session,"terminal":"ghostty","request_id":"missing-viewer-binary"}));
+    assert_eq!(open["state"], "partial");
+    assert!(
+        open["error"]
+            .as_str()
+            .unwrap()
+            .contains("native executable unavailable")
+    );
+    assert!(open["pid"].is_null());
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        receipt["runtime_pid"]
+    );
+    f.call(json!({"op":"stop-instance","session_id":session}));
+    f.call(json!({"op":"stop-instance","session_id":worker["session_id"]}));
+    f.halt();
 }
 
 #[test]

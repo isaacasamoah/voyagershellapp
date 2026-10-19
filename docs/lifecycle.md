@@ -51,10 +51,20 @@ independently disowned or escaped processes are outside this contract.
 
 Each viewer has its own child and the exact mapped X11 window ID. Mapping requires
 one window belonging to the live child; ambiguous or unidentified windows fail.
+For Bash, opening also waits for the shell viewer's connection; a Ghostty error
+window alone does not confirm attachment. Absolute executable paths must exist
+and be executable before Ghostty starts. Codex window mapping does not prove a
+completed agent turn.
 Focus uses `_NET_ACTIVE_WINDOW` and confirms the request, not keyboard focus.
 Close uses `_NET_CLOSE_WINDOW`; completion means that mapped window is gone.
 Ghostty may remain resident afterward. A known closed viewer can be reopened
 without restarting the runtime; an unidentified opening is not guessed away.
+
+The service records its Voyager executable path at startup and uses that path
+for Bash viewers and each instance's `VOYAGER_BIN`. Replacing the build artifact
+at the same path does not change it to Linux's ` (deleted)` process label. The
+replacement must remain a compatible CLI; removing it produces a failed open,
+not a new runtime. A service restart is still required to load changed service code.
 
 Voyager launches dedicated Ghostty XWayland clients with
 `--confirm-close-surface=false`. Closing that viewer detaches from service-owned
@@ -94,6 +104,18 @@ Voyager's runtime owner handles cleanup explicitly.
 ## Native checks
 
 Normal Cargo/Electron tests use fixtures and real PTYs without model calls.
+The binary-replacement regression checks viewer paths, bound CLI access and
+missing-file failure. A separate real Ghostty/Bash check exercises replacement,
+same-runtime reopen and a failing client command without a false success:
+
+```sh
+VOYAGER_NATIVE_SHELL_DIR="$(mktemp -u /tmp/voyager-shell-XXXXXXXX)" \
+  cargo test --locked --test native_shell_viewer -- --ignored --nocapture
+```
+
+Use a fresh private directory on a graphical Linux session. It saves `proof.json`
+there and stops its own shell and service. It does not exercise a model turn or voice.
+
 The [panel lifecycle proof](../desktop/README.md#lifecycle-experiment) uses two
 real Bash/Ghostty instances. It checks menu hit testing, background/reopen,
 already-closed viewers, stop, capture cutoff, re-registration, and row removal.

@@ -45,6 +45,8 @@ The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
+Rebuilding the executable at the same path preserves viewer and instance CLI paths.
+Bash open receipts also wait for the viewer connection, not just a Ghostty window.
 
 Explicit supervisor preemption, knowledge extraction and shared graphs are later
 work. Voyager is an experimental prototype.

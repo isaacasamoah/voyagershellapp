@@ -60,6 +60,7 @@ pub struct Shell {
     listener: UnixListener,
     viewer: Option<Viewer>,
     socket: PathBuf,
+    binary: PathBuf,
     output: Vec<u8>,
     output_start: u64,
     pending: Option<String>,
@@ -75,7 +76,13 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn start(store: &mut Store, state: &Path, launch: &str, cwd: &str) -> Result<Self> {
+    pub fn start(
+        store: &mut Store,
+        state: &Path,
+        binary: &Path,
+        launch: &str,
+        cwd: &str,
+    ) -> Result<Self> {
         let dir = state.join(format!("s-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir(&dir)?;
         let socket = dir.join("t.sock");
@@ -107,7 +114,7 @@ impl Shell {
             .current_dir(cwd)
             .env("TERM", "xterm-256color")
             .env("VOYAGER_STATE", state)
-            .env("VOYAGER_BIN", std::env::current_exe()?)
+            .env("VOYAGER_BIN", binary)
             .env("VOYAGER_CALLER", "instance")
             .env(
                 "VOYAGER_SESSION_CONTEXT",
@@ -140,6 +147,7 @@ impl Shell {
             listener,
             viewer: None,
             socket,
+            binary: binary.to_owned(),
             output: Vec::new(),
             output_start: 0,
             pending: None,
@@ -172,9 +180,12 @@ impl Shell {
     pub fn attach(&self, state: &Path) -> Result<Value> {
         ensure!(self.alive, "shell ended or command capture unavailable");
         Ok(
-            json!({"executable":std::env::current_exe()?,"args":["--state",state,"shell-attach",self.session],
+            json!({"executable":self.binary,"args":["--state",state,"shell-attach",self.session],
             "pid":self.process.id(),"session_id":self.session,"socket":self.socket,"kind":"shell"}),
         )
+    }
+    pub fn viewer_connected(&self) -> bool {
+        self.viewer.is_some()
     }
     pub fn output(&self, after: u64) -> Value {
         let end = self.output_start + self.output.len() as u64;

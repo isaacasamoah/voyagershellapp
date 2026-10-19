@@ -234,6 +234,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         creations: HashMap::new(),
         native_calls: Vec::new(),
         state: fs::canonicalize(state)?,
+        binary: std::env::current_exe()?,
         executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
     };
     let listener = UnixListener::bind(&socket_path)?;
@@ -410,6 +411,7 @@ struct Runtime {
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
     state: PathBuf,
+    binary: PathBuf,
     executable: String,
 }
 

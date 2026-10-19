@@ -53,6 +53,7 @@ pub struct Worker {
 impl Worker {
     pub fn begin(
         state: &Path,
+        binary: &Path,
         executable: &str,
         launch: &str,
         cwd: &str,
@@ -66,7 +67,6 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
-        let binary = std::env::current_exe()?;
         let child = Command::new(executable)
             .args([
                 "app-server",

@@ -143,7 +143,7 @@ impl Runtime {
             }
         };
         if kind == "shell" {
-            match Shell::start(&mut self.store, &self.state, id, cwd) {
+            match Shell::start(&mut self.store, &self.state, &self.binary, id, cwd) {
                 Ok(shell) => {
                     let session = shell.session.clone();
                     self.shells.insert(session.clone(), shell);
@@ -152,7 +152,15 @@ impl Runtime {
                 Err(error) => self.fail_creation(id, error.to_string())?,
             }
         } else {
-            match Worker::begin(&self.state, &self.executable, id, cwd, name, &context) {
+            match Worker::begin(
+                &self.state,
+                &self.binary,
+                &self.executable,
+                id,
+                cwd,
+                name,
+                &context,
+            ) {
                 Ok(startup) => {
                     self.creations.insert(id.into(), (inputs, startup));
                 }
@@ -456,6 +464,12 @@ impl Runtime {
                                 terminal::window(terminal.child.id())? == Some(window),
                                 "outcome_unknown: terminal window identity changed"
                             );
+                            ensure!(
+                                self.shells
+                                    .get(&id)
+                                    .is_none_or(|shell| shell.viewer_connected()),
+                                "provider_failed: terminal has no attached shell viewer; close it before reopening"
+                            );
                             terminal::focus(terminal.child.id())?;
                             operation.receipt["window_id"] = json!(window);
                             operation.receipt["pid"] = json!(terminal.child.id());
@@ -648,6 +662,14 @@ impl Runtime {
                 if let Some(window) = terminal::window(terminal.child.id())? {
                     terminal.window = Some(window);
                     operation.receipt["window_id"] = json!(window);
+                    if self
+                        .shells
+                        .get(&id)
+                        .is_some_and(|shell| !shell.viewer_connected())
+                    {
+                        operation.phase = Phase::WaitOpen;
+                        return Ok(false);
+                    }
                     operation.effect("open", "confirmed");
                     Ok(true)
                 } else {

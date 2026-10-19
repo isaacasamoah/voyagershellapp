@@ -31,6 +31,15 @@ pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
     let executable = info["executable"]
         .as_str()
         .context("missing native executable")?;
+    if Path::new(executable).is_absolute() {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(executable)
+            .with_context(|| format!("native executable unavailable: {executable}"))?;
+        ensure!(
+            metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
+            "native executable is not executable: {executable}"
+        );
+    }
     let args = info["args"]
         .as_array()
         .context("missing native arguments")?
