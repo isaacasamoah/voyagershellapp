@@ -250,6 +250,13 @@ pub fn authorize(store: &Store, actor: &Value, dock: Option<&str>, request: &Val
     if ["create", "launch"].contains(&op) {
         return Ok(());
     }
+    if ["fleets", "move-vessel"].contains(&op) {
+        ensure!(
+            dock == Some(id),
+            "forbidden: fleet organization requires the current dock"
+        );
+        return Ok(());
+    }
     let target = request["session_id"]
         .as_str()
         .context("forbidden: owner-only operation")?;

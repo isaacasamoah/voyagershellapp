@@ -1,7 +1,8 @@
 # Create an instance from the panel
 
 Open Voyager, click **+** above Instances, choose **Codex** or **Terminal · Bash**,
-enter a name and folder, select an agent rank (Crew by default), then choose **Create and open**. A real Ghostty window
+enter a name and folder, select an agent rank (Crew by default) and an existing
+Fleet if wanted, then choose **Create and open**. A real Ghostty window
 opens; the new instance is already registered and capturing. The desktop places
 it on the left half of the panel's display and minimises other managed viewers.
 While Electron is running, it also places newly observed Voyager-owned viewers

@@ -81,3 +81,35 @@ test('creation retry identity includes rank and assignment', async () => {
   assert.notEqual(calls[2][2], calls[3][2]);
   assert.deepEqual(calls[3].slice(5), ['--rank', 'captain', '--supervisor', 'commodore']);
 });
+test('fleet assignment failure retries the same runtime, including a changed destination', async () => {
+  const calls = [];
+  const create = instanceCreator(async (...args) => {
+    calls.push(args);
+    if (args[0] === 'fleets') return { fleets: [{ id: 'a' }, { id: 'b' }] };
+    if (args[0] === 'move-vessel' && args[2] === 'a') throw Error('Fleet changed');
+    return { state: 'completed', session_id: 'one' };
+  });
+  const input = { kind: 'codex', name: 'Writer', cwd: '/project', fleet: 'a' };
+  await assert.rejects(create(input), /same vessel/);
+  assert.deepEqual(await create({ ...input, fleet: 'b' }), { session: 'one' });
+  assert.equal(calls.filter((c) => c[0] === 'create').length, 1);
+  assert.deepEqual(
+    calls.filter((c) => c[0] === 'move-vessel'),
+    [
+      ['move-vessel', 'one', 'a'],
+      ['move-vessel', 'one', 'b'],
+    ],
+  );
+});
+test('a missing fleet fails before a runtime starts', async () => {
+  const calls = [];
+  const create = instanceCreator(async (...args) => {
+    calls.push(args);
+    return { fleets: [] };
+  });
+  await assert.rejects(
+    create({ kind: 'shell', name: 'Shell', cwd: '/project', fleet: 'gone' }),
+    /existing fleet/,
+  );
+  assert.deepEqual(calls, [['fleets']]);
+});

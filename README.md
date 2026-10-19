@@ -22,10 +22,12 @@ is our starting point, and we’d love to build toward it with other developers.
 ## Current prototype
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
-  Creation registers it and starts capture. Native windows open by default.
+  Creation registers it and starts capture. Choose a Fleet when one exists. Native
+  windows open by default.
 - Click a Vessel card to surface its terminal on half a display and minimise
   the others. Rank rows start collapsed; separate Fleets collect related vessels
-  through drag/drop. The panel and canvases size to their visible content.
+  through drag/drop or a request to Voyager/the docked agent. Membership is visual
+  organization and grants no authority. The panel and canvases size to their visible content.
   See [Vessels and fleets](docs/fleets.md).
 - **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.

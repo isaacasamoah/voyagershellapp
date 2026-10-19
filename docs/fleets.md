@@ -15,6 +15,11 @@ and minimise the other managed terminals. Its top-right **⋯** retains lifecycl
 and assignment actions, including Rename. **Minimise** retains the terminal client. **Background**
 closes the client while keeping the agent runtime and capture.
 
+When Fleets exist, the Vessel creation form offers a Fleet selector. Choose
+a destination or No fleet. Creation starts the same runtime, then sets visual
+membership; an assignment failure keeps that Vessel for an explicit retry.
+An invalid Fleet is refused before starting a new runtime.
+
 Use **+** opposite **Fleets**, enter its goal, then drag Vessel cards onto its canvas.
 Dragging a supervisor carries its assigned descendants. Each Vessel appears in
 one Fleet or in the main Vessels list. Drag back to that list to leave a Fleet.
@@ -66,3 +71,18 @@ bounds and canvas growth, surfaces a Fleet in native terminals, restores their
 previous geometry, then removes its own metadata. It preserves service
 registrations, ranks, assignments and capture. It creates no agent or model task.
 Physical dragging remains a user check.
+
+## Agent organization
+
+Voyager's private conversation uses `voyager_fleets` and
+`voyager_move_to_fleet`. A currently docked agent uses the same service through
+`fleets` and `move-vessel VESSEL FLEET|none`. Moving a supervisor carries its
+assigned descendants. Rank, supervisor, running work and capture are unchanged.
+The docked grant ends on undock; creating, renaming or deleting Fleet definitions
+remains an owner action. Normal terminal callers cannot edit membership.
+
+`npm start -- --expanded --proof-fleet-creation` uses a fresh private state and
+`VOYAGER_VOICE_FOLLOWS_DOCK=0`. It creates real Bash/Codex Vessels into a chosen
+Fleet, moves one through the private conversation's named tool, then moves it
+back through a real docked Codex turn and its bound CLI. It checks completion and
+unchanged rank/assignment, then removes only its test Vessels and Fleets.

@@ -61,3 +61,8 @@ runtime and closes its viewer; runtime-only is explicit. Undock and removal do
 not kill direct reports. Rank changes, assignment, removal and daemon shutdown
 remain owner operations. The service is the policy authority; this skill grants
 no rights and does not bypass native tool restrictions or OS permissions.
+
+While docked, `fleets` reads visual groups and `move-vessel VESSEL FLEET|none`
+moves a Vessel with its assigned descendants. Include `--control GENERATION`
+when acting for the human. Fleet membership changes no rank or supervisor.
+Undocking removes this Fleet-editing permission.

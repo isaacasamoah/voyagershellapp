@@ -306,6 +306,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                             "stop-instance",
                             "shell-exec",
                             "adjudicate",
+                            "move-vessel",
                         ]
                         .iter()
                         .any(|op| request["op"] == *op)
@@ -443,7 +444,8 @@ impl Runtime {
                     "background",
                     "stop-instance",
                     "shell-exec",
-                    "adjudicate"
+                    "adjudicate",
+                    "move-vessel"
                 ]
                 .contains(&string(request, "op")?),
                 "control precondition is only for agent commands"

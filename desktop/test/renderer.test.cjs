@@ -171,3 +171,15 @@ test('rank rows start collapsed and expand without a duplicate group header', as
   await tree.children[0].children[0].onclick();
   assert.deepEqual(requests, ['captain']);
 });
+test('existing fleets appear in creation and the selected fleet reaches the service action', async () => {
+  const ui = renderer();
+  ui.update();
+  assert.equal(ui.nodes.get('instance-fleet-field').hidden, true);
+  ui.update({ fleetData: { fleets: [{ id: 'a', name: 'Launch' }], assignments: {} } });
+  assert.equal(ui.nodes.get('instance-fleet-field').hidden, false);
+  ui.nodes.get('add').onclick();
+  ui.nodes.get('instance-name').value = 'Designer';
+  ui.nodes.get('instance-fleet').value = 'a';
+  await ui.nodes.get('create-form').onsubmit({ preventDefault() {} });
+  assert.equal(ui.calls[0].fleet, 'a');
+});

@@ -158,3 +158,8 @@ Normal fixture tests exercise all four ranks and denied relationship cases. The
 real native tool journey uses the Captain/Crew pair. Neither establishes native
 Wayland discovery, other terminal applications or crash recovery. Native voice
 has its own [adapter and proof limits](voice.md).
+
+Fleet membership is presentation data. The currently docked agent can list Fleets
+and move Vessel branches between them using the bound CLI. This grant expires
+on undock and never changes ranks or supervisory assignments. Fleet definition
+changes remain owner operations.

@@ -329,6 +329,30 @@ fn dock_grants_only_temporary_bound_agent_authority_without_promotion() {
     let caps = s.agent(&credential, json!({"op":"capabilities"}));
     assert_eq!(caps["rank"], "crew");
     assert_eq!(caps["dock_generation"], generation);
+    let fleet = uuid::Uuid::new_v4().to_string();
+    s.owner(json!({"op":"create-fleet","request_id":fleet,"name":"Visual organization"}));
+    assert!(
+        s.agent(&credential, json!({"op":"fleets"}))["fleets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["id"] == fleet)
+    );
+    let moved = s.agent(
+        &credential,
+        json!({"op":"move-vessel","session_id":target,"fleet_id":fleet}),
+    );
+    assert_eq!(moved["assignments"][&target], fleet);
+    let target_row = s
+        .owner(json!({"op":"list"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == target)
+        .unwrap()
+        .clone();
+    assert_eq!(target_row["rank"], "crew");
+    assert!(target_row["supervisor_id"].is_null());
     let receipt=s.agent(&credential,json!({"op":"send","session_id":target,"request_id":"docked-send","message":"accepted before undock"}));
     assert_eq!(receipt["state"], "accepted");
     assert_eq!(receipt["authority"], "docked");
@@ -338,6 +362,18 @@ fn dock_grants_only_temporary_bound_agent_authority_without_promotion() {
     assert_eq!(child["rank"], "crew");
     assert!(child["supervisor_id"].is_null());
     s.owner(json!({"op":"undock","generation":generation}));
+    assert_eq!(
+        s.raw(
+            Some(&credential),
+            json!({"op":"move-vessel","session_id":target,"fleet_id":null})
+        )["code"],
+        "forbidden"
+    );
+    assert_eq!(
+        s.raw(Some(&credential), json!({"op":"fleets"}))["code"],
+        "forbidden"
+    );
+    assert_eq!(s.raw(None,json!({"op":"move-vessel","session_id":target,"fleet_id":null,"control_generation":generation}))["code"],"stale_control");
     assert_eq!(s.raw(Some(&credential),json!({"op":"send","session_id":target,"request_id":"after-undock","message":"new rights withdrawn"}))["code"],"forbidden");
     assert_eq!(s.raw(None,json!({"op":"send","session_id":target,"request_id":"stale-owner","message":"stale","control_generation":generation}))["code"],"stale_control");
     thread::sleep(Duration::from_millis(1200));

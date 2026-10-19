@@ -21,6 +21,11 @@ function instanceCreator(rpc) {
     if (!pending || pending.key !== key) pending = { key, id: randomUUID(), session: null };
     busy = true;
     try {
+      if (input.fleet != null) {
+        const data = await rpc('fleets');
+        if (!data.fleets.some((fleet) => fleet.id === input.fleet))
+          throw Error('Choose an existing fleet.');
+      }
       if (pending.session) {
         await rpc(
           'open',
@@ -50,6 +55,15 @@ function instanceCreator(rpc) {
         }
       }
       const session = pending.session;
+      if (Object.hasOwn(input, 'fleet')) {
+        try {
+          await rpc('move-vessel', session, input.fleet ?? 'none');
+        } catch {
+          throw Error(
+            'Vessel created, but its fleet could not be updated. Try again to move the same vessel.',
+          );
+        }
+      }
       pending = null;
       return { session };
     } finally {

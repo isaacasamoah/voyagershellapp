@@ -79,6 +79,8 @@ independently owned native server as before.
 | `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
 | `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
 | `rename SESSION NAME [--request-id ID]` | Change a display name without changing the runtime or launch receipt |
+| `fleets` | Owner or currently docked agent reads visual Fleet definitions/membership |
+| `move-vessel VESSEL FLEET\|none` | Owner or docked agent moves a Vessel branch without changing authority |
 | `rename-fleet FLEET NAME` | Rename an existing Fleet without moving members |
 | `voice app\|none\|SESSION [--request-id ID]` | Select voice, stopping participating voices first; native target must be docked |
 | `rank INSTANCE RANK [--request-id ID]` | Owner changes an agent rank without invalidating assignments |

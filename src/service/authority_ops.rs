@@ -75,7 +75,9 @@ impl Runtime {
                 "background",
                 "stop-instance",
                 "shell-exec",
-                "shell-read"
+                "shell-read",
+                "fleets",
+                "move-vessel"
             ]);
         } else if actor["kind"] == "instance" {
             result["permitted_actions"] = json!([

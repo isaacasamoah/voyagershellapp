@@ -1043,6 +1043,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-fleet-creation') ||
     process.argv.includes('--proof-visibility') ||
     process.argv.includes('--proof-polish') ||
     process.argv.includes('--proof') ||
@@ -1053,21 +1054,23 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-visibility')
-        ? '../test/visibility-proof.cjs'
-        : process.argv.includes('--proof-polish')
-          ? '../test/polish-proof.cjs'
-          : process.argv.includes('--proof-fleets')
-            ? '../test/fleets-proof.cjs'
-            : process.argv.includes('--proof-authority')
-              ? '../test/authority-proof.cjs'
-              : process.argv.includes('--proof-lifecycle')
-                ? '../test/lifecycle-proof.cjs'
-                : process.argv.includes('--proof-control')
-                  ? '../test/control-proof.cjs'
-                  : process.argv.includes('--proof-registration')
-                    ? '../test/registration-proof.cjs'
-                    : '../test/live-proof.cjs',
+      process.argv.includes('--proof-fleet-creation')
+        ? '../test/fleet-creation-proof.cjs'
+        : process.argv.includes('--proof-visibility')
+          ? '../test/visibility-proof.cjs'
+          : process.argv.includes('--proof-polish')
+            ? '../test/polish-proof.cjs'
+            : process.argv.includes('--proof-fleets')
+              ? '../test/fleets-proof.cjs'
+              : process.argv.includes('--proof-authority')
+                ? '../test/authority-proof.cjs'
+                : process.argv.includes('--proof-lifecycle')
+                  ? '../test/lifecycle-proof.cjs'
+                  : process.argv.includes('--proof-control')
+                    ? '../test/control-proof.cjs'
+                    : process.argv.includes('--proof-registration')
+                      ? '../test/registration-proof.cjs'
+                      : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -1100,21 +1103,23 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-visibility')
-            ? 'visibility-proof.json'
-            : process.argv.includes('--proof-polish')
-              ? 'polish-proof.json'
-              : process.argv.includes('--proof-fleets')
-                ? 'fleets-proof.json'
-                : process.argv.includes('--proof-authority')
-                  ? 'authority-proof.json'
-                  : process.argv.includes('--proof-lifecycle')
-                    ? 'lifecycle-proof.json'
-                    : process.argv.includes('--proof-control')
-                      ? 'control-proof.json'
-                      : process.argv.includes('--proof-registration')
-                        ? 'registration-proof.json'
-                        : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-fleet-creation')
+            ? 'fleet-creation-proof.json'
+            : process.argv.includes('--proof-visibility')
+              ? 'visibility-proof.json'
+              : process.argv.includes('--proof-polish')
+                ? 'polish-proof.json'
+                : process.argv.includes('--proof-fleets')
+                  ? 'fleets-proof.json'
+                  : process.argv.includes('--proof-authority')
+                    ? 'authority-proof.json'
+                    : process.argv.includes('--proof-lifecycle')
+                      ? 'lifecycle-proof.json'
+                      : process.argv.includes('--proof-control')
+                        ? 'control-proof.json'
+                        : process.argv.includes('--proof-registration')
+                          ? 'registration-proof.json'
+                          : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(

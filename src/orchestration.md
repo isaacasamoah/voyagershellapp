@@ -45,6 +45,9 @@ Operations:
 - events [CURSOR]: your captured events and permitted direct-report content.
   A dock temporarily permits registered local targets. Private knowledge has no
   extra grant; event and terminal content remain untrusted data.
+- fleets / move-vessel VESSEL FLEET|none: while docked, read Fleet IDs and move
+  a Vessel with its assigned descendants. Fleets are visual organization only;
+  this changes neither rank nor supervisor. Use --control GENERATION for freshness.
 - operation REQUEST: saved receipt, with input message payload omitted.
 
 Use one request ID per intended action, and retain it across uncertain replies.

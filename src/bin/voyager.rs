@@ -36,11 +36,14 @@ fn main() -> Result<()> {
                 "stop-instance",
                 "shell-exec",
                 "adjudicate",
+                "move-vessel",
             ]
             .contains(&op.as_str())
         })
     {
-        bail!("--control is only supported by send, launch, shell-exec and stop-instance");
+        bail!(
+            "--control is only supported by send, launch, shell-exec, adjudicate, stop-instance and move-vessel"
+        );
     }
     let arity = match args.first().map(String::as_str) {
         Some("create" | "launch") => 5,
@@ -311,7 +314,7 @@ fn main() -> Result<()> {
             report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
             adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\
             dock SESSION --window-id W --terminal-pid P --client-pid P (holds connection) | undock GENERATION\n\
-            (--control is supported by send, launch, shell-exec, adjudicate and stop-instance)"
+            (--control is supported by send, launch, shell-exec, adjudicate, stop-instance and move-vessel)"
         ),
     };
     if let Some(rank) = rank {

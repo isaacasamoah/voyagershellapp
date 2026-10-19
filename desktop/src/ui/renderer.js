@@ -61,6 +61,7 @@ function renderState(value) {
   if (view !== 'panel') return;
   currentSessions = value.sessions;
   updateCreationAuthority();
+  updateCreationFleets();
   if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
   const rows = JSON.stringify([
     value.sessions,
@@ -525,11 +526,29 @@ function updateCreationAuthority() {
   );
   select.value = choices.some((s) => s.id === selected) ? selected : '';
 }
+function updateCreationFleets() {
+  const fleets = lastState?.fleetData?.fleets || [];
+  const select = $('instance-fleet');
+  const selected = select.value;
+  $('instance-fleet-field').hidden = fleets.length === 0;
+  const key = JSON.stringify(fleets);
+  if (select.dataset.options === key) return;
+  select.dataset.options = key;
+  select.replaceChildren(
+    ...[['', 'No fleet'], ...fleets.map((f) => [f.id, f.name])].map(([value, name]) => {
+      const option = element('option', name);
+      option.value = value;
+      return option;
+    }),
+  );
+  select.value = fleets.some((f) => f.id === selected) ? selected : '';
+}
 function showCreate(open) {
   if (creating) return;
   if (open) {
     $('instance-rank').value = 'crew';
     $('instance-supervisor').value = '';
+    $('instance-fleet').value = '';
     updateCreationAuthority();
   }
   $('create-form').hidden = !open;
@@ -558,6 +577,7 @@ $('create-form').onsubmit = async (event) => {
       cwd: $('instance-cwd').value,
       rank: $('instance-kind').value === 'codex' ? $('instance-rank').value : null,
       supervisor: $('instance-supervisor').value || null,
+      ...(!$('instance-fleet-field').hidden ? { fleet: $('instance-fleet').value || null } : {}),
     });
     if (result?.error) throw Error(result.error);
     creating = false;
