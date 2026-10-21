@@ -34,6 +34,7 @@ const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
 app.commandLine.appendSwitch('ozone-platform', 'x11');
+app.disableHardwareAcceleration();
 app.setName('Voyager Shell');
 app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
@@ -303,6 +304,20 @@ function setSeated(value) {
 function raiseSeatedAvatar() {
   if (expanded && seated && !dragging) avatarWin.moveTop();
 }
+app.on('second-instance', async () => {
+  if (!avatarWin || avatarWin.isDestroyed()) return;
+  if (avatarWin.isMinimized()) avatarWin.restore();
+  if (panelWin.isMinimized()) panelWin.restore();
+  try {
+    await setExpanded(true);
+    panelWin.show();
+    panelWin.focus();
+    avatarWin.showInactive();
+    raiseSeatedAvatar();
+  } catch (error) {
+    console.error(error.message);
+  }
+});
 async function setExpanded(value) {
   expanded = value;
   if (value) {
@@ -752,7 +767,7 @@ async function surface(ids, single = false) {
     sendState();
   }
 }
-function createWindow(width, height) {
+function createWindow(width, height, type) {
   const client = new BrowserWindow({
     width,
     height,
@@ -761,7 +776,7 @@ function createWindow(width, height) {
     hasShadow: false,
     resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: true,
+    type,
     show: false,
     backgroundColor: '#00000000',
     icon: path.join(__dirname, '../assets/idle.png'),
@@ -780,9 +795,9 @@ function createWindow(width, height) {
 }
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
-  panelWin = createWindow(320, 372);
+  panelWin = createWindow(320, 372, 'toolbar');
   avatarWin = createWindow(collapsedSize, collapsedSize);
-  candidateWin = createWindow(100, 100);
+  candidateWin = createWindow(100, 100, 'toolbar');
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('focus', raiseSeatedAvatar);

@@ -14,6 +14,15 @@ live monitor or an app launcher; its buttons only change the diagram.
 
 ## Appearance and gestures
 
+Fedora's Activities overview shows one Voyager entry, its astronaut window.
+The glass panel and docking outline are native toolbar windows, so they are not
+separate applications to close. Opening Voyager again reveals the existing
+panel instead of creating another interface. The Linux prototype uses software
+rendering after native desktop launch exposed repeated Mesa GPU-process crashes.
+Renderer isolation and sandboxing remain enabled. See Electron's
+[window types](https://www.electronjs.org/docs/latest/api/base-window) and
+[hardware acceleration API](https://www.electronjs.org/docs/latest/api/app#appdisablehardwareacceleration).
+
 The floating 104 px astronaut has no text or square shadow. A click opens the
 continuous curved glass panel, with rainbow VOYAGER lettering above the seated
 astronaut and “Let’s Go Together” below the agent list. Click again to collapse.

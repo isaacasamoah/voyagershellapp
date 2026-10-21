@@ -29,11 +29,15 @@ async function wait(read, accept, message) {
   }
   throw Error(message);
 }
-async function open() {
+async function open(expanded = true) {
   let output = '';
   app = spawn(
     electron,
-    [...(installed ? [] : [path.join(root, 'desktop')]), '--expanded', '--remote-debugging-port=0'],
+    [
+      ...(installed ? [] : [path.join(root, 'desktop')]),
+      ...(expanded ? ['--expanded'] : []),
+      '--remote-debugging-port=0',
+    ],
     {
       env: { ...process.env, VOYAGER_STATE: state },
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -95,7 +99,37 @@ const serviceButton =
   "Array.from(document.querySelectorAll('#app-menu button')).find(b=>b.textContent==='Stop service')";
 (async () => {
   await fs.mkdir(state, { mode: 0o700 });
-  let ui = await open();
+  let ui = await open(false);
+  assert.equal(await ui('document.body.dataset.expanded'), 'false');
+  const secondary = spawn(electron, [...(installed ? [] : [path.join(root, 'desktop')])], {
+    env: { ...process.env, VOYAGER_STATE: state },
+    stdio: 'ignore',
+  });
+  await once(secondary, 'exit');
+  assert.equal(secondary.exitCode, 0);
+  await wait(
+    () => ui('document.body.dataset.expanded'),
+    (value) => value === 'true',
+    'Opening Voyager again did not reveal the existing panel',
+  );
+  const inventory = JSON.parse(
+    (await exec(path.join(path.dirname(binary), 'voyager-windows'), [])).stdout,
+  );
+  const windows = inventory.windows
+    .filter((window) => window.pid === app.pid && window.visible)
+    .sort((a, b) => a.width - b.width);
+  assert.equal(windows.length, 2);
+  const avatarType = (await exec('xprop', ['-id', String(windows[0].id), '_NET_WM_WINDOW_TYPE']))
+    .stdout;
+  const panelType = (await exec('xprop', ['-id', String(windows[1].id), '_NET_WM_WINDOW_TYPE']))
+    .stdout;
+  assert.match(avatarType, /_NET_WM_WINDOW_TYPE_NORMAL/);
+  assert.match(panelType, /_NET_WM_WINDOW_TYPE_TOOLBAR/);
+  observations.push({
+    action: 'reopen-reveals-one-interface-with-a-helper-panel',
+    avatar: windows[0].id,
+    panel: windows[1].id,
+  });
   const initial = await wait(
     () => rpc('status'),
     (s) => s.conversation.phase === 'ready',
