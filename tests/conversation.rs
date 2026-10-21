@@ -508,8 +508,20 @@ fn private_assistant_observes_shell_output_and_retains_orchestration() {
         "voyager_send",
         json!({"session_id":agent,"message":"bounded fixture task"}),
     );
-    let result = finish(&trial, sent);
-    assert!(result["error"].is_null(), "{result}");
+    let request = sent["request_id"].clone();
+    wait(|| trial.call(json!({"op":"operation","request_id":request}))["state"] == "accepted");
+    let accepted = trial.call(json!({"op":"operation","request_id":request}));
+    wait(|| {
+        trial.call(json!({"op":"events","session_id":agent,"after":0}))["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| {
+                event["type"] == "turn.completed"
+                    && event["native_turn_id"] == accepted["native_turn_id"]
+                    && event["payload"]["has_error"] == false
+            })
+    });
     finish(
         &trial,
         tool(&trial, "voyager_stop", json!({"session_id":agent})),
