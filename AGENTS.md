@@ -61,3 +61,13 @@ unchanged and bound to its original request. Recheck pending sources before spee
 Voice selection belongs in `src/service/voice.rs`; native terminal input belongs
 in `src/terminal.rs`. Read `docs/voice.md` before editing either boundary. Native
 input must target verified process and PTY identity, never desktop keyboard focus.
+
+## Workspace and working documents
+
+The primary checkout tracks `main`. The advanced prototype is on `experiment/private-harness-voice` in `.worktrees/harness-voice`; it is not merged into main. Rust checks are defined in CONTRIBUTING.md; Electron commands are in desktop/package.json.
+
+Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
+
+Documentation root: `/home/isaac/obsidian/Projects/voyagershellapp`. Read its `status.md` to resume and follow its links to the owning plan and specification. Use the shared `working-docs` skill before producing persistent documents. The existing explainer/, specs/, plans/ and research/ directories are approved; status and log have one owner at the documentation root. This destination policy overrides default output paths in content skills without changing their procedures.
+
+Use Voyager orchestration only when requested or called for by an approved plan. Project facts remain here; shared procedures remain in skills.
