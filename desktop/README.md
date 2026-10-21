@@ -76,8 +76,9 @@ user-facing chat text crosses the named conversation boundary.
 
 The panel and astronaut are separate transparent windows so holding and pulling
 the astronaut can leave the panel in place. A seated astronaut is a child of the
-visible panel; floating detaches that relationship. The native panel background
-is draggable. The astronaut and buttons are excluded from native drag regions so
+visible panel; floating detaches that relationship. Pointer capture moves the
+panel background; controls keep their own input. Linux uses floating toolbar
+windows so helpers are excluded from ordinary window switching. The astronaut and buttons remain separate so
 their clicks reach the renderer.
 
 Terminal docking now also holds a service control connection. Its lifetime is

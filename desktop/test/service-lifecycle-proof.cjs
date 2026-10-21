@@ -123,10 +123,10 @@ const serviceButton =
     .stdout;
   const panelType = (await exec('xprop', ['-id', String(windows[1].id), '_NET_WM_WINDOW_TYPE']))
     .stdout;
-  assert.match(avatarType, /_NET_WM_WINDOW_TYPE_NORMAL/);
+  assert.match(avatarType, /_NET_WM_WINDOW_TYPE_TOOLBAR/);
   assert.match(panelType, /_NET_WM_WINDOW_TYPE_TOOLBAR/);
   observations.push({
-    action: 'reopen-reveals-one-interface-with-a-helper-panel',
+    action: 'reopen-reveals-existing-floating-tools',
     avatar: windows[0].id,
     panel: windows[1].id,
   });

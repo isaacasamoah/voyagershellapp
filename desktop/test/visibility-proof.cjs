@@ -108,7 +108,20 @@ exports.run = async ({
       await check(`reopened-${i}`);
       const p = panelWin.getBounds();
       await move({ x: p.x + 24, y: p.y + p.height - 60 });
-      await delay(350);
+      const hoverDeadline = Date.now() + 2500;
+      while (
+        (await panelWin.webContents.executeJavaScript(`document.body.dataset.panelHovered`)) !==
+          'true' &&
+        Date.now() < hoverDeadline
+      )
+        await delay(100);
+      observations.push({
+        label: `panel-hover-${i}`,
+        requested: p,
+        actual: panelWin.getBounds(),
+        pointer: screen.getCursorScreenPoint(),
+        window: windowAt(await inventory(), screen.dipToScreenPoint(screen.getCursorScreenPoint())),
+      });
       assert.equal(
         await panelWin.webContents.executeJavaScript(`document.body.dataset.panelHovered`),
         'true',
@@ -117,6 +130,68 @@ exports.run = async ({
       await input(['button', true]);
       await input(['button', false]);
       await check(`focused-${i}`);
+      const before = panelWin.getBounds();
+      const start = { x: before.x + 24, y: before.y + before.height - 60 };
+      await move(start);
+      const pointerBefore = screen.getCursorScreenPoint();
+      await input(['button', true]);
+      if (i > 0) await delay(120);
+      await move({ x: start.x + 80, y: start.y + 40 });
+      await delay(200);
+      await input(['button', false]);
+      await delay(150);
+      const after = panelWin.getBounds();
+      observations.push({
+        label: `panel-drag-${i}`,
+        before,
+        after,
+        pointerBefore,
+        pointerAfter: screen.getCursorScreenPoint(),
+      });
+      assert.equal(after.x - before.x, 80, 'Dragging the panel must move its native window');
+      assert.equal(after.y - before.y, 40, 'Dragging the panel must preserve the pointer offset');
+      const seatedAvatar = avatarWin.getBounds();
+      assert.equal(seatedAvatar.x, after.x + 100);
+      assert.equal(seatedAvatar.y, after.y + 36);
+      await move({ x: start.x + 100, y: start.y + 50 });
+      await delay(100);
+      assert.deepEqual(
+        panelWin.getBounds(),
+        after,
+        'Releasing the pointer must end panel movement',
+      );
+      if (i === 0) {
+        const add = await panelWin.webContents.executeJavaScript(
+          `(() => { const r = document.getElementById('add').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+        );
+        await move({ x: after.x + add.x, y: after.y + add.y });
+        await input(['button', true]);
+        await input(['button', false]);
+        await delay(200);
+        assert.equal(
+          await panelWin.webContents.executeJavaScript(
+            `document.getElementById('create-form').hidden`,
+          ),
+          false,
+        );
+        const openBounds = panelWin.getBounds();
+        assert.equal(openBounds.x, after.x);
+        assert.equal(openBounds.y, after.y);
+        const cancel = await panelWin.webContents.executeJavaScript(
+          `(() => { const r = document.getElementById('cancel-create').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+        );
+        await move({ x: openBounds.x + cancel.x, y: openBounds.y + cancel.y });
+        await input(['button', true]);
+        await input(['button', false]);
+        await delay(200);
+        assert.equal(
+          await panelWin.webContents.executeJavaScript(
+            `document.getElementById('create-form').hidden`,
+          ),
+          true,
+        );
+        observations.push({ label: 'panel-buttons-remain-clickable' });
+      }
       await clickAvatar();
       assert(!panelWin.isVisible(), 'Native click should hide the panel');
       await check(`collapsed-${i}`);

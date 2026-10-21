@@ -49,6 +49,7 @@ let avatarWin,
   expanded = false,
   seated = false,
   dragging = null,
+  panelDrag = null,
   binding = null;
 const fleets = fleetActions(rpc);
 let fleetData = { fleets: [], assignments: {} },
@@ -344,6 +345,7 @@ async function setExpanded(value) {
       await delay(25);
     }
   } else {
+    panelDrag = null;
     setSeated(false);
     panelWin.hide();
     sendState();
@@ -381,7 +383,13 @@ function updateDockHover(snapshot) {
   );
 }
 function updatePointer() {
-  advanceDrag(screen.getCursorScreenPoint());
+  const cursor = screen.getCursorScreenPoint();
+  if (panelDrag)
+    setBoundsIfChanged(panelWin, {
+      x: cursor.x - panelDrag.x,
+      y: cursor.y - panelDrag.y,
+    });
+  advanceDrag(cursor);
   if (!binding || seated || dragging) setDockHovered(false);
   if ((!binding && !expanded) || hoverBusy || performance.now() - lastHoverProbe < 100) return;
   hoverBusy = true;
@@ -767,7 +775,7 @@ async function surface(ids, single = false) {
     sendState();
   }
 }
-function createWindow(width, height, type) {
+function createWindow(width, height) {
   const client = new BrowserWindow({
     width,
     height,
@@ -776,7 +784,8 @@ function createWindow(width, height, type) {
     hasShadow: false,
     resizable: false,
     alwaysOnTop: true,
-    type,
+    type: process.platform === 'linux' ? 'toolbar' : undefined,
+    skipTaskbar: true,
     show: false,
     backgroundColor: '#00000000',
     icon: path.join(__dirname, '../assets/idle.png'),
@@ -795,9 +804,9 @@ function createWindow(width, height, type) {
 }
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
-  panelWin = createWindow(320, 372, 'toolbar');
+  panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
-  candidateWin = createWindow(100, 100, 'toolbar');
+  candidateWin = createWindow(100, 100);
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('focus', raiseSeatedAvatar);
@@ -951,6 +960,15 @@ app.whenReady().then(async () => {
   handle('supervise-instance', [panelWin], (id, supervisor, request) =>
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
+  handle('begin-panel-drag', [panelWin], (x, y) => {
+    const bounds = panelWin.getBounds();
+    if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > bounds.width || y > bounds.height)
+      throw Error('Invalid panel drag');
+    panelDrag = { x, y };
+  });
+  handle('end-panel-drag', [panelWin], () => {
+    panelDrag = null;
+  });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
