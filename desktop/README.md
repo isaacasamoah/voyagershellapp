@@ -39,6 +39,10 @@ instance's **⋯** menu shows its rank and current assignment and lets the owner
 change them. The service rejects a rank change that would invalidate an assignment;
 clear or change those assignments first.
 
+The close cross leaves work running. The small top-left menu provides explicit
+service shutdown, which refuses until managed Vessels have been stopped.
+See [app and service lifetime](../docs/service.md#app-and-service-lifetime).
+
 Questions addressed to the owner appear in **Questions for you**, with their
 sender and delivery status. Answer a question, accept a result or request changes
 there. A recorded response and delivery to the agent are separate outcomes.
@@ -87,6 +91,18 @@ checks socket lifetime; `npm start -- --proof-control` exercises two existing
 native clients without model calls.
 
 ## Testing changes
+
+The app/service lifetime check opens real Electron and Ghostty, starts the
+installed private Codex provider without a model turn, and tests UI close/reopen,
+shutdown refusal, stop/remove, retained history and explicit service shutdown:
+
+```sh
+VOYAGER_PANEL_LIFECYCLE_DIR=/tmp/voyager-panel-new \
+  node test/service-lifecycle-proof.cjs
+```
+
+Use a fresh absolute directory and a graphical-session environment. The check
+uses programmatic renderer actions; physical pointer behavior remains separate.
 
 `test/binding.test.cjs` checks identity mistakes and refusal cases without a
 desktop, model or credentials. `test/live-proof.cjs` is an explicit integration

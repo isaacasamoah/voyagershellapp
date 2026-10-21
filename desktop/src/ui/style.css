@@ -214,6 +214,25 @@ body[data-connected='false'] #connection {
 #quit:focus-visible {
   opacity: 1;
 }
+#app-menu {
+  position: absolute;
+  top: 108px;
+  left: 10px;
+  -webkit-app-region: no-drag;
+}
+#app-menu > .instance-menu > button {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  color: #425767;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#panel:hover #app-menu > .instance-menu > button,
+#app-menu > .instance-menu > button:focus-visible,
+#app-menu > .instance-menu > button[aria-expanded='true'] {
+  opacity: 1;
+}
 body[data-dock-error='true'] #indicator {
   background: #c69349;
 }

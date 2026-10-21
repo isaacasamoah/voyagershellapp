@@ -46,6 +46,24 @@ acceptance is separate from completion.
 
 `serve` stays in the foreground unless your process manager launches it in the background. `start` instead runs it independently, and the Electron app uses that operation. No OS service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
 
+## App and service lifetime
+
+Opening the app starts or reconnects to Voyager. The panel's close cross quits
+only Electron; owned runtimes, capture and the private Codex process remain.
+The small top-left menu contains **Stop service**. This calls the same owner-only
+`stop` operation as the CLI and closes the interface only after it succeeds.
+Running managed Vessels must be stopped explicitly first, including any that
+were deregistered. A refusal stays visible and leaves the app connected.
+Per-Vessel menus retain separate **Stop**, **Remove**, and **Stop and remove**
+actions; their [lifecycle contract](lifecycle.md) defines the effects.
+
+Starting at login is not enabled. Opening Voyager is the startup action.
+
+The desktop uses named, sender-checked
+[Electron IPC](https://www.electronjs.org/docs/latest/tutorial/ipc).
+The service option reuses the panel's existing
+[popover menu](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using).
+
 ## Commands
 
 To start without an existing native server, use `serve` with no socket argument.

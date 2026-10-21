@@ -832,6 +832,10 @@ app.whenReady().then(async () => {
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
+  handle('stop-service', [panelWin], async () => {
+    await rpc('stop');
+    app.quit();
+  });
   handle('choose-directory', [panelWin], async () => {
     const result = await dialog.showOpenDialog(panelWin, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];

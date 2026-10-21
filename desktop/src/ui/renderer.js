@@ -458,6 +458,11 @@ $('avatar').addEventListener('keydown', (event) => {
   }
 });
 $('quit').onclick = () => api.quit();
+if (view === 'panel') {
+  const { menu, addAction } = actionMenu('Voyager', 'service');
+  addAction('Stop service', () => api.stopService());
+  $('app-menu').append(menu);
+}
 if (view === 'panel' && typeof ResizeObserver !== 'undefined') {
   let previousHeight;
   new ResizeObserver(() => {

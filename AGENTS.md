@@ -64,7 +64,10 @@ input must target verified process and PTY identity, never desktop keyboard focu
 
 ## Workspace and working documents
 
-The primary checkout tracks `main`. The advanced prototype is on `experiment/private-harness-voice` in `.worktrees/harness-voice`; it is not merged into main. Rust checks are defined in CONTRIBUTING.md; Electron commands are in desktop/package.json.
+The primary checkout tracks `main`. The historical prototype branch is
+`experiment/private-harness-voice` in `.worktrees/harness-voice`. Integration and
+packaging use separate task worktrees. Rust checks are defined in CONTRIBUTING.md;
+Electron commands are in desktop/package.json.
 
 Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
 

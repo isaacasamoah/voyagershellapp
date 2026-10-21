@@ -87,9 +87,11 @@ test('preload exposes explicit authority actions with no generic RPC escape hatc
   });
   api.rankInstance('crew', 'captain', 'rank');
   api.superviseInstance('crew', null, 'assign');
+  api.stopService();
   assert.deepEqual(calls, [
     ['rank-instance', 'crew', 'captain', 'rank'],
     ['supervise-instance', 'crew', null, 'assign'],
+    ['stop-service'],
   ]);
   assert.equal(api.rpc, undefined);
 });

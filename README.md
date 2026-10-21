@@ -66,6 +66,9 @@ Closing Electron stops voice while the runtime and work continue.
 ## Try it
 
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
+Opening the app starts or reconnects to the service. Closing the panel leaves work
+running. After stopping managed Vessels, use the small panel menu's **Stop service**
+to shut Voyager down explicitly. Starting at login is not enabled.
 The [desktop guide](docs/desktop.md) describes docking and gestures.
 The [lifecycle contract](docs/lifecycle.md) defines each action and its result.
 The [authority guide](docs/authority.md) explains ranks, assignment and agent tools.

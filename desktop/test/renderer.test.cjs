@@ -183,3 +183,30 @@ test('existing fleets appear in creation and the selected fleet reaches the serv
   await ui.nodes.get('create-form').onsubmit({ preventDefault() {} });
   assert.equal(ui.calls[0].fleet, 'a');
 });
+
+test('the panel exposes explicit service stop and preserves a refused shutdown', async () => {
+  const ui = renderer();
+  ui.update();
+  let stopped = 0;
+  let closed = 0;
+  ui.api.quit = () => closed++;
+  ui.api.stopService = async () => {
+    stopped++;
+    return { error: 'Stop running vessels before stopping Voyager.' };
+  };
+  const stop = ui.nodes
+    .get('app-menu')
+    .querySelectorAll('button')
+    .find((button) => button.textContent === 'Stop service');
+  assert.ok(stop, 'Stop service is reachable from the panel menu');
+  await stop.onclick();
+  assert.equal(stopped, 1);
+  assert.equal(closed, 0);
+  assert.equal(
+    ui.nodes.get('instance-error').textContent,
+    'Stop running vessels before stopping Voyager.',
+  );
+  ui.nodes.get('quit').onclick();
+  assert.equal(closed, 1);
+  assert.equal(stopped, 1);
+});

@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld(
     superviseInstance: (id, supervisor, request) =>
       ipcRenderer.invoke('supervise-instance', id, supervisor, request),
     quit: () => ipcRenderer.invoke('quit-ui'),
+    stopService: () => ipcRenderer.invoke('stop-service'),
     onDockSound: (callback) => {
       ipcRenderer.on('dock-sound', (_event, action) => callback(action));
     },
