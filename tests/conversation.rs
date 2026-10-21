@@ -396,3 +396,122 @@ fn participating_voice_requires_native_closure_not_just_a_stop_acknowledgement()
     );
     assert!(client(&trial.state, json!({"op":"conversation-voice-start","request_id":"refused","client_id":"none","sdp":"fixture"})).is_err());
 }
+
+#[test]
+fn private_tools_read_local_work_without_execution_or_service_secret_access() {
+    use std::os::unix::fs::symlink;
+    let trial = Trial::start(FIXTURE);
+    trial.ready();
+    let work = trial.state.with_extension("work");
+    fs::create_dir(&work).unwrap();
+    let file = work.join("session.jsonl");
+    let source = "{\"role\":\"user\",\"text\":\"inspect this transcript\"}\n";
+    fs::write(&file, source).unwrap();
+    let read = tool(&trial, "voyager_read_file", json!({"path":file,"offset":0}));
+    assert_eq!(read["text"], source, "{read}");
+    assert_eq!(read["truncated"], false);
+    let found = tool(
+        &trial,
+        "voyager_search_files",
+        json!({"path":work,"query":"inspect this transcript","content":true}),
+    );
+    assert_eq!(
+        found["matches"][0]["path"],
+        file.to_str().unwrap(),
+        "{found}"
+    );
+    let missing = tool(
+        &trial,
+        "voyager_read_file",
+        json!({"path":work.join("missing"),"offset":0}),
+    );
+    assert!(missing["error"].is_string());
+    let secret = trial.state.join("private-fixture.json");
+    fs::write(&secret, "FIXTURE_PRIVATE").unwrap();
+    symlink(&secret, work.join("shortcut")).unwrap();
+    let denied = tool(
+        &trial,
+        "voyager_read_file",
+        json!({"path":work.join("shortcut"),"offset":0}),
+    );
+    assert!(
+        denied["error"].as_str().unwrap().contains("protected"),
+        "{denied}"
+    );
+    let fifo = work.join("pipe");
+    nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::S_IRUSR).unwrap();
+    let begin = Instant::now();
+    assert!(
+        tool(&trial, "voyager_read_file", json!({"path":fifo,"offset":0}))["error"].is_string()
+    );
+    assert!(begin.elapsed() < Duration::from_secs(2));
+    let large = "a".repeat(40_000);
+    fs::write(work.join("large"), &large).unwrap();
+    let first = tool(
+        &trial,
+        "voyager_read_file",
+        json!({"path":work.join("large"),"offset":0}),
+    );
+    assert_eq!(first["text"].as_str().unwrap().len(), 32768);
+    assert_eq!(first["truncated"], true);
+    let second = tool(
+        &trial,
+        "voyager_read_file",
+        json!({"path":work.join("large"),"offset":first["next_offset"]}),
+    );
+    assert_eq!(second["text"].as_str().unwrap().len(), 40_000 - 32768);
+    assert_eq!(second["truncated"], false);
+    assert_eq!(fs::read_to_string(&file).unwrap(), source);
+    assert_eq!(fs::read_to_string(&secret).unwrap(), "FIXTURE_PRIVATE");
+    fs::remove_dir_all(work).unwrap();
+}
+
+#[test]
+fn private_assistant_observes_shell_output_and_retains_orchestration() {
+    let trial = Trial::start(FIXTURE);
+    trial.ready();
+    let shell = finish(&trial, tool(&trial, "voyager_create", json!({"kind":"shell","name":"Observation fixture","cwd":trial.state,"rank":null,"supervisor_id":null,"open":false})))["session_id"].clone();
+    wait(|| trial.call(json!({"op":"shell-read","session_id":shell}))["ready"] == true);
+    let sent = tool(
+        &trial,
+        "voyager_shell",
+        json!({"session_id":shell,"command":"printf 'INSPECTION_OUTPUT\\n'"}),
+    );
+    assert!(sent["error"].is_null(), "{sent}");
+    wait(|| {
+        trial
+            .call(json!({"op":"shell-read","session_id":shell}))
+            .to_string()
+            .contains("INSPECTION_OUTPUT")
+    });
+    let output = tool(
+        &trial,
+        "voyager_shell_read",
+        json!({"session_id":shell,"after":0}),
+    );
+    assert!(output.to_string().contains("INSPECTION_OUTPUT"), "{output}");
+    finish(
+        &trial,
+        tool(&trial, "voyager_background", json!({"session_id":shell})),
+    );
+    assert_eq!(
+        trial.call(json!({"op":"list"}))[0]["worker_state"],
+        "running"
+    );
+    finish(
+        &trial,
+        tool(&trial, "voyager_stop", json!({"session_id":shell})),
+    );
+    let agent = finish(&trial, tool(&trial, "voyager_create", json!({"kind":"codex","name":"Instruction fixture","cwd":trial.state,"rank":"crew","supervisor_id":null,"open":false})))["session_id"].clone();
+    let sent = tool(
+        &trial,
+        "voyager_send",
+        json!({"session_id":agent,"message":"bounded fixture task"}),
+    );
+    let result = finish(&trial, sent);
+    assert!(result["error"].is_null(), "{result}");
+    finish(
+        &trial,
+        tool(&trial, "voyager_stop", json!({"session_id":agent})),
+    );
+}

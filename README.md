@@ -57,6 +57,9 @@ Voyager starts a private Codex runtime with the service. Type in the subtle chat
 bar at the panel bottom, or press the avatar's soundwave to use voice. Named
 service tools manage Vessels and Fleets. Escalations and replies use the same chat,
 with the original request available behind disclosure.
+The private assistant can search/read local work files and transcripts, inspect
+captured Codex events and retained Bash output, and delegate changes to Vessels.
+Local inspection is bounded and read-only; named orchestration controls remain available.
 The conversation stays separate from terminal sessions and Vessel capture.
 Docking selects native Codex voice by default; undocking stops it. The floating
 soundwave uses the private app conversation. [Voice setup and limits](docs/voice.md).

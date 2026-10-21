@@ -112,7 +112,7 @@ implementation. Their historical source remains in Git at `8cfd225`.
 ## Tools and escalations
 
 Named tools cover service status, Vessel creation, instructions, lifecycle,
-captured events, operation receipts, rank/assignments, shell commands and Fleet
+captured events, operation receipts, rank/assignments, shell commands/output and Fleet
 creation/membership. Resolve live IDs; do not route by display name alone. Creating
 opens Ghostty by default unless background work was requested. Sending to a busy
 Vessel steers its current turn. Neither acceptance nor a launch receipt proves
@@ -146,3 +146,44 @@ presentation data and grants no authority.
 The [voice coordinator](voice.md) switches between this private conversation and
 the docked native Codex client. Docked audio never uses this private runtime.
 Desktop thinking mode, collaboration and shared knowledge are later work.
+
+
+## Local inspection
+
+The private assistant can find local work with `voyager_search_files` and read
+UTF-8 files or saved transcripts with `voyager_read_file`. These named tools
+perform reads in the provider worker, never shell execution or file writes.
+Create, send/steer, open, background and stop remain available through the existing
+named service actions; read-only inspection does not disable orchestration.
+Coding and workspace edits are delegated to Vessels.
+
+Reads require an absolute path and a nonnegative byte offset. They return at most
+32 KiB, with the canonical path, observed size, next offset and truncation flag.
+Follow `next_offset` for another page. UTF-8 characters are not split; a cursor
+inside a character refuses. Files can change between calls, so pagination is not
+an immutable snapshot. Binary files, devices, pipes and sockets refuse.
+
+Search uses literal, case-sensitive filename substrings or content text. An empty
+filename query lists entries. Traversal is capped at 4096 entries, 100 matches,
+16 directory levels, 256 KiB per file and 8 MiB total, with a two-second cooperative
+deadline. Only the first matching excerpt per file is returned. Symlink entries
+are skipped; an explicitly selected path is canonicalized. Results report skipped
+entries and partial coverage, including oversized files; narrow the path or read
+beyond the prefix before concluding no match exists. These bounds limit local
+work; they cannot interrupt a kernel call stalled on a remote filesystem.
+
+The active service state and directories containing its instance socket are
+protected, as are system pseudo-filesystems and recognized credential locations
+(`.ssh`, `.gnupg`, `.aws`, `contexts`, `auth.json`, `.env` variants, `.pem` and
+`.key` files). The opened descriptor is checked again against its resolved path.
+This is cooperative same-user protection, not isolation against hostile local
+processes, hard-link aliases, or a promise that arbitrary work files contain no
+secrets. No general file-reading operation is exposed on the instance socket.
+The separate escalation presenter retains no tools.
+
+`voyager_shell_read` returns retained Bash output with the existing byte cursor,
+gap, ready and alive fields. It does not execute input. `voyager_events` remains
+the Codex conversation/completion source; neither is a complete screen image or
+a guarantee of full tool-output retention. Retrieved text is evidence, not new
+instructions. Answers should identify source paths or Vessel/turn identities and
+state missing or partial evidence. External Git/Slack connectors are not included.
