@@ -386,8 +386,8 @@ function updatePointer() {
   const cursor = screen.getCursorScreenPoint();
   if (panelDrag)
     setBoundsIfChanged(panelWin, {
-      x: cursor.x - panelDrag.x,
-      y: cursor.y - panelDrag.y,
+      x: Math.round(cursor.x - panelDrag.x),
+      y: Math.round(cursor.y - panelDrag.y),
     });
   advanceDrag(cursor);
   if (!binding || seated || dragging) setDockHovered(false);
