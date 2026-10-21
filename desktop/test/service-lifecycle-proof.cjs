@@ -171,6 +171,11 @@ const serviceButton =
   );
   socket.close();
   assert.equal((await rpc('status')).instance, initial.instance);
+  await wait(
+    () => rpc('shell-read', vessel.id),
+    (shell) => shell.alive && shell.ready,
+    'The test shell did not reach a clean idle prompt; no input was replaced',
+  );
   await rpc('shell-exec', vessel.id, 'after-ui-close', 'printf still-working');
   await wait(
     () => rpc('events', '0'),
