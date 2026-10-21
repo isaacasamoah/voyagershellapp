@@ -276,6 +276,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => (listener.accept(), false),
             Err(e) => return Err(e.into()),
         };
+        let idle = matches!(&accepted, Err(error) if error.kind() == io::ErrorKind::WouldBlock);
         match accepted {
             Ok((mut stream, _)) => {
                 stream.set_read_timeout(Some(Duration::from_secs(1)))?;
@@ -400,7 +401,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             Err(e) => return Err(e.into()),
         }
         runtime.observe()?;
-        if runtime.codex.is_none() {
+        if idle && runtime.codex.is_none() {
             std::thread::sleep(Duration::from_millis(50));
         }
     }

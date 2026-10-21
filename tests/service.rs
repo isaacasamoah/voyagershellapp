@@ -1346,3 +1346,29 @@ fn version_two_names_move_to_sessions_without_changing_launch_inputs() {
     );
     assert_eq!(store.events(0).unwrap(), before);
 }
+
+#[test]
+fn queued_desktop_reads_do_not_each_pay_the_idle_sleep() {
+    let mut f = Fixture::new();
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env("VOYAGER_CODEX_BIN", "/missing-provider-for-polling-fixture")
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    let start = Instant::now();
+    for index in 0..12 {
+        let result = f.call(json!({"op":if index % 2 == 0 {"status"} else {"list"}}));
+        assert!(result.is_object() || result.is_array());
+    }
+    assert!(
+        start.elapsed() < Duration::from_millis(400),
+        "queued reads took {:?}",
+        start.elapsed()
+    );
+    f.halt();
+}

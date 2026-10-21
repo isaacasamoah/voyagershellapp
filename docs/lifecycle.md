@@ -139,3 +139,10 @@ Use a fresh private directory. Physical gestures, menu readability and sound
 still require a person. These lifecycle checks do not establish other platforms, voice handoff or
 crash/reboot recovery. [Authority checks](authority.md#checks) cover the separate
 bound-identity and hierarchy contract.
+
+The service sleeps only after an idle accept pass when no external Codex observer
+is present. Queued requests still advance capture and lifecycle between replies,
+but do not each pay the idle 50 ms delay. This matters for docking and placement,
+which perform several named reads before attaching. The service-boundary burst
+regression distinguishes queued responsiveness from idle polling; it is not a
+measurement of native window mapping or voice startup.
