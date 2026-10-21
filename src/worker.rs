@@ -53,10 +53,12 @@ pub struct Worker {
 impl Worker {
     pub fn begin(
         state: &Path,
+        binary: &Path,
         executable: &str,
         launch: &str,
         cwd: &str,
         name: Option<&str>,
+        context: &Path,
     ) -> Result<StartingWorker> {
         let dir = state.join(format!("w-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir(&dir)?;
@@ -65,7 +67,6 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
-        let binary = std::env::current_exe()?;
         let child = Command::new(executable)
             .args([
                 "app-server",
@@ -85,6 +86,13 @@ impl Worker {
             .arg(format!(
                 "shell_environment_policy.set.VOYAGER_BIN={}",
                 json!(binary)
+            ))
+            .arg("-c")
+            .arg("shell_environment_policy.set.VOYAGER_CALLER=\"instance\"")
+            .arg("-c")
+            .arg(format!(
+                "shell_environment_policy.set.VOYAGER_SESSION_CONTEXT={}",
+                json!(context)
             ))
             .current_dir(cwd)
             .stdin(Stdio::null())

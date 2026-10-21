@@ -35,7 +35,8 @@ target/debug/voyager --state "$VOYAGER_STATE" launch PARENT_SESSION worker-001 "
   "Please use no tools and change no files. Reply with: Worker connected."
 ```
 
-The returned `session_id` identifies the worker. `runtime: running` refers to its process; `state: completed` describes the launch action; `initial_request.state: accepted` acknowledges task submission. Read the recorded turn outcome to establish completion. The parent ID is an attribution supplied by a local caller, not cryptographic proof of which agent made the request.
+The returned `session_id` identifies the worker. `runtime: running` refers to its process; `state: completed` describes the launch action; `initial_request.state: accepted` acknowledges task submission. Read the recorded turn outcome to establish completion. Launch ancestry is retained separately from authority. Bound agent calls must use
+their own parent identity and satisfy the [rank and assignment rules](authority.md).
 
 `launch` includes the worker's assigned task. Its accepted turn supplies native
 history before attachment. To create an empty conversation without a parent or

@@ -5,9 +5,15 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectControl } = require('./control.cjs');
+const { conversationClient } = require('./conversation.cjs');
+const { authorityActions } = require('./authority.cjs');
+const { vesselPlan } = require('./layout.cjs');
+const hierarchy = require('./ui/hierarchy.js');
+const { fleetActions } = require('./fleets.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const {
   processIdentity,
+  terminalSnapshot,
   identifyTerminal,
   resolveWindow,
   registeredSession,
@@ -38,6 +44,10 @@ let avatarWin,
   seated = false,
   dragging = null,
   binding = null;
+const fleets = fleetActions(rpc);
+let fleetData = { fleets: [], assignments: {} },
+  fleetError = null,
+  measuredPanelHeight = 372;
 let sessions = [],
   selected = null,
   windows = [],
@@ -47,10 +57,16 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
-let creating = false;
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
+const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let controlConnection = null;
+const conversation = conversationClient(stateDir, (value) => {
+  for (const client of [avatarWin, panelWin]) {
+    if (client && !client.isDestroyed()) client.webContents.send('conversation', value);
+  }
+});
+let conversationTimer;
 let layer = '';
 let dockHovered = false,
   panelHovered = false,
@@ -99,28 +115,39 @@ async function discoverTerminals() {
       external: true,
     });
   }
-  for (const session of sessions.filter(
+  const managed = sessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
-  )) {
-    const info = await rpc('attach-info', session.id);
-    endpoints.push({
-      server: session.server,
-      executable: await fs.realpath(info.executable),
-      external: false,
-      kind: session.kind,
-      nativeId: session.native_thread_id,
-      args: info.args,
-    });
-  }
-  const found = [];
-  for (const endpoint of endpoints) {
-    for (const pid of new Set(windows.map((w) => w.pid))) {
-      try {
-        const record = await identifyTerminal(pid, endpoint);
-        if (record) found.push(record);
-      } catch {}
-    }
-  }
+  );
+  endpoints.push(
+    ...(await Promise.all(
+      managed.map(async (session) => {
+        const info = await rpc('attach-info', session.id);
+        return {
+          server: session.server,
+          executable: await fs.realpath(info.executable),
+          external: false,
+          kind: session.kind,
+          nativeId: session.native_thread_id,
+          args: info.args,
+        };
+      }),
+    )),
+  );
+  const found = (
+    await Promise.all(
+      [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
+        const snapshot = await terminalSnapshot(pid).catch(() => null);
+        if (!snapshot || snapshot.terminal.executable !== '/usr/bin/ghostty') return [];
+        return (
+          await Promise.all(
+            endpoints.map((endpoint) =>
+              identifyTerminal(pid, endpoint, snapshot).catch(() => null),
+            ),
+          )
+        ).filter(Boolean);
+      }),
+    )
+  ).flat();
   records = found;
 }
 function windowBehindAvatar(stack, point) {
@@ -181,7 +208,7 @@ function sendState() {
     dragging: Boolean(dragging && (dragging.held || dragging.moved)),
     docked: binding?.session.id ?? null,
     sessions: sessions.map(
-      ({ id, name, kind, cwd, ownership, capture, worker_state, removed_ms }) => ({
+      ({
         id,
         name,
         kind,
@@ -189,10 +216,29 @@ function sendState() {
         ownership,
         capture,
         worker_state,
+        window,
         removed_ms,
+        rank,
+        supervisor_id,
+        registered_ms,
+      }) => ({
+        id,
+        name,
+        kind,
+        cwd,
+        ownership,
+        capture,
+        worker_state,
+        window,
+        removed_ms,
+        rank,
+        supervisor_id,
+        registered_ms,
       }),
     ),
     service,
+    fleetData,
+    fleetError,
     serviceError,
     platformError,
     dockError,
@@ -215,14 +261,26 @@ function placePanel() {
   const p = avatarPosition();
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
-  const height = Math.min(
-    area.height,
-    288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
-  );
+  const height = Math.min(area.height, panelHeight());
   const x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, p.x - 108)));
   const y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, p.y - 44)));
   setBoundsIfChanged(panelWin, { x, y, width, height });
   setBoundsIfChanged(avatarWin, { x: x + 100, y: y + 36 });
+}
+function panelHeight() {
+  return measuredPanelHeight;
+}
+function resizePanel() {
+  const previous = panelWin.getBounds();
+  const area = screen.getDisplayMatching(previous).workArea;
+  const height = Math.min(area.height, panelHeight());
+  const width = 320;
+  setBoundsIfChanged(panelWin, {
+    x: Math.max(area.x, Math.min(previous.x, area.x + area.width - width)),
+    y: Math.max(area.y, Math.min(previous.y, area.y + area.height - height)),
+    width,
+    height,
+  });
 }
 function placeAvatar(x, y) {
   const area = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
@@ -235,6 +293,10 @@ function placeAvatar(x, y) {
 function setSeated(value) {
   seated = value;
   if (!value || panelWin.isVisible()) avatarWin.setParentWindow(value ? panelWin : null);
+  raiseSeatedAvatar();
+}
+function raiseSeatedAvatar() {
+  if (expanded && seated && !dragging) avatarWin.moveTop();
 }
 async function setExpanded(value) {
   expanded = value;
@@ -248,7 +310,6 @@ async function setExpanded(value) {
     placePanel();
     sendState();
     panelWin.showInactive();
-    avatarWin.moveTop();
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
     const deadline = performance.now() + 2000;
     while (expanded && seated) {
@@ -256,6 +317,7 @@ async function setExpanded(value) {
       if (!expanded || !seated) return;
       if (mapped) {
         avatarWin.setParentWindow(panelWin);
+        raiseSeatedAvatar();
         return;
       }
       if (performance.now() >= deadline) throw Error('The desktop did not show the panel');
@@ -467,6 +529,9 @@ function follow() {
   });
   placeAvatar(anchor.x - avatarSize / 2, anchor.y - avatarSize / 2);
 }
+const placedWindows = new Set();
+let presentationReady = false;
+let creating = 0;
 async function refresh() {
   if (busy) return;
   busy = true;
@@ -478,6 +543,12 @@ async function refresh() {
     ]);
     service = nextService;
     sessions = nextSessions;
+    try {
+      fleetData = await fleets.read();
+      fleetError = null;
+    } catch (error) {
+      fleetError = error.message;
+    }
     serviceError = null;
     if (!selected)
       selected = sessions.find((s) => s.ownership === 'managed')?.id ?? sessions[0]?.id ?? null;
@@ -505,6 +576,7 @@ async function refresh() {
       windows,
       records,
       processes,
+      false,
     );
     const session = result.record && registeredSession(result.record, sessions);
     if (
@@ -529,8 +601,151 @@ async function refresh() {
     }
   }
   busy = false;
-  if (expanded && seated && !dragging) placePanel();
+  if (expanded && !dragging) {
+    if (seated) placePanel();
+    else resizePanel();
+  }
   sendState();
+  const opened = records.flatMap((record) => {
+    const session = registeredSession(record, sessions);
+    const window = windows.find((w) => w.pid === record.pid);
+    return session?.ownership === 'managed' && session.removed_ms == null && window
+      ? [{ id: session.id, key: `${window.id}:${record.start}` }]
+      : [];
+  });
+  if (!presentationReady) {
+    opened.forEach((item) => placedWindows.add(item.key));
+    presentationReady = true;
+  } else if (!creating && !arranging && !dragging) {
+    const next = opened.find((item) => !placedWindows.has(item.key));
+    if (next) {
+      placedWindows.add(next.key);
+      try {
+        await surface([next.id], true);
+      } catch (error) {
+        dockError = `Window placement failed: ${error.message}`;
+        sendState();
+      }
+    }
+  }
+}
+let arranging = false;
+async function surface(ids, single = false) {
+  const id = ids[0];
+  if (arranging) throw Error('Windows are being arranged.');
+  arranging = true;
+  try {
+    if (
+      single &&
+      sessions.some(
+        (s) =>
+          s.id === id &&
+          s.removed_ms != null &&
+          s.ownership === 'managed' &&
+          s.worker_state === 'running',
+      )
+    )
+      return await rpc('open', id, 'ghostty');
+    const display = screen.getDisplayMatching(panelWin.getBounds());
+    const area = { ...display.workArea };
+    if (single) area.width = Math.floor(area.width / 2);
+    if (ids.some((id) => !sessions.some((session) => session.id === id)))
+      sessions = await rpc('list', '--include-removed');
+    let targets = vesselPlan(sessions, ids, area);
+    if (!targets.length) throw Error('This instance is not running.');
+    windows = await inventory();
+    const hasViewer = (target) =>
+      records.some(
+        (r) =>
+          registeredSession(r, sessions)?.id === target.session &&
+          windows.some((w) => w.pid === r.pid),
+      );
+    if (targets.some((target) => !hasViewer(target))) await discoverTerminals();
+    const missing = targets.filter((target) => !hasViewer(target));
+    if (missing.length) {
+      await Promise.all(missing.map((target) => rpc('open', target.session, 'ghostty')));
+      sessions = await rpc('list', '--include-removed');
+      windows = await inventory();
+      await discoverTerminals();
+    }
+    const minimum = { width: 1, height: 1 };
+    for (const record of records) {
+      if (!targets.some((t) => registeredSession(record, sessions)?.id === t.session)) continue;
+      const w = windows.find((w) => w.pid === record.pid);
+      minimum.width = Math.max(
+        minimum.width,
+        Math.ceil((w?.minimum?.[0] || 100) / display.scaleFactor),
+      );
+      minimum.height = Math.max(
+        minimum.height,
+        Math.ceil((w?.minimum?.[1] || 80) / display.scaleFactor),
+      );
+    }
+    targets = vesselPlan(sessions, ids, area, minimum);
+    const live = await identities();
+    const plan = [];
+    for (const record of records) {
+      const session = registeredSession(record, sessions);
+      if (!session || session.ownership !== 'managed' || session.removed_ms != null) continue;
+      const w = windows.find((w) => w.pid === record.pid);
+      if (!w) continue;
+      const match = resolveWindow(w, windows, [record], live, false);
+      if (match.error) throw Error(match.error);
+      const target = targets.find((t) => t.session === session.id);
+      const entry = { id: w.id, pid: record.pid, start: record.start, minimise: !target };
+      if (target) {
+        const origin = screen.dipToScreenPoint({ x: target.x, y: target.y });
+        const edge = screen.dipToScreenPoint({
+          x: target.x + target.width,
+          y: target.y + target.height,
+        });
+        Object.assign(entry, origin, { width: edge.x - origin.x, height: edge.y - origin.y });
+      }
+      plan.push(entry);
+    }
+    for (const target of targets)
+      if (
+        !plan.some(
+          (p) =>
+            !p.minimise &&
+            records.some(
+              (r) => r.pid === p.pid && registeredSession(r, sessions)?.id === target.session,
+            ),
+        )
+      )
+        throw Error('A vessel terminal changed before it could be arranged.');
+    const request = { windows: plan, focus: plan.find((p) => !p.minimise).id };
+    const { stdout } = await exec(probe, ['layout', JSON.stringify(request)], {
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    });
+    const result = JSON.parse(stdout);
+    if (single) selected = id;
+    await fs.writeFile(
+      path.join(stateDir, 'last-layout.json'),
+      JSON.stringify(
+        {
+          mode: single ? 'single' : 'rank',
+          vessels: ids,
+          request,
+          result,
+          displays: screen.getAllDisplays(),
+        },
+        null,
+        2,
+      ),
+    );
+    for (const entry of plan) {
+      const record = records.find((r) => r.pid === entry.pid);
+      if (record) placedWindows.add(`${entry.id}:${record.start}`);
+    }
+    if (result.state !== 'confirmed')
+      throw Error('The desktop adjusted some window sizes. Try a smaller fleet.');
+    return result;
+  } finally {
+    arranging = false;
+    sendState();
+  }
 }
 function createWindow(width, height) {
   const client = new BrowserWindow({
@@ -553,9 +768,7 @@ function createWindow(width, height) {
   });
   client.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   client.webContents.on('will-navigate', (event) => event.preventDefault());
-  client.webContents.session.setPermissionRequestHandler((_web, _permission, callback) =>
-    callback(false),
-  );
+
   client.on('closed', () => app.quit());
   return client;
 }
@@ -566,11 +779,26 @@ app.whenReady().then(async () => {
   candidateWin = createWindow(100, 100);
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
+  panelWin.on('focus', raiseSeatedAvatar);
   panelWin.on('move', () => {
     if (!expanded || !seated || dragging) return;
     const panel = panelWin.getBounds();
     setBoundsIfChanged(avatarWin, { x: panel.x + 100, y: panel.y + 36 });
   });
+  const localAvatar = (contents, details) =>
+    contents === avatarWin.webContents && details.isMainFrame;
+  avatarWin.webContents.session.setPermissionCheckHandler(
+    (contents, permission, origin, details) =>
+      permission === 'media' && details.mediaType === 'audio' && localAvatar(contents, details),
+  );
+  avatarWin.webContents.session.setPermissionRequestHandler(
+    (contents, permission, callback, details) =>
+      callback(
+        permission === 'media' &&
+          localAvatar(contents, details) &&
+          details.mediaTypes?.every((type) => type === 'audio'),
+      ),
+  );
   const handle = (name, clients, fn) =>
     ipcMain.handle(name, async (event, ...args) => {
       if (!clients.some((client) => event.senderFrame === client.webContents.mainFrame))
@@ -582,43 +810,90 @@ app.whenReady().then(async () => {
           dockError = 'Couldn’t connect to this terminal.';
           sendState();
         }
-        return { error: error.message };
+        return { error: error.message, code: error.code };
       }
     });
+  handle('conversation-ready', [avatarWin, panelWin], () => conversation.snapshot());
+  handle('voice-app', [avatarWin], () => {
+    if (binding) throw Error('Voice belongs to the docked vessel.');
+    return rpc('voice', 'app');
+  });
+  handle('voice-native', [avatarWin], (id, active) => {
+    if (typeof active !== 'boolean' || !binding || binding.session.id !== id)
+      throw Error('The docked vessel changed.');
+    return rpc('voice', active ? id : 'none');
+  });
+  handle('conversation-send', [panelWin], (text, request) => conversation.send(text, request));
+  handle('conversation-voice-start', [avatarWin], (sdp) => conversation.startVoice(sdp));
+  handle('conversation-voice-stop', [avatarWin], () => conversation.stopVoice());
+  handle('conversation-voice-activity', [avatarWin], (speaker, active) =>
+    conversation.voiceActivity(speaker, active),
+  );
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
   handle('ready', [avatarWin, panelWin], sendState);
-  handle('select', [panelWin], (id) => {
-    if (!sessions.some((s) => s.id === id)) throw Error('Unknown session');
-    selected = id;
-    sendState();
-  });
   handle('quit-ui', [panelWin], () => app.quit());
-  handle('create-form', [panelWin], (open) => {
-    creating = open === true;
-    if (seated) placePanel();
-    else
-      panelWin.setSize(
-        320,
-        Math.min(
-          screen.getDisplayMatching(panelWin.getBounds()).workArea.height,
-          288 + Math.max(1, sessions.length) * 44 + (creating ? 250 : 0),
-        ),
-      );
+  handle('stop-service', [panelWin], async () => {
+    await rpc('stop');
+    app.quit();
   });
   handle('choose-directory', [panelWin], async () => {
     const result = await dialog.showOpenDialog(panelWin, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];
   });
   handle('create-instance', [panelWin], async (input) => {
-    const result = await createInstance(input);
-    await refresh();
-    return result;
+    creating++;
+    try {
+      const result = await createInstance(input);
+      await refresh();
+      try {
+        await surface([result.session], true);
+      } catch (error) {
+        return { ...result, warning: `Created, but placement failed: ${error.message}` };
+      }
+      return result;
+    } finally {
+      creating--;
+    }
   });
-  handle('open-instance', [panelWin], async (id) => {
-    if (!sessions.some((s) => s.id === id && s.ownership === 'managed'))
-      throw Error('Unknown managed instance');
-    return rpc('open', id, 'ghostty');
+  handle('panel-content-height', [panelWin], (height) => {
+    if (!Number.isInteger(height) || height < 0 || height > 20000)
+      throw Error('Invalid panel size.');
+    measuredPanelHeight = height;
+    if (expanded) {
+      if (seated) placePanel();
+      else resizePanel();
+    }
   });
+  handle('surface-instance', [panelWin], (id) => {
+    if (typeof id !== 'string') throw Error('Choose a vessel.');
+    return surface([id], true);
+  });
+  handle('surface-fleet', [panelWin], async (id) => {
+    const data = await fleets.read();
+    if (!data.fleets.some((f) => f.id === id)) throw Error('Choose a fleet.');
+    const current = await rpc('list');
+    return surface(
+      current
+        .filter((s) => hierarchy.fleetOf(s.id, current, data.assignments) === id)
+        .map((s) => s.id),
+    );
+  });
+  async function fleetAction(call) {
+    try {
+      return await call();
+    } finally {
+      await refresh();
+    }
+  }
+  handle('create-fleet', [panelWin], (name, request) =>
+    fleetAction(() => fleets.create(name, request)),
+  );
+  handle('move-vessel', [panelWin], (id, fleet) => fleetAction(() => fleets.move(id, fleet)));
+  handle('remove-fleet', [panelWin], (id) => fleetAction(() => fleets.remove(id)));
+  handle('rename-fleet', [panelWin], (id, name) => fleetAction(() => fleets.rename(id, name)));
+  handle('rename-instance', [panelWin], (id, name, request) =>
+    authorityAction(() => rpc('rename', id, name, '--request-id', request)),
+  );
   async function instanceAction(id, request, op, flags = []) {
     if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
     if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
@@ -641,6 +916,19 @@ app.whenReady().then(async () => {
   });
   handle('register-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'register-instance'),
+  );
+  async function authorityAction(call) {
+    try {
+      return await call();
+    } finally {
+      await refresh();
+    }
+  }
+  handle('rank-instance', [panelWin], (id, rank, request) =>
+    authorityAction(() => authorityActionsForInstance.rank(id, rank, request)),
+  );
+  handle('supervise-instance', [panelWin], (id, supervisor, request) =>
+    authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
@@ -726,6 +1014,8 @@ app.whenReady().then(async () => {
     console.error(error.message);
   }
   await refresh();
+  await conversation.poll();
+  conversationTimer = setInterval(() => conversation.poll(), 250);
   if (process.argv.includes('--expanded')) await setExpanded(true);
   if (
     !globalShortcut.register('Control+Alt+V', () => {
@@ -735,22 +1025,56 @@ app.whenReady().then(async () => {
     })
   )
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
+  if (process.argv.includes('--proof-conversation')) {
+    require('./conversation-proof.cjs')
+      .run({
+        panelWin,
+        avatarWin,
+        conversation,
+        rpc,
+        directory: process.env.VOYAGER_CONVERSATION_PROOF_DIR,
+        screen,
+      })
+      .catch(async (error) => {
+        console.error(error);
+        if (process.env.VOYAGER_CONVERSATION_PROOF_DIR)
+          await fs.writeFile(
+            path.join(process.env.VOYAGER_CONVERSATION_PROOF_DIR, 'error.txt'),
+            error.stack,
+          );
+      });
+  }
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-fleet-creation') ||
+    process.argv.includes('--proof-visibility') ||
+    process.argv.includes('--proof-polish') ||
     process.argv.includes('--proof') ||
     process.argv.includes('--proof-lifecycle') ||
+    process.argv.includes('--proof-authority') ||
+    process.argv.includes('--proof-fleets') ||
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
     require(
-      process.argv.includes('--proof-lifecycle')
-        ? '../test/lifecycle-proof.cjs'
-        : process.argv.includes('--proof-control')
-          ? '../test/control-proof.cjs'
-          : process.argv.includes('--proof-registration')
-            ? '../test/registration-proof.cjs'
-            : '../test/live-proof.cjs',
+      process.argv.includes('--proof-fleet-creation')
+        ? '../test/fleet-creation-proof.cjs'
+        : process.argv.includes('--proof-visibility')
+          ? '../test/visibility-proof.cjs'
+          : process.argv.includes('--proof-polish')
+            ? '../test/polish-proof.cjs'
+            : process.argv.includes('--proof-fleets')
+              ? '../test/fleets-proof.cjs'
+              : process.argv.includes('--proof-authority')
+                ? '../test/authority-proof.cjs'
+                : process.argv.includes('--proof-lifecycle')
+                  ? '../test/lifecycle-proof.cjs'
+                  : process.argv.includes('--proof-control')
+                    ? '../test/control-proof.cjs'
+                    : process.argv.includes('--proof-registration')
+                      ? '../test/registration-proof.cjs'
+                      : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
@@ -760,6 +1084,7 @@ app.whenReady().then(async () => {
         rpc,
         refresh,
         inventory,
+        surface,
         dock,
         undock,
         setExpanded,
@@ -782,13 +1107,23 @@ app.whenReady().then(async () => {
         console.error(error);
         const file = path.join(
           stateDir,
-          process.argv.includes('--proof-lifecycle')
-            ? 'lifecycle-proof.json'
-            : process.argv.includes('--proof-control')
-              ? 'control-proof.json'
-              : process.argv.includes('--proof-registration')
-                ? 'registration-proof.json'
-                : 'desktop-refinement-proof.json',
+          process.argv.includes('--proof-fleet-creation')
+            ? 'fleet-creation-proof.json'
+            : process.argv.includes('--proof-visibility')
+              ? 'visibility-proof.json'
+              : process.argv.includes('--proof-polish')
+                ? 'polish-proof.json'
+                : process.argv.includes('--proof-fleets')
+                  ? 'fleets-proof.json'
+                  : process.argv.includes('--proof-authority')
+                    ? 'authority-proof.json'
+                    : process.argv.includes('--proof-lifecycle')
+                      ? 'lifecycle-proof.json'
+                      : process.argv.includes('--proof-control')
+                        ? 'control-proof.json'
+                        : process.argv.includes('--proof-registration')
+                          ? 'registration-proof.json'
+                          : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(
@@ -820,6 +1155,8 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   controlConnection?.close();
+  conversation.close();
+  clearInterval(conversationTimer);
   globalShortcut.unregisterAll();
   clearInterval(timer);
   clearInterval(dragTimer);

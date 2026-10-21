@@ -1,0 +1,428 @@
+[
+  {
+    "type": "function",
+    "name": "voyager_status",
+    "description": "Read Voyager service status. Registration, runtime, capture and conversation state are different.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_vessels",
+    "description": "List registered Vessels with exact IDs, names, kind, rank, assignment, runtime and capture state. Resolve targets by ID, never guess.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_create",
+    "description": "Create and register one real Codex or Bash Vessel. Opens its Ghostty terminal unless open is false. Crew is the normal default rank. Poll the returned request with voyager_operation; starting is not completion.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "codex",
+            "shell"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "rank": {
+          "enum": [
+            "admiral",
+            "commodore",
+            "captain",
+            "crew",
+            null
+          ]
+        },
+        "supervisor_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "cwd",
+        "rank",
+        "supervisor_id",
+        "open"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_send",
+    "description": "Send a bounded instruction to one registered Codex Vessel. Starts a turn when idle or steers the current turn. Acceptance is not completed work. Never silently resend an uncertain instruction.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_operation",
+    "description": "Read the saved outcome of an action or instruction. Poll this instead of repeating its action.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_events",
+    "description": "Read captured work events after a cursor for a Vessel. Look for its actual native turn completion and errors.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "session_id",
+        "after"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_open",
+    "description": "Open or surface the same Vessel terminal without creating another runtime.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_background",
+    "description": "Close a Vessel terminal while its runtime and capture continue.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_stop",
+    "description": "Stop the owned Vessel and close its terminal, retaining registration and history. Only use when the human requested stopping that work.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_remove",
+    "description": "Deregister a Vessel, ending future capture; historic events remain. stop=true also stops and closes it. Only remove when the human requested it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stop": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_id",
+        "stop"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_rank",
+    "description": "Set an agent rank at the owner\u2019s request. Existing assignments must remain valid.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rank": {
+          "enum": [
+            "admiral",
+            "commodore",
+            "captain",
+            "crew"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "rank"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_supervise",
+    "description": "Assign a Vessel to an adjacent higher rank, or null to clear its supervisor. Fleet grouping does not grant authority.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supervisor_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "supervisor_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_shell",
+    "description": "Run one command in a registered Bash Vessel, respecting human input exclusion.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "command"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_fleets",
+    "description": "List named Fleet goals and explicit membership roots. Descendants follow their supervisor\u2019s Fleet unless explicitly moved.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_create_fleet",
+    "description": "Create a Fleet for a short goal. It is a presentation group, not an authority level.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "goal"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_move_to_fleet",
+    "description": "Move a Vessel and its assigned descendants into a Fleet, or null back to Vessels. Does not change authority.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fleet_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "fleet_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_remove_fleet",
+    "description": "Remove a presentation Fleet while preserving its Vessels and running work.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "fleet_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "fleet_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_escalations",
+    "description": "Read questions routed to the human, including original messages and answered/delivery state. Resolve stale questions before acting.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_answer",
+    "description": "Forward the human input bound to this native turn unchanged to one unanswered escalation. Use only when those words explicitly answer this question. For ambiguity or multiple possible targets ask for clarification. This records an answer and delivery, not task completion or a fabricated approval.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "escalation_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "escalation_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_rename",
+    "description": "Rename a Vessel for the owner. Identity, rank, work and capture remain unchanged.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "voyager_rename_fleet",
+    "description": "Rename a Fleet for the owner without changing membership or authority.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "fleet_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fleet_id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

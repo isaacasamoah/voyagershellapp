@@ -30,15 +30,30 @@ fn main() -> Result<()> {
     };
     if control.is_some()
         && !args.first().is_some_and(|op| {
-            ["send", "launch", "stop-instance", "shell-exec"].contains(&op.as_str())
+            [
+                "send",
+                "launch",
+                "stop-instance",
+                "shell-exec",
+                "adjudicate",
+                "move-vessel",
+            ]
+            .contains(&op.as_str())
         })
     {
-        bail!("--control is only supported by send, launch, shell-exec and stop-instance");
+        bail!(
+            "--control is only supported by send, launch, shell-exec, adjudicate, stop-instance and move-vessel"
+        );
     }
     let arity = match args.first().map(String::as_str) {
         Some("create" | "launch") => 5,
         Some("open") => 3,
         Some("background" | "stop-instance" | "remove" | "register-instance") => 2,
+        Some("rank" | "supervise" | "rename") => 3,
+        Some("voice") => 2,
+        Some("report" | "escalate") => 3,
+        Some("adjudicate") => 5,
+        Some("dock") => 2,
         Some("list") => 1,
         _ => args.len(),
     };
@@ -54,9 +69,68 @@ fn main() -> Result<()> {
     let mut include_removed = false;
     let mut request_id = None;
     let mut terminal = None;
+    let mut rank = None;
+    let mut supervisor = None;
+    let mut about = None;
+    let mut reply_to = None;
+    let mut window_id = None;
+    let mut terminal_pid = None;
+    let mut client_pid = None;
     let mut options = options.into_iter();
     while let Some(option) = options.next() {
         match option.as_str() {
+            "--window-id" if op == "dock" => {
+                window_id = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide window ID"))?
+                        .parse::<u32>()?,
+                )
+            }
+            "--terminal-pid" if op == "dock" => {
+                terminal_pid = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide terminal PID"))?
+                        .parse::<u32>()?,
+                )
+            }
+            "--client-pid" if op == "dock" => {
+                client_pid = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide client PID"))?
+                        .parse::<u32>()?,
+                )
+            }
+            "--rank" if ["create", "launch"].contains(&op) => {
+                rank = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide rank"))?,
+                )
+            }
+            "--supervisor" if ["create", "launch"].contains(&op) => {
+                supervisor = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide supervisor"))?,
+                )
+            }
+            "--about" if ["escalate", "adjudicate"].contains(&op) => {
+                about = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide task reference"))?,
+                )
+            }
+            "--reply-to" if op == "adjudicate" => {
+                reply_to = Some(
+                    options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("provide escalation ID"))?,
+                )
+            }
             "--background" if ["create", "launch"].contains(&op) => background = true,
             "--runtime-only" if op == "stop-instance" => runtime_only = true,
             "--stop" if op == "remove" => stop_removed = true,
@@ -75,6 +149,10 @@ fn main() -> Result<()> {
                     "stop-instance",
                     "remove",
                     "register-instance",
+                    "rank",
+                    "supervise",
+                    "rename",
+                    "voice",
                 ]
                 .contains(&op) =>
             {
@@ -87,7 +165,68 @@ fn main() -> Result<()> {
             _ => bail!("invalid option for {op}: {option}"),
         }
     }
+    if args
+        .first()
+        .is_some_and(|op| ["start", "serve", "dock"].contains(&op.as_str()))
+        && (std::env::var_os("VOYAGER_CALLER").is_some()
+            || std::env::var_os("VOYAGER_SESSION_CONTEXT").is_some())
+    {
+        bail!("forbidden: instance callers cannot start a service or claim a dock");
+    }
     let mut request = match args.as_slice() {
+        [op, session] if op == "dock" => {
+            let process = |pid: Option<u32>| -> Result<serde_json::Value> {
+                let pid = pid.ok_or_else(|| {
+                    anyhow::anyhow!("dock requires --terminal-pid and --client-pid")
+                })?;
+                let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;
+                let fields = stat
+                    .rsplit_once(')')
+                    .ok_or_else(|| anyhow::anyhow!("invalid process identity"))?
+                    .1
+                    .split_whitespace()
+                    .collect::<Vec<_>>();
+                let start = fields
+                    .get(19)
+                    .ok_or_else(|| anyhow::anyhow!("missing process start"))?;
+                Ok(json!({"pid":pid,"start":start}))
+            };
+            return service::hold_dock(
+                &state,
+                json!({"op":"dock","session_id":session,"generation":uuid::Uuid::new_v4().to_string(),"window_id":window_id.ok_or_else(||anyhow::anyhow!("dock requires --window-id"))?,"terminal":process(terminal_pid)?,"frontend":process(client_pid)?}),
+            );
+        }
+        [op] if op == "fleets" => json!({"op":"fleets"}),
+        [op, id, name] if op == "create-fleet" => json!({"op":op,"request_id":id,"name":name}),
+        [op, vessel, fleet] if op == "move-vessel" => {
+            json!({"op":op,"session_id":vessel,"fleet_id":if fleet == "none" { serde_json::Value::Null } else { json!(fleet) }})
+        }
+        [op, fleet, name] if op == "rename-fleet" => json!({"op":op,"fleet_id":fleet,"name":name}),
+        [op, target] if op == "voice" => json!({"op":op,"target":target}),
+        [op, session, name] if op == "rename" => json!({"op":op,"session_id":session,"name":name}),
+        [op, fleet] if op == "remove-fleet" => json!({"op":op,"fleet_id":fleet}),
+        [op] if op == "conversation" => json!({"op":"conversation","after":0}),
+        [op, after] if op == "conversation" => {
+            json!({"op":"conversation","after":after.parse::<u64>()?})
+        }
+        [op, id, text] if op == "chat" => {
+            json!({"op":"conversation-send","request_id":id,"text":text})
+        }
+        [op, id] if op == "chat-operation" => {
+            json!({"op":"conversation-operation","request_id":id})
+        }
+        [op] if ["capabilities", "escalations"].contains(&op.as_str()) => json!({"op":op}),
+        [op, session] if op == "capabilities" => json!({"op":op,"session_id":session}),
+        [op, session, rank] if op == "rank" => json!({"op":op,"session_id":session,"rank":rank}),
+        [op, session, supervisor] if op == "supervise" => {
+            json!({"op":op,"session_id":session,"supervisor_id":if supervisor=="none" {serde_json::Value::Null} else {json!(supervisor)}})
+        }
+        [op, id, message] if ["report", "escalate"].contains(&op.as_str()) => {
+            json!({"op":op,"request_id":id,"message":message})
+        }
+        [op, session, id, decision, message] if op == "adjudicate" => {
+            json!({"op":op,"session_id":session,"request_id":id,"decision":decision,"message":message})
+        }
         [op] if op == "serve" => return service::serve(&state, None),
         [op] if op == "start" => {
             println!("{}", service::start(&state)?);
@@ -169,9 +308,27 @@ fn main() -> Result<()> {
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
-            undock GENERATION (--control is supported by send, launch, shell-exec and stop-instance)"
+            rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | rename SESSION NAME [--request-id ID] | capabilities [SESSION]\n\
+            fleets | create-fleet ID GOAL | rename-fleet FLEET NAME | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
+            voice app|none|SESSION [--request-id ID] | conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
+            report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
+            adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\
+            dock SESSION --window-id W --terminal-pid P --client-pid P (holds connection) | undock GENERATION\n\
+            (--control is supported by send, launch, shell-exec, adjudicate, stop-instance and move-vessel)"
         ),
     };
+    if let Some(rank) = rank {
+        request["rank"] = json!(rank);
+    }
+    if let Some(supervisor) = supervisor {
+        request["supervisor_id"] = json!(supervisor);
+    }
+    if let Some(about) = about {
+        request["about_request_id"] = json!(about);
+    }
+    if let Some(reply_to) = reply_to {
+        request["reply_to"] = json!(reply_to);
+    }
     if let Some(terminal) = terminal {
         request["terminal"] = json!(terminal);
     }
@@ -181,6 +338,10 @@ fn main() -> Result<()> {
         "stop-instance",
         "remove",
         "register-instance",
+        "rank",
+        "supervise",
+        "rename",
+        "voice",
     ]
     .contains(&request["op"].as_str().unwrap_or(""))
     {
@@ -192,6 +353,11 @@ fn main() -> Result<()> {
     if let Some(generation) = control {
         request["control_generation"] = json!(generation);
     }
+    let operation = if request["op"] == "conversation-send" {
+        "conversation-operation"
+    } else {
+        "operation"
+    };
     let mut receipt = service::client(&state, request)?;
     while receipt["state"] == "pending" {
         let id = receipt["request_id"]
@@ -199,10 +365,10 @@ fn main() -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("pending receipt has no request ID"))?
             .to_owned();
         std::thread::sleep(Duration::from_millis(250));
-        receipt = service::client(&state, json!({"op":"operation","request_id":id}))?;
+        receipt = service::client(&state, json!({"op":operation,"request_id":id}))?;
     }
     println!("{}", serde_json::to_string_pretty(&receipt)?);
-    if ["partial", "uncertain", "cancelled"]
+    if ["partial", "uncertain", "cancelled", "failed"]
         .iter()
         .any(|s| receipt["state"] == *s)
     {

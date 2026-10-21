@@ -1,6 +1,9 @@
-# Register a real Codex session
+# Service and CLI
 
-This first service slice connects to a Codex app server that is already running. You keep using the same native app and thread while Voyager observes new conversation events. Registration never makes Voyager the owner of the native process.
+Voyager owns the native instances it creates and can also register an already
+running Codex app-server conversation. Registration observes future events and
+does not transfer ownership of that external process. The panel and agent tools
+use the operations below through the same Rust service.
 
 ## Build and run
 
@@ -36,9 +39,30 @@ target/debug/voyager --state "$VOYAGER_STATE" send SESSION_ID request-001 \
   "Please use no tools and change no files. Reply with: Voyager connected."
 ```
 
-The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. Sending to an already-active thread is refused. Native input can race that check, so the returned native turn ID is authoritative; a send is not promised to create an independent task.
+The message goes to the existing agent. No model, instructions, credentials or permission settings are replaced. An idle target starts a turn; an active target is steered using its exact observed
+turn ID. A changed or unavailable active turn is reported without a new-turn
+fallback. The returned native turn ID and dispatch mode identify the submission;
+acceptance is separate from completion.
 
 `serve` stays in the foreground unless your process manager launches it in the background. `start` instead runs it independently, and the Electron app uses that operation. No OS service is installed by this repository yet. Closing the watcher leaves the service running. Closing a foreground service terminal can stop Voyager and disrupt its managed workers; run it independently for detach persistence. The separately registered lead's native process remains outside Voyager's ownership.
+
+## App and service lifetime
+
+Opening the app starts or reconnects to Voyager. The panel's close cross quits
+only Electron; owned runtimes, capture and the private Codex process remain.
+The small top-left menu contains **Stop service**. This calls the same owner-only
+`stop` operation as the CLI and closes the interface only after it succeeds.
+Running managed Vessels must be stopped explicitly first, including any that
+were deregistered. A refusal stays visible and leaves the app connected.
+Per-Vessel menus retain separate **Stop**, **Remove**, and **Stop and remove**
+actions; their [lifecycle contract](lifecycle.md) defines the effects.
+
+Starting at login is not enabled. Opening Voyager is the startup action.
+
+The desktop uses named, sender-checked
+[Electron IPC](https://www.electronjs.org/docs/latest/tutorial/ipc).
+The service option reuses the panel's existing
+[popover menu](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using).
 
 ## Commands
 
@@ -54,7 +78,7 @@ independently owned native server as before.
 | `register THREAD_ID` | Subscribe to an existing loaded thread; repeated registration keeps its identity |
 | `list [--include-removed]` | Active registrations; optionally include retained deregistered records |
 | `start` | Connect to the existing service or start it independently of the calling app |
-| `create codex\|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty]` | Start/register/capture and open a native window by default |
+| `create codex\|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] [--rank RANK] [--supervisor ID]` | Start/register/capture and open a native window by default |
 | `open SESSION_ID ghostty` | Request a native Ghostty window for a managed instance; no new agent or control claim |
 | `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
 | `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |
@@ -63,7 +87,7 @@ independently owned native server as before.
 | `events [CURSOR]` | Up to 100 recorded events after an exclusive sequence cursor |
 | `watch [CURSOR]` | Print ordered JSONL pages, checking for new events every 250 ms when caught up |
 | `watch --pretty [CURSOR]` | Readable You/Agent messages and lifecycle lines, with terminal control characters escaped |
-| `launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background]` | Start/register/capture, submit one initial task and open by default; task acceptance is not completion |
+| `launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] [--rank RANK] [--supervisor ID]` | Start/register/capture, submit one initial task and open by default; task acceptance is not completion |
 | `attach SESSION_ID` | Replace this terminal client with the managed instance's native attachment |
 | `attach-info SESSION_ID` | Inspect the worker's native connection command and process identity |
 | `background SESSION_ID` | Close the owned viewer while runtime and capture continue |
@@ -72,7 +96,25 @@ independently owned native server as before.
 | `register-instance SESSION_ID` | Explicitly resume future capture of a removed instance, without importing history |
 | `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
 | `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
+| `rename SESSION NAME [--request-id ID]` | Change a display name without changing the runtime or launch receipt |
+| `fleets` | Owner or currently docked agent reads visual Fleet definitions/membership |
+| `move-vessel VESSEL FLEET\|none` | Owner or docked agent moves a Vessel branch without changing authority |
+| `rename-fleet FLEET NAME` | Rename an existing Fleet without moving members |
+| `voice app\|none\|SESSION [--request-id ID]` | Select voice, stopping participating voices first; native target must be docked |
+| `rank INSTANCE RANK [--request-id ID]` | Owner changes an agent rank without invalidating assignments |
+| `supervise TARGET SUPERVISOR\|none [--request-id ID]` | Owner sets or clears a direct assignment |
+| `capabilities [INSTANCE]` | Read permitted actions and the bound caller's scope |
+| `report REQUEST MESSAGE` | Record own status without starting a native turn |
+| `adjudicate TARGET REQUEST accept\|revise\|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]` | Record and deliver a decision with separate delivery outcome |
+| `escalate REQUEST MESSAGE [--about TASK]` | Route a question to the assigned supervisor or owner |
+| `escalations` | Owner reads escalated questions and reply outcomes |
+| `dock INSTANCE --window-id W --terminal-pid P --client-pid P` | Owner holds a live CLI control connection; exiting releases it |
 | `undock GENERATION` | Release only that current control attachment, leaving registration and work alone |
+
+Agent creation defaults to Crew; RANK is admiral, commodore, captain or crew.
+Bash has no rank. [Authority](authority.md) defines permitted callers and direct
+assignment scope. Raw native attachment information is owner-only. Instance calls
+use a private bound context and never fall back to owner access.
 
 See [docking and control](control.md) for the persistent desktop connection,
 `interface.docked`/`interface.undocked` events and optional `--control GENERATION`
@@ -113,7 +155,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Eight earlier black-box process fixtures remain. Twelve Rust tests exercise the service against local WebSocket protocol fixtures, test source deduplication/text bounds, and cover parentless named creation, failed native startup and schema migration. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, several concurrent owned workers and explicit stop. The shell test uses a real Bash PTY, shared working state, unfinished input and close/reopen during work. They are not substitutes for the separate native demonstrations.
+Eight earlier black-box process fixtures remain. Service and authority tests exercise the service against local WebSocket protocol fixtures, test source deduplication/text bounds, and cover parentless named creation, failed native startup and schema migration. They cover exact registration, unknown targets, duplicate sends and conflicting IDs, source filtering, client disconnect, native-owner independence, restart gaps, uncertain delivery without replay, and explicit gaps after malformed notifications or an overflowing notification queue during a request. The worker test adds real child-process ownership, duplicate launches, client detach/reconnect during work, parent attribution, several concurrent owned workers and explicit stop. The shell test uses a real Bash PTY, shared working state, unfinished input and close/reopen during work. They are not substitutes for the separate native demonstrations.
 
 ## Real Codex check — 9 October 2026
 

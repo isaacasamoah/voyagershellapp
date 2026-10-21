@@ -22,30 +22,56 @@ is our starting point, and we’d love to build toward it with other developers.
 ## Current prototype
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
-  Creation registers it and starts capture. Native windows open by default.
-- **↗** focuses an existing window or reopens the same running instance.
-- **⋯** offers background, stop, remove, and stop-and-remove. Removal ends future
+  Creation registers it and starts capture. Choose a Fleet when one exists. Native
+  windows open by default.
+- Click a Vessel card to surface its terminal on half a display and minimise
+  the others. Rank rows start collapsed; separate Fleets collect related vessels
+  through drag/drop or a request to Voyager/the docked agent. Membership is visual
+  organization and grants no authority. The panel and canvases size to their visible content.
+  See [Vessels and fleets](docs/fleets.md).
+- **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
 - Docking selects the human control attachment. Undocking or closing Electron
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
-- Agent messages can start a turn only while the target is idle. Active-turn
-  steering is not implemented.
+- Agent creation selects Admiral, Commodore, Captain or Crew, defaulting to Crew.
+  Assigned supervisors delegate and adjudicate downward; agents escalate upward.
+  Docking temporarily grants human command authority.
+- Agent messages start an idle turn or steer the observed active turn. The service
+  checks the bound caller; it never silently replays a failed or uncertain send.
 
 The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
+Rebuilding the executable at the same path preserves viewer and instance CLI paths.
+Bash open receipts also wait for the viewer connection, not just a Ghostty window.
 
-Captain/crew authority, supervisor priority, automatic native voice, knowledge
-extraction and shared graphs are later work. Voyager is an experimental prototype.
+Explicit supervisor preemption, knowledge extraction and shared graphs are later
+work. Voyager is an experimental prototype.
+
+## Talk to Voyager
+
+Voyager starts a private Codex runtime with the service. Type in the subtle chat
+bar at the panel bottom, or press the avatar's soundwave to use voice. Named
+service tools manage Vessels and Fleets. Escalations and replies use the same chat,
+with the original request available behind disclosure.
+The conversation stays separate from terminal sessions and Vessel capture.
+Docking selects native Codex voice by default; undocking stops it. The floating
+soundwave uses the private app conversation. [Voice setup and limits](docs/voice.md).
+Closing Electron stops voice while the runtime and work continue.
+[Conversation setup and current limits](docs/harness-runtime.md).
 
 ## Try it
 
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
+Opening the app starts or reconnects to the service. Closing the panel leaves work
+running. After stopping managed Vessels, use the small panel menu's **Stop service**
+to shut Voyager down explicitly. Starting at login is not enabled.
 The [desktop guide](docs/desktop.md) describes docking and gestures.
 The [lifecycle contract](docs/lifecycle.md) defines each action and its result.
+The [authority guide](docs/authority.md) explains ranks, assignment and agent tools.
 The [CLI reference](docs/service.md#commands) exposes the same operations to scripts
 and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that workflow.
 

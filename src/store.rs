@@ -21,7 +21,7 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         let db = Connection::open(path)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        ensure!(version <= 1, "unsupported database schema version");
+        ensure!(version <= 3, "unsupported database schema version");
         db.execute_batch(
             "PRAGMA foreign_keys=ON;
             PRAGMA journal_mode=DELETE;
@@ -92,6 +92,43 @@ impl Store {
                 COMMIT;",
             )?;
         }
+        if version < 2 {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                ALTER TABLE sessions ADD COLUMN rank TEXT;
+                ALTER TABLE sessions ADD COLUMN supervisor_id TEXT REFERENCES sessions(id);
+                ALTER TABLE operations ADD COLUMN actor_session_id TEXT REFERENCES sessions(id);
+                ALTER TABLE operations ADD COLUMN actor_kind TEXT;
+                ALTER TABLE requests ADD COLUMN actor_session_id TEXT REFERENCES sessions(id);
+                ALTER TABLE requests ADD COLUMN actor_kind TEXT;
+                ALTER TABLE requests ADD COLUMN authority TEXT;
+                ALTER TABLE requests ADD COLUMN control_generation TEXT;
+                ALTER TABLE requests ADD COLUMN purpose TEXT;
+                ALTER TABLE requests ADD COLUMN about_request_id TEXT REFERENCES requests(id);
+                ALTER TABLE requests ADD COLUMN dispatch_mode TEXT;
+                ALTER TABLE requests ADD COLUMN expected_turn_id TEXT;
+                ALTER TABLE requests ADD COLUMN error_code TEXT;
+                UPDATE sessions SET rank='crew' WHERE kind='codex';",
+            )?;
+            let invalid: i64 = db.query_row(
+                "SELECT count(*) FROM sessions WHERE kind NOT IN ('codex','shell')",
+                [],
+                |r| r.get(0),
+            )?;
+            ensure!(invalid == 0, "unsupported instance kind in migration");
+            db.execute_batch("PRAGMA user_version=2; COMMIT;")?;
+        }
+        if version < 3 {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                ALTER TABLE sessions ADD COLUMN name TEXT;
+                UPDATE sessions SET name=(SELECT name FROM workers WHERE workers.session_id=sessions.id);
+                PRAGMA user_version=3;
+                COMMIT;",
+            )?;
+        }
+        let invalid: i64 = db.query_row("SELECT count(*) FROM sessions WHERE kind NOT IN ('codex','shell') OR (kind='codex' AND (rank IS NULL OR rank NOT IN ('admiral','commodore','captain','crew'))) OR (kind='shell' AND rank IS NOT NULL)", [], |r| r.get(0))?;
+        ensure!(invalid == 0, "invalid instance kind or rank in database");
         Ok(Self(db))
     }
 
@@ -112,7 +149,7 @@ impl Store {
         }
         let id = Uuid::new_v4().to_string();
         self.0.execute(
-            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms) VALUES (?1,?2,?3,?4,?5,?6)",
+            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms,rank) VALUES (?1,?2,?3,?4,?5,?6,'crew')",
             params![
                 id,
                 server,
@@ -131,11 +168,11 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,w.name,s.kind,s.removed_ms,s.capture_generation FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
-            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?,"kind":r.get::<_,String>(10)?,"removed_ms":r.get::<_,Option<i64>>(11)?,"capture_generation":r.get::<_,i64>(12)?}))
+            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?,"kind":r.get::<_,String>(10)?,"removed_ms":r.get::<_,Option<i64>>(11)?,"capture_generation":r.get::<_,i64>(12)?,"rank":r.get::<_,Option<String>>(13)?,"supervisor_id":r.get::<_,Option<String>>(14)?}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -181,11 +218,14 @@ impl Store {
         metadata: &Value,
         pid: u32,
     ) -> Result<String> {
-        let id = Uuid::new_v4().to_string();
+        let id = self
+            .operation(launch)?
+            .and_then(|(v, _)| v["new_session_id"].as_str().map(str::to_owned))
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
         let native = metadata["id"].as_str().context("missing worker thread")?;
         let tx = self.0.transaction()?;
         tx.execute(
-            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms) VALUES (?1,?2,?3,?4,?5,?6)",
+            "INSERT INTO sessions (id,server,native_id,native_session_id,cwd,registered_ms,rank) VALUES (?1,?2,?3,?4,?5,?6,'crew')",
             params![
                 id,
                 server,
@@ -200,7 +240,7 @@ impl Store {
             params![launch, id, pid],
         )?;
         tx.execute(
-            "UPDATE sessions SET kind=?2 WHERE id=?1",
+            "UPDATE sessions SET kind=?2,rank=CASE WHEN ?2='shell' THEN NULL ELSE 'crew' END,name=(SELECT name FROM workers WHERE workers.session_id=sessions.id) WHERE id=?1",
             params![id, metadata["kind"].as_str().unwrap_or("codex")],
         )?;
         tx.commit()?;
@@ -294,7 +334,21 @@ impl Store {
             "UPDATE sessions SET removed_ms=COALESCE(removed_ms,?2) WHERE id=?1",
             params![session, now()],
         )?;
-        self.local(session, "session.removed", json!({"history_retained":true}))?;
+        let edges: Vec<Value> = self
+            .sessions()?
+            .into_iter()
+            .filter(|s| s["id"] == session || s["supervisor_id"] == session)
+            .map(|s| json!({"session_id":s["id"],"supervisor_id":s["supervisor_id"]}))
+            .collect();
+        self.0.execute(
+            "UPDATE sessions SET supervisor_id=NULL WHERE id=?1 OR supervisor_id=?1",
+            [session],
+        )?;
+        self.local(
+            session,
+            "session.removed",
+            json!({"history_retained":true,"cleared_assignments":edges}),
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -324,8 +378,8 @@ impl Store {
 
     pub fn begin_operation(&self, id: &str, inputs: &Value, receipt: &Value) -> Result<()> {
         self.0.execute(
-            "INSERT INTO operations VALUES (?1,?2,?3,?4,?4)",
-            params![id, inputs.to_string(), receipt.to_string(), now()],
+            "INSERT INTO operations (id,inputs,receipt,created_ms,updated_ms,actor_session_id,actor_kind) VALUES (?1,?2,?3,?4,?4,?5,?6)",
+            params![id, inputs.to_string(), receipt.to_string(), now(), inputs["actor"]["session_id"].as_str(), inputs["actor"]["kind"].as_str()],
         )?;
         Ok(())
     }
@@ -335,6 +389,65 @@ impl Store {
             "UPDATE operations SET receipt=?2,updated_ms=?3 WHERE id=?1",
             params![id, receipt.to_string(), now()],
         )?;
+        Ok(())
+    }
+
+    pub fn reconcile_coordination(&self) -> Result<()> {
+        let rows = {
+            let mut query = self.0.prepare("SELECT id,inputs,receipt FROM operations WHERE json_extract(inputs,'$.op') IN ('adjudicate','escalate') AND json_extract(receipt,'$.delivery')='recorded' AND json_type(receipt,'$.task_request_id')='text'")?;
+            query
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let transaction = self.0.unchecked_transaction()?;
+        for (id, inputs, receipt) in rows {
+            let inputs: Value = serde_json::from_str(&inputs)?;
+            let mut receipt: Value = serde_json::from_str(&receipt)?;
+            let task_id = receipt["task_request_id"]
+                .as_str()
+                .context("missing coordination task identity")?;
+            let task = self.request(task_id)?;
+            let (delivery, reason) = match task.as_ref() {
+                Some(task)
+                    if task["state"] == "accepted"
+                        && task["native_turn_id"]
+                            .as_str()
+                            .is_some_and(|id| !id.is_empty()) =>
+                {
+                    ("accepted", None)
+                }
+                Some(task) if task["state"] == "failed" => (
+                    "failed",
+                    Some(task["error_code"].as_str().unwrap_or("provider_failed")),
+                ),
+                Some(task) if task["state"] == "pending" && task["dispatch_mode"].is_null() => {
+                    ("failed", Some("service_restarted_before_dispatch"))
+                }
+                None => ("failed", Some("service_restarted_before_dispatch")),
+                Some(_) => ("uncertain", Some("service_restarted_delivery_unconfirmed")),
+            };
+            receipt["delivery"] = json!(delivery);
+            if let Some(reason) = reason {
+                receipt["error"] = json!(format!(
+                    "Native delivery {delivery}: {reason}; no automatic replay."
+                ));
+            } else {
+                receipt
+                    .as_object_mut()
+                    .context("invalid coordination receipt")?
+                    .remove("error");
+            }
+            self.local(receipt["session_id"].as_str().context("missing coordination sender")?, "coordination.delivery", json!({"request_id":id,"destination":receipt["destination"],"delivery":delivery,"actor":inputs["actor"],"reason":reason,"replay_available":false}))?;
+            receipt["native_request"] = json!(task);
+            self.save_operation(&id, &receipt)?;
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -354,12 +467,12 @@ impl Store {
     }
 
     pub fn request(&self, id: &str) -> Result<Option<Value>> {
-        Ok(self.0.query_row("SELECT session_id,message,state,native_turn_id FROM requests WHERE id=?1",[id],|r|Ok(json!({"request_id":id,"session_id":r.get::<_,String>(0)?,"message":r.get::<_,String>(1)?,"state":r.get::<_,String>(2)?,"native_turn_id":r.get::<_,Option<String>>(3)?}))).optional()?)
+        Ok(self.0.query_row("SELECT session_id,message,state,native_turn_id,actor_session_id,actor_kind,authority,control_generation,purpose,about_request_id,dispatch_mode,expected_turn_id,error_code FROM requests WHERE id=?1",[id],|r|Ok(json!({"request_id":id,"session_id":r.get::<_,String>(0)?,"message":r.get::<_,String>(1)?,"state":r.get::<_,String>(2)?,"native_turn_id":r.get::<_,Option<String>>(3)?,"actor_session_id":r.get::<_,Option<String>>(4)?,"actor_kind":r.get::<_,Option<String>>(5)?,"authority":r.get::<_,Option<String>>(6)?,"control_generation":r.get::<_,Option<String>>(7)?,"purpose":r.get::<_,Option<String>>(8)?,"about_request_id":r.get::<_,Option<String>>(9)?,"dispatch_mode":r.get::<_,Option<String>>(10)?,"expected_turn_id":r.get::<_,Option<String>>(11)?,"error_code":r.get::<_,Option<String>>(12)?}))).optional()?)
     }
 
     pub fn begin_request(&self, id: &str, session: &str, message: &str) -> Result<()> {
         self.0.execute(
-            "INSERT INTO requests VALUES (?1,?2,?3,'uncertain',NULL,?4)",
+            "INSERT INTO requests (id,session_id,message,state,native_turn_id,created_ms) VALUES (?1,?2,?3,'pending',NULL,?4)",
             params![id, session, message, now()],
         )?;
         Ok(())

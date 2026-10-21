@@ -1,6 +1,7 @@
 use super::{Runtime, Terminal, string};
 use crate::{
     actions::{self, Action, PendingOperation, Phase},
+    authority,
     codex::Codex,
     events,
     shell::Shell,
@@ -16,6 +17,38 @@ use std::{
 };
 
 impl Runtime {
+    pub(super) fn rename_instance(&mut self, request: &Value) -> Result<Value> {
+        let id = actions::request_id(request)?;
+        if let Some((inputs, receipt)) = self.store.operation(id)? {
+            ensure!(
+                inputs == *request,
+                "request_conflict: rename ID has different inputs"
+            );
+            return Ok(receipt);
+        }
+        ensure!(
+            self.store.request(id)?.is_none(),
+            "request_conflict: ID already names a task"
+        );
+        let session = string(request, "session_id")?;
+        let previous = self.store.session(session)?;
+        let name = actions::name(string(request, "name")?)?;
+        let transaction = self.store.0.unchecked_transaction()?;
+        self.store.0.execute(
+            "UPDATE sessions SET name=?2 WHERE id=?1",
+            rusqlite::params![session, name],
+        )?;
+        self.store.local(
+            session,
+            "session.renamed",
+            json!({"previous_name":previous["name"],"name":name,"request_id":id}),
+        )?;
+        let receipt = json!({"request_id":id,"session_id":session,"state":"completed","action":"rename","name":name,"event_seq":self.store.0.last_insert_rowid(),"actor":request["actor"]});
+        self.store.begin_operation(id, request, &receipt)?;
+        transaction.commit()?;
+        Ok(receipt)
+    }
+
     pub(super) fn create_operation(&mut self, request: &Value) -> Result<Value> {
         let id = actions::request_id(request)?;
         ensure!(
@@ -29,10 +62,26 @@ impl Runtime {
             request.get("terminal").is_none_or(|t| t == "ghostty"),
             "unsupported: choose ghostty"
         );
+        let (rank, supervisor) = authority::creation(
+            &self.store,
+            &request["actor"],
+            self.control.session(),
+            request,
+        )?;
         let mut inputs = request.clone();
+        if let Some(rank) = rank {
+            inputs["rank"] = json!(rank.as_str());
+        }
+        if let Some(supervisor) = supervisor {
+            inputs["supervisor_id"] = json!(supervisor);
+        }
         inputs["open"] = json!(open);
         inputs["terminal"] = json!("ghostty");
-        if let Some((previous, receipt)) = self.store.operation(id)? {
+        if let Some((mut previous, receipt)) = self.store.operation(id)? {
+            previous
+                .as_object_mut()
+                .context("creation inputs")?
+                .remove("new_session_id");
             ensure!(
                 previous == inputs,
                 "request_conflict: creation ID has different inputs"
@@ -42,6 +91,10 @@ impl Runtime {
         ensure!(
             self.store.launch(id)?.is_none(),
             "outcome_unknown: this launch predates operation receipts; inspect the existing instance"
+        );
+        ensure!(
+            self.store.request(id)?.is_none(),
+            "request_conflict: ID already names a task"
         );
         let cwd = fs::canonicalize(string(request, "cwd")?)
             .context("invalid_input: choose an existing folder")?;
@@ -54,11 +107,7 @@ impl Runtime {
                 ["codex", "shell"].contains(&kind),
                 "unsupported: instance kind"
             );
-            let name = string(request, "name")?;
-            ensure!(
-                !name.trim().is_empty() && name.len() <= 100 && !name.chars().any(char::is_control),
-                "invalid_input: use a short name"
-            );
+            let name = actions::name(string(request, "name")?)?;
             (kind, Some(name), None, None)
         } else {
             let parent = string(request, "parent_id")?;
@@ -70,14 +119,31 @@ impl Runtime {
             );
             ("codex", None, Some(parent), Some(prompt))
         };
-        let receipt = json!({"request_id":id,"action":op,"session_id":null,"state":"pending","runtime":"unknown","window":"closed","registration":null,"effects":[{"phase":"start","state":"requested"}],"event_seq":null});
+        inputs["new_session_id"] = json!(uuid::Uuid::new_v4().to_string());
+        let receipt = json!({"request_id":id,"actor":request["actor"],"action":op,"session_id":null,"state":"pending","runtime":"unknown","window":"closed","registration":null,"effects":[{"phase":"start","state":"requested"}],"event_seq":null});
         self.store.begin_launch(id, parent, cwd, prompt, name)?;
         self.store.begin_operation(id, &inputs, &receipt)?;
         self.store
             .0
             .execute("UPDATE workers SET kind=?2 WHERE launch_id=?1", [id, kind])?;
+        let context = match self.credentials.issue(
+            &self.state,
+            &self.instance,
+            string(&inputs, "new_session_id")?,
+            id,
+        ) {
+            Ok(context) => context,
+            Err(error) => {
+                self.fail_creation(id, error.to_string())?;
+                return Ok(self
+                    .store
+                    .operation(id)?
+                    .context("creation receipt missing")?
+                    .1);
+            }
+        };
         if kind == "shell" {
-            match Shell::start(&mut self.store, &self.state, id, cwd) {
+            match Shell::start(&mut self.store, &self.state, &self.binary, id, cwd) {
                 Ok(shell) => {
                     let session = shell.session.clone();
                     self.shells.insert(session.clone(), shell);
@@ -86,7 +152,15 @@ impl Runtime {
                 Err(error) => self.fail_creation(id, error.to_string())?,
             }
         } else {
-            match Worker::begin(&self.state, &self.executable, id, cwd, name) {
+            match Worker::begin(
+                &self.state,
+                &self.binary,
+                &self.executable,
+                id,
+                cwd,
+                name,
+                &context,
+            ) {
                 Ok(startup) => {
                     self.creations.insert(id.into(), (inputs, startup));
                 }
@@ -100,13 +174,15 @@ impl Runtime {
             .1)
     }
 
-    fn fail_creation(&self, id: &str, error: String) -> Result<()> {
+    fn fail_creation(&mut self, id: &str, error: String) -> Result<()> {
         self.store.worker_state(id, "failed")?;
-        let mut receipt = self
+        let (inputs, mut receipt) = self
             .store
             .operation(id)?
-            .context("creation receipt missing")?
-            .1;
+            .context("creation receipt missing")?;
+        if let Some(session) = inputs["new_session_id"].as_str() {
+            self.credentials.revoke(session)?;
+        }
         receipt["state"] = json!("partial");
         receipt["error"] = json!(error);
         receipt["effects"][0]["state"] = json!("failed");
@@ -115,10 +191,25 @@ impl Runtime {
 
     fn complete_creation(&mut self, request: &Value, session: &str) -> Result<()> {
         let id = actions::request_id(request)?;
+        authority::creation(
+            &self.store,
+            &request["actor"],
+            self.control.session(),
+            request,
+        )?;
+        self.store.0.execute(
+            "UPDATE sessions SET rank=?2,supervisor_id=?3 WHERE id=?1",
+            rusqlite::params![
+                session,
+                request["rank"].as_str(),
+                request["supervisor_id"].as_str()
+            ],
+        )?;
         let mut operation = PendingOperation::new(id, session, Action::Open);
+        operation.receipt["actor"] = request["actor"].clone();
         operation.receipt["action"] = request["op"].clone();
         let record = self.store.session(session)?;
-        for field in ["name", "cwd", "parent_id", "kind"] {
+        for field in ["name", "cwd", "parent_id", "kind", "rank", "supervisor_id"] {
             operation.receipt[field] = record[field].clone();
         }
         operation.receipt["runtime_pid"] =
@@ -194,7 +285,8 @@ impl Runtime {
     pub(super) fn begin_action(&mut self, request: &Value, action: Action) -> Result<Value> {
         let id = actions::request_id(request)?;
         let session = string(request, "session_id")?;
-        let inputs = action.inputs(session, request.get("control_generation"));
+        let mut inputs = action.inputs(session, request.get("control_generation"));
+        inputs["actor"] = request["actor"].clone();
         if let Some((previous, receipt)) = self.store.operation(id)? {
             ensure!(
                 previous == inputs,
@@ -202,6 +294,10 @@ impl Runtime {
             );
             return Ok(receipt);
         }
+        ensure!(
+            self.store.request(id)?.is_none(),
+            "request_conflict: ID already names a task"
+        );
         let record = self.store.session(session)?;
         ensure!(
             !self
@@ -228,6 +324,7 @@ impl Runtime {
             );
         }
         let mut pending = PendingOperation::new(id, session, action);
+        pending.receipt["actor"] = request["actor"].clone();
         self.snapshot_operation(&mut pending)?;
         self.store.begin_operation(id, &inputs, &pending.receipt)?;
         let receipt = pending.receipt.clone();
@@ -324,6 +421,17 @@ impl Runtime {
             "outcome_unknown: lifecycle acknowledgement timed out; inspect this operation before trying another action"
         );
         let id = operation.session.clone();
+        if matches!(
+            operation.phase,
+            Phase::Start | Phase::Close | Phase::Remove | Phase::LaunchIdle { .. }
+        ) {
+            let inputs = self
+                .store
+                .operation(&operation.id)?
+                .context("operation missing")?
+                .0;
+            self.authorize(&inputs)?;
+        }
         if let Some(generation) = self
             .store
             .operation(&operation.id)?
@@ -355,6 +463,12 @@ impl Runtime {
                             ensure!(
                                 terminal::window(terminal.child.id())? == Some(window),
                                 "outcome_unknown: terminal window identity changed"
+                            );
+                            ensure!(
+                                self.shells
+                                    .get(&id)
+                                    .is_none_or(|shell| shell.viewer_connected()),
+                                "provider_failed: terminal has no attached shell viewer; close it before reopening"
                             );
                             terminal::focus(terminal.child.id())?;
                             operation.receipt["window_id"] = json!(window);
@@ -436,6 +550,13 @@ impl Runtime {
                             + 1;
                         shell.require_registration_boundary()?;
                         self.store.reactivate(&id)?;
+                        let launch: String = self.store.0.query_row(
+                            "SELECT launch_id FROM workers WHERE session_id=?1",
+                            [&id],
+                            |r| r.get(0),
+                        )?;
+                        self.credentials
+                            .issue(&self.state, &self.instance, &id, &launch)?;
                         shell.reactivate(next);
                         self.store.local(
                             &id,
@@ -541,6 +662,14 @@ impl Runtime {
                 if let Some(window) = terminal::window(terminal.child.id())? {
                     terminal.window = Some(window);
                     operation.receipt["window_id"] = json!(window);
+                    if self
+                        .shells
+                        .get(&id)
+                        .is_some_and(|shell| !shell.viewer_connected())
+                    {
+                        operation.phase = Phase::WaitOpen;
+                        return Ok(false);
+                    }
                     operation.effect("open", "confirmed");
                     Ok(true)
                 } else {
@@ -550,6 +679,7 @@ impl Runtime {
             }
             Phase::Remove => {
                 self.store.remove(&id)?;
+                self.credentials.revoke(&id)?;
                 if let Some(shell) = self.shells.get_mut(&id) {
                     shell.deregister();
                 }
@@ -579,6 +709,7 @@ impl Runtime {
                     let task = format!("launch:{}", operation.id);
                     let prompt = string(&inputs, "prompt")?;
                     self.store.begin_request(&task, &id, prompt)?;
+                    self.store.0.execute("UPDATE requests SET actor_kind=?2,actor_session_id=?3,authority=?4,control_generation=?5,purpose='instruction',dispatch_mode='start',state='uncertain' WHERE id=?1",rusqlite::params![task,inputs["actor"]["kind"].as_str(),inputs["actor"]["session_id"].as_str(),if crate::authority::is_owner(&inputs["actor"]) {"owner"} else {"supervisor"},inputs["control_generation"].as_str()])?;
                     let native = self.store.session(&id)?["native_thread_id"]
                         .as_str()
                         .context("native identity missing")?
@@ -659,6 +790,24 @@ impl Runtime {
                     );
                     connection.pending.clear();
                     let generation = self.store.reactivate(&id)?;
+                    let launch = self
+                        .store
+                        .sessions()?
+                        .into_iter()
+                        .find(|s| s["id"] == id)
+                        .and_then(|s| {
+                            self.store
+                                .0
+                                .query_row(
+                                    "SELECT launch_id FROM workers WHERE session_id=?1",
+                                    [s["id"].as_str().unwrap_or("")],
+                                    |r| r.get::<_, String>(0),
+                                )
+                                .ok()
+                        })
+                        .unwrap_or_else(|| id.clone());
+                    self.credentials
+                        .issue(&self.state, &self.instance, &id, &launch)?;
                     if let Some(worker) = self.workers.get_mut(&id) {
                         worker.connection = Some(*connection);
                         worker.generation = generation;

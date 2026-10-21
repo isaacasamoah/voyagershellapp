@@ -28,6 +28,40 @@ struct Fixture {
 }
 
 #[test]
+fn codex_found_on_path_has_a_canonical_viewer_executable() {
+    let mut f = Fixture::new();
+    let bin = f.dir.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let executable = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/worker_server.py"
+    ));
+    std::os::unix::fs::symlink(executable, bin.join("codex")).unwrap();
+    let search = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::iter::once(bin).chain(std::env::split_paths(&search));
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env_remove("VOYAGER_CODEX_BIN")
+            .env("PATH", std::env::join_paths(paths).unwrap())
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"path-codex","name":"Agent","cwd":f.dir}));
+    assert_eq!(created["runtime"], "running");
+    let info = f.call(json!({"op":"attach-info","session_id":created["session_id"]}));
+    assert_eq!(
+        info["executable"],
+        fs::canonicalize(executable).unwrap().to_str().unwrap()
+    );
+    f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
+    f.halt();
+}
+
+#[test]
 fn cli_option_spelling_in_message_or_name_remains_data() {
     let mut f = Fixture::new();
     f.start();
@@ -117,6 +151,7 @@ impl Fixture {
                                 let result=match request["method"].as_str().unwrap() {
                                     "initialize" => json!({"userAgent":"fixture"}),
                                     "thread/loaded/list" => json!({"data":["live-thread","other-thread"],"nextCursor":null}),
+                                    "thread/realtime/stop" => json!({}),
                                     "thread/read" => json!({"thread":metadata(p["threadId"].as_str().unwrap())}),
                                     "thread/resume" => {
                                         assert_eq!(p["excludeTurns"],true);
@@ -181,8 +216,11 @@ impl Fixture {
         self.start_with_voice("0");
     }
     fn start_with_voice(&mut self, voice: &str) {
+        self.start_with_binary(voice, Path::new(env!("CARGO_BIN_EXE_voyager")));
+    }
+    fn start_with_binary(&mut self, voice: &str, binary: &Path) {
         self.service = Some(
-            Command::new(env!("CARGO_BIN_EXE_voyager"))
+            Command::new(binary)
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
                     "VOYAGER_CODEX_BIN",
@@ -745,7 +783,7 @@ fn control_switch_stale_release_disconnect_and_capture_are_independent() {
     let a = dock_request(&session, 1, process_claim(std::process::id()));
     let (old, ack) = open_control(&f, &a);
     assert_eq!(ack["active"], true);
-    assert_eq!(ack["voice"]["state"], "unsupported");
+    assert_eq!(ack["voice"]["follows_dock"], true);
     assert_eq!(
         f.call(json!({"op":"status"}))["control"]["generation"],
         a["generation"]
@@ -812,7 +850,10 @@ fn control_switch_stale_release_disconnect_and_capture_are_independent() {
 fn control_release_is_durable_and_restart_never_restores_authority() {
     let mut f = Fixture::new();
     f.start();
-    assert_eq!(f.call(json!({"op":"status"}))["voice"]["state"], "disabled");
+    assert_eq!(
+        f.call(json!({"op":"status"}))["voice"]["follows_dock"],
+        false
+    );
     let session = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
     let a = dock_request(&session, 1, process_claim(std::process::id()));
     let (_socket, _) = open_control(&f, &a);
@@ -881,6 +922,48 @@ fn closing_terminal_releases_control_without_stopping_external_server() {
 }
 
 #[test]
+fn replaced_service_binary_keeps_shell_viewer_and_worker_cli_paths_usable() {
+    let mut f = Fixture::new();
+    let binary = f.dir.join("voyager");
+    fs::copy(env!("CARGO_BIN_EXE_voyager"), &binary).unwrap();
+    f.start_with_binary("0", &binary);
+    let replacement = f.dir.join("replacement");
+    fs::copy(env!("CARGO_BIN_EXE_voyager"), &replacement).unwrap();
+    fs::rename(replacement, &binary).unwrap();
+    let running = fs::read_link(format!("/proc/{}/exe", f.service.as_ref().unwrap().id())).unwrap();
+    assert!(running.to_string_lossy().ends_with(" (deleted)"));
+    let receipt = f.call(json!({"op":"create","open":false,"kind":"shell","request_id":"shell-after-rebuild","name":"Workbench","cwd":f.dir}));
+    let session = &receipt["session_id"];
+    let info = f.call(json!({"op":"attach-info","session_id":session}));
+    assert_eq!(info["executable"], binary.to_str().unwrap());
+    wait(|| f.call(json!({"op":"shell-read","session_id":session}))["ready"] == true);
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"cli-after-rebuild","command":"\"$VOYAGER_BIN\" --state \"$VOYAGER_STATE\" capabilities > cli.json"}));
+    wait(|| {
+        fs::read_to_string(f.dir.join("cli.json"))
+            .is_ok_and(|s| serde_json::from_str::<Value>(&s).is_ok())
+    });
+    let worker = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"worker-after-rebuild","name":"Agent","cwd":f.dir}));
+    assert_eq!(worker["runtime"], "running");
+    fs::remove_file(&binary).unwrap();
+    let open = f.call(json!({"op":"open","session_id":session,"terminal":"ghostty","request_id":"missing-viewer-binary"}));
+    assert_eq!(open["state"], "partial");
+    assert!(
+        open["error"]
+            .as_str()
+            .unwrap()
+            .contains("native executable unavailable")
+    );
+    assert!(open["pid"].is_null());
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        receipt["runtime_pid"]
+    );
+    f.call(json!({"op":"stop-instance","session_id":session}));
+    f.call(json!({"op":"stop-instance","session_id":worker["session_id"]}));
+    f.halt();
+}
+
+#[test]
 fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     let mut f = Fixture::new();
     f.start();
@@ -918,7 +1001,11 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     let delayed = json!({"op":"shell-exec","session_id":session,"request_id":"delayed","command":"sleep 0.3; printf survived > proof.txt"});
     let accepted = f.call(delayed.clone());
     assert_eq!(f.call(delayed), accepted); // Never replay the same command.
-    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"busy","command":"echo wrong"})).is_err());
+    assert!(client(
+        &f.dir,
+        json!({"op":"shell-exec","session_id":session,"request_id":"busy","command":"echo wrong"})
+    )
+    .is_err());
     drop(terminal);
     wait(|| f.dir.join("child/proof.txt").exists());
     wait(ready);
@@ -969,7 +1056,7 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
     assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"typeahead-refused","command":"echo wrong"})).is_err());
     writeln!(again, "{}", json!({"input":vec![3u8]})).unwrap();
     wait(ready);
-    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"sleep 0.3; touch should-not-complete"}));
+    f.call(json!({"op":"shell-exec","session_id":session,"request_id":"stop-live","command":"while [ ! -e stop-release ]; do sleep 0.01; done; touch should-not-complete"}));
     wait(|| {
         f.events()["events"]
             .as_array()
@@ -978,9 +1065,14 @@ fn managed_shell_shares_human_state_and_survives_detach_with_input_exclusion() {
             .any(|e| e["type"] == "shell.command" && e["payload"]["command_id"] == "stop-live")
     });
     f.call(json!({"op":"stop-instance","session_id":session}));
+    fs::write(f.dir.join("child/stop-release"), "release").unwrap();
     thread::sleep(Duration::from_millis(350));
     assert!(!f.dir.join("child/should-not-complete").exists());
-    assert!(client(&f.dir,json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})).is_err());
+    assert!(client(
+        &f.dir,
+        json!({"op":"shell-exec","session_id":session,"request_id":"ended","command":"echo wrong"})
+    )
+    .is_err());
     f.halt();
 }
 
@@ -1107,7 +1199,7 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     store
         .local(&session, "before", json!({"marker":"PRESERVED"}))
         .unwrap();
-    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
+    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN name; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
     drop(store);
     assert!(Store::open(&path).is_err());
     let db = rusqlite::Connection::open(&path).unwrap();
@@ -1141,4 +1233,116 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     );
     drop(db);
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn owned_worker_steering_reuses_the_exact_turn_and_request_identity() {
+    let mut f = Fixture::new();
+    f.start();
+    let parent = f.call(json!({"op":"register","thread_id":"live-thread"}))["session_id"].clone();
+    let created = f.call(json!({"op":"launch","open":false,"parent_id":parent,"request_id":"steering-worker","cwd":f.dir,"prompt":"keep working"}));
+    let session = created["session_id"].clone();
+    let turn = created["initial_request"]["native_turn_id"].clone();
+    let input = json!({"op":"send","session_id":session,"request_id":"steer-same-turn","message":"keep the current work and incorporate this"});
+    let accepted = f.call(input.clone());
+    assert_eq!(accepted["state"], "accepted");
+    assert_eq!(accepted["native_turn_id"], turn);
+    assert_eq!(accepted["dispatch_mode"], "steer");
+    assert_eq!(accepted["expected_turn_id"], turn);
+    assert_eq!(f.call(input), accepted);
+    assert!(client(&f.dir, json!({"op":"send","session_id":session,"request_id":"steer-same-turn","message":"different"})).is_err());
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["session_id"] == session && e["type"] == "turn.completed")
+    });
+    let idle = f.call(json!({"op":"send","session_id":session,"request_id":"start-after-completion","message":"new work"}));
+    assert_eq!(idle["dispatch_mode"], "start");
+    assert_ne!(idle["native_turn_id"], turn);
+    f.call(json!({"op":"stop-instance","session_id":session}));
+}
+
+#[test]
+fn rename_preserves_identity_capture_history_and_request_receipts() {
+    let mut f = Fixture::new();
+    f.start();
+    let registered = f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let id = registered["session_id"].as_str().unwrap();
+    let before = f.call(json!({"op":"list"}))[0].clone();
+    let request = json!({"op":"rename","session_id":id,"request_id":"rename-visible","name":"  Navigation  "});
+    let receipt = f.call(request.clone());
+    assert_eq!(receipt["name"], "Navigation");
+    assert_eq!(f.call(request), receipt);
+    assert!(
+        client(
+            &f.dir,
+            json!({"op":"rename","session_id":id,"request_id":"rename-visible","name":"Another"})
+        )
+        .is_err()
+    );
+    assert!(
+        client(
+            &f.dir,
+            json!({"op":"rename","session_id":id,"request_id":"bad-name","name":"line\nbreak"})
+        )
+        .is_err()
+    );
+    let after = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(after["name"], "Navigation");
+    for key in [
+        "id",
+        "native_thread_id",
+        "capture",
+        "capture_generation",
+        "rank",
+    ] {
+        assert_eq!(before[key], after[key]);
+    }
+    let history = f.events();
+    assert_eq!(
+        history["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["type"] == "session.renamed")
+            .count(),
+        1
+    );
+    f.halt();
+    f.start();
+    assert_eq!(f.call(json!({"op":"list"}))[0]["name"], "Navigation");
+}
+
+#[test]
+fn version_two_names_move_to_sessions_without_changing_launch_inputs() {
+    let f = Fixture::new();
+    let path = f.dir.join("labels.sqlite");
+    let mut store = Store::open(&path).unwrap();
+    store
+        .begin_launch(
+            "original",
+            None,
+            "/synthetic",
+            None,
+            Some("Original launch"),
+        )
+        .unwrap();
+    let session = store
+        .register_worker("original", "fixture", &metadata("named"), 1234)
+        .unwrap();
+    store
+        .0
+        .execute_batch("ALTER TABLE sessions DROP COLUMN name; PRAGMA user_version=2;")
+        .unwrap();
+    let before = store.events(0).unwrap();
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.session(&session).unwrap()["name"], "Original launch");
+    assert_eq!(
+        store.launch("original").unwrap().unwrap()["name"],
+        "Original launch"
+    );
+    assert_eq!(store.events(0).unwrap(), before);
 }

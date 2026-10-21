@@ -19,6 +19,15 @@ continuous curved glass panel, with rainbow VOYAGER lettering above the seated
 astronaut and “Let’s Go Together” below the agent list. Click again to collapse.
 Drag the panel background to move it. Buttons remain clickable.
 
+At rest, Voyager stretches every 20–40 seconds. Its private conversation's
+active turn opens a book; tool results and a 4.8-second reading rhythm turn
+pages. When processing ends, it puts the book away, stretches and returns to
+rest. These gestures use the [original artwork](../desktop/assets/README.md).
+Gesture holds and transitions run at 1.6 times the original duration, with eased
+crossfades. They indicate processing, not task success, and do not change docking opacity
+or input behavior. Reduced-motion mode uses static reading and resting poses.
+The animation currently follows the app conversation, not a docked Vessel's turn.
+
 When the astronaut is docked to a terminal, clicking it toggles the panel where
 you last left it. The astronaut stays at the terminal and control is unchanged.
 The panel does not follow it. Pressing and pulling releases terminal control;
@@ -43,15 +52,17 @@ alternative.
 This is an overlay **over** text, not an image between the terminal's text and
 background. The browser reference can render those layers together; an external
 window cannot. The avatar's hover area is reserved for grabbing once activated.
-The floating and panel-seated astronaut keep their normal brightness. Hovering
+The floating and panel-seated astronaut keep their normal brightness. The seated
+astronaut stays above the panel when it reopens or receives focus; it shares the
+panel's glass underneath instead of showing through it from behind. Hovering
 over the open panel makes its existing glass colours opaque for readability;
 leaving restores transparency, without changing its colour palette.
 
-The panel shows Online/Offline and project names with connection dots. Green
+The panel shows names with connection dots and reports Offline when needed. Green
 means connected; gray means disconnected, stopped or unknown. Tooltips and
 accessible labels retain the full status. No event feed, internal IDs,
-instructional footer is shown. A **+** opens the instance form, and **↗** reopens
-a managed instance’s native window. The close × quits only
+instructional footer is shown. A **+** opens the instance form; an instance card
+surfaces its native window. [Vessels and fleets](fleets.md) organise related work. The close × quits only
 Electron. Connection is observation status, not proof of task completion.
 
 ## Create from the panel
@@ -163,8 +174,9 @@ avatar joins. Registration may succeed even if subsequent visual placement fails
 the agent still appears in the service registry.
 
 `voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
-only a window belonging to its calling process; it does not move or type into the
-terminal. Electron checks the actual native stack after asking for placement. A covered
+only a window belonging to its calling process. Its separate layout operation
+arranges identified managed terminals as described in [Vessels and fleets](fleets.md).
+Neither operation types into a terminal. Electron checks the actual native stack after asking for placement. A covered
 marker hides rather than painting over another X11 app. Linux hover uses a
 bounded pointer/button probe while a dock or panel is visible, because Electron forwards ignored
 mouse movement only on macOS/Windows; it does not inject input. Native Wayland

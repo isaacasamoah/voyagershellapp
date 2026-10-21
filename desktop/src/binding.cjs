@@ -13,8 +13,6 @@ async function processIdentity(pid) {
 }
 
 async function directChildren(pid) {
-  // Linux records children on the thread that spawned them, not necessarily
-  // the terminal's main thread. These are still direct children, not a tree scan.
   const tasks = await fs.readdir(`/proc/${pid}/task`);
   const children = await Promise.all(
     tasks.map(async (tid) => {
@@ -26,14 +24,12 @@ async function directChildren(pid) {
           .map(Number);
       } catch {
         return [];
-      } // A terminal thread can exit while enumerating it.
+      }
     }),
   );
   return [...new Set(children.flat())];
 }
 
-// Deliberately support one fixed native resume command. No title, cwd, session
-// picker, --last, extra shell layer, or implicit default daemon is an identity.
 function resumeThread(argv, server) {
   const args = argv.slice(1);
   if (args.length !== 4 && args.length !== 5) return null;
@@ -42,17 +38,18 @@ function resumeThread(argv, server) {
   return /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(args[3]) ? args[3] : null;
 }
 
-async function identifyTerminal(pid, endpoint) {
+async function terminalSnapshot(pid) {
   const terminal = await processIdentity(pid);
+  const children = await Promise.all(
+    (await directChildren(pid)).map((child) => processIdentity(child).catch(() => null)),
+  );
+  return { terminal, children: children.filter(Boolean) };
+}
+async function identifyTerminal(pid, endpoint, snapshot) {
+  const { terminal, children } = snapshot || (await terminalSnapshot(pid));
   if (terminal.executable !== '/usr/bin/ghostty') return null;
   const matches = [];
-  for (const child of await directChildren(pid)) {
-    let frontend;
-    try {
-      frontend = await processIdentity(child);
-    } catch {
-      continue;
-    }
+  for (const frontend of children) {
     const nativeId =
       endpoint.kind === 'shell'
         ? JSON.stringify(frontend.argv.slice(1)) === JSON.stringify(endpoint.args)
@@ -72,12 +69,12 @@ async function identifyTerminal(pid, endpoint) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-function resolveWindow(window, windows, records, identities) {
-  if (!window?.visible) return { error: 'This terminal is unavailable.' };
+function resolveWindow(window, windows, records, identities, requireVisible = true) {
+  if (!window || (requireVisible && !window.visible))
+    return { error: 'This terminal is unavailable.' };
   const matches = records.filter((r) => r.pid === window.pid);
   if (matches.length !== 1) return { error: 'Can’t identify this terminal’s agent.' };
   const record = matches[0];
-  // Even hidden siblings make a process-to-window association ambiguous.
   if (windows.filter((w) => w.pid === record.pid).length !== 1)
     return { error: 'Use a separate terminal window for this agent.' };
   const terminal = identities.get(record.pid),
@@ -115,6 +112,7 @@ function windowAt(windows, point, excludedIds = []) {
 
 module.exports = {
   processIdentity,
+  terminalSnapshot,
   identifyTerminal,
   resumeThread,
   resolveWindow,

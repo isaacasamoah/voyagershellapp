@@ -1,10 +1,8 @@
-//! X11/XWayland inventory and placement of the calling Electron avatar only.
-//! Titles are display labels, never session identities. Native Wayland windows
-//! are intentionally absent; that integration needs a compositor adapter.
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
 use x11rb::{
     connection::Connection,
+    properties::WmSizeHints,
     protocol::shape::{ConnectionExt as _, SK},
     protocol::xproto::{
         AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, MapState, StackMode,
@@ -19,7 +17,18 @@ fn main() -> Result<()> {
     let pid_atom = atom(b"_NET_WM_PID")?;
     let title_atom = atom(b"_NET_WM_NAME")?;
     let utf8 = atom(b"UTF8_STRING")?;
+    let state_atom = atom(b"_NET_WM_STATE")?;
+    let hidden_atom = atom(b"_NET_WM_STATE_HIDDEN")?;
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "layout") {
+        ensure!(
+            args.len() == 2 && args[1].len() <= 65536,
+            "usage: voyager-windows layout JSON"
+        );
+        let result = voyager_shell::window_layout::apply(&serde_json::from_str(&args[1])?)?;
+        println!("{result}");
+        return Ok(());
+    }
     if !args.is_empty() {
         ensure!(
             args.len() == 3 && args[0] == "above",
@@ -64,10 +73,17 @@ fn main() -> Result<()> {
         .reply()?;
     let mut windows = Vec::new();
     for id in ids.value32().into_iter().flatten() {
-        // A window can close between any two queries. Omit that stale candidate.
         let window = (|| -> Result<_> {
             let attr = conn.get_window_attributes(id)?.reply()?;
+            let hidden = conn
+                .get_property(false, id, state_atom, AtomEnum::ATOM, 0, 64)?
+                .reply()?
+                .value32()
+                .is_some_and(|mut values| values.any(|a| a == hidden_atom));
             let geometry = conn.get_geometry(id)?.reply()?;
+            let minimum = WmSizeHints::get_normal_hints(&conn, id)?
+                .reply()?
+                .and_then(|h| h.min_size);
             let position = conn.translate_coordinates(id, root, 0, 0)?.reply()?;
             let pid = conn
                 .get_property(false, id, pid_atom, AtomEnum::CARDINAL, 0, 1)?
@@ -80,8 +96,6 @@ fn main() -> Result<()> {
             let class = conn
                 .get_property(false, id, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 256)?
                 .reply()?;
-            // Only inspect the caller's input regions. Electron uses a 1x1
-            // region at the transparent corner for ignore-mouse-events on Linux.
             let input_region = if pid == Some(nix::unistd::getppid().as_raw() as u32) {
                 Some(
                     conn.shape_get_rectangles(id, SK::INPUT)?
@@ -97,7 +111,8 @@ fn main() -> Result<()> {
             Ok(json!({
                 "id": id,
                 "pid": pid,
-                "visible": attr.map_state == MapState::VIEWABLE,
+                "visible": attr.map_state == MapState::VIEWABLE && !hidden,
+                "minimised": hidden,
                 "x": position.dst_x,
                 "y": position.dst_y,
                 "width": geometry.width,
@@ -105,6 +120,7 @@ fn main() -> Result<()> {
                 "title": String::from_utf8_lossy(&title.value),
                 "class": String::from_utf8_lossy(&class.value).replace('\0', " "),
                 "input_region": input_region,
+                "minimum": minimum,
             }))
         })();
         if let Ok(window) = window {
@@ -112,8 +128,6 @@ fn main() -> Result<()> {
         }
     }
     let pointer = conn.query_pointer(root)?.reply()?;
-    // Button state prevents a hover from stealing an existing text-selection drag.
-    // X11's first eight mask bits are modifiers; the next five are pointer buttons.
     let buttons = u16::from(pointer.mask) & 0x1f00;
     println!(
         "{}",

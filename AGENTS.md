@@ -27,3 +27,50 @@ Lifecycle operations are owned by `src/service/lifecycle.rs`; native requests by
 Read [the lifecycle contract](docs/lifecycle.md) before changing either boundary.
 Keep changed code comment-free, including doc comments and explanatory docstrings.
 Put mechanisms, invariants and design reasons in the owning context document.
+
+Rank and direct-assignment policy belongs in `src/authority.rs`. Runtime identity,
+coordination and capability presentation belong in `src/service/authority_ops.rs`.
+The CLI and Electron expose those service decisions; they do not grant rights.
+Read `docs/authority.md` before changing that boundary. Native voice and explicit
+preemptive override remain separate from rank and ordinary steering.
+
+Rank presentation derives from service assignments in `desktop/src/ui/hierarchy.js`.
+Fleet membership is separate, local presentation data owned by `src/service/fleets.rs`;
+`desktop/src/fleets.cjs` only calls its named service actions.
+Cell geometry belongs in `desktop/src/layout.cjs`; native placement uses
+`src/window_layout.rs`. Read `docs/fleets.md` before changing these boundaries.
+Minimise retains the terminal; background closes it. Neither changes authority.
+Panel size follows rendered content through ResizeObserver, capped to the display.
+Do not reintroduce Vessel-count estimates or duplicate supervisor group headers.
+
+The service-owned private conversation lives in `src/service/conversation.rs`.
+Its desktop boundary is `desktop/src/conversation.cjs`; microphone/playback and
+progressive chat belong in `desktop/src/ui/conversation.js`. Read
+`docs/harness-runtime.md` before changing these boundaries. It is separate from
+Vessel identity, capture and authority. Provider work must not block the service
+loop; losing a desktop voice lease stops audio, not the runtime. Keep internal
+reasoning unavailable to instance callers. Evidence and account data stay outside
+the repository.
+
+The private conversation's tool catalog is `src/service/conversation-tools.json`;
+`conversation_tools.rs` maps those named operations to the existing service. Keep
+the app owner, Vessel rank and no-tools escalation presenter distinct. The model
+may explain evidence; only an actual human reply may be routed as an answer,
+unchanged and bound to its original request. Recheck pending sources before speech.
+
+Voice selection belongs in `src/service/voice.rs`; native terminal input belongs
+in `src/terminal.rs`. Read `docs/voice.md` before editing either boundary. Native
+input must target verified process and PTY identity, never desktop keyboard focus.
+
+## Workspace and working documents
+
+The primary checkout tracks `main`. The historical prototype branch is
+`experiment/private-harness-voice` in `.worktrees/harness-voice`. Integration and
+packaging use separate task worktrees. Rust checks are defined in CONTRIBUTING.md;
+Electron commands are in desktop/package.json.
+
+Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
+
+Documentation root: `/home/isaac/obsidian/Projects/voyagershellapp`. Read its `status.md` to resume and follow its links to the owning plan and specification. Use the shared `working-docs` skill before producing persistent documents. The existing explainer/, specs/, plans/ and research/ directories are approved; status and log have one owner at the documentation root. This destination policy overrides default output paths in content skills without changing their procedures.
+
+Use Voyager orchestration only when requested or called for by an approved plan. Project facts remain here; shared procedures remain in skills.

@@ -1,5 +1,6 @@
 use crate::{
     actions::{Action, PendingOperation},
+    authority::{self, Credentials},
     codex::Codex,
     control::Control,
     events,
@@ -33,8 +34,13 @@ use std::{
     time::Duration,
 };
 
+mod authority_ops;
+mod conversation;
+mod conversation_tools;
+mod fleets;
 mod lifecycle;
 mod native;
+mod voice;
 use native::NativeCall;
 
 const REQUEST_LIMIT: u64 = 64 * 1024;
@@ -63,9 +69,46 @@ fn frame(stream: &mut UnixStream) -> Result<Value> {
     serde_json::from_slice(&bytes).context("invalid request JSON")
 }
 
-pub fn client(state: &Path, request: Value) -> Result<Value> {
-    let mut stream =
-        UnixStream::connect(state.join("service.sock")).context("Voyager service unavailable")?;
+pub fn client(state: &Path, mut request: Value) -> Result<Value> {
+    let instance = std::env::var_os("VOYAGER_CALLER").is_some()
+        || std::env::var_os("VOYAGER_SESSION_CONTEXT").is_some();
+    if instance {
+        ensure!(
+            std::env::var("VOYAGER_CALLER").ok().as_deref() == Some("instance"),
+            "forbidden: invalid instance caller context"
+        );
+        let path = PathBuf::from(
+            std::env::var_os("VOYAGER_SESSION_CONTEXT")
+                .context("forbidden: missing instance context")?,
+        );
+        let mut file = OpenOptions::new()
+            .read(true)
+            .custom_flags(nix::libc::O_NOFOLLOW)
+            .open(path)
+            .context("forbidden: unavailable instance context")?;
+        let meta = file.metadata()?;
+        ensure!(
+            meta.is_file()
+                && meta.uid() == Uid::effective().as_raw()
+                && meta.mode() & 0o077 == 0
+                && meta.len() <= 4096,
+            "forbidden: context must be a private regular file"
+        );
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        request["credential"] =
+            serde_json::from_slice(&bytes).context("forbidden: invalid instance context")?;
+    }
+    exchange(state, request, instance)
+}
+
+fn exchange(state: &Path, request: Value, instance: bool) -> Result<Value> {
+    let mut stream = UnixStream::connect(state.join(if instance {
+        "instances.sock"
+    } else {
+        "service.sock"
+    }))
+    .context("Voyager service unavailable")?;
     ensure!(
         getsockopt(&stream, sockopt::PeerCredentials)?.uid() == Uid::effective().as_raw(),
         "different-user service"
@@ -88,11 +131,60 @@ pub fn client(state: &Path, request: Value) -> Result<Value> {
         .context("missing service result")
 }
 
+pub fn hold_dock(state: &Path, request: Value) -> Result<()> {
+    ensure!(
+        std::env::var_os("VOYAGER_CALLER").is_none()
+            && std::env::var_os("VOYAGER_SESSION_CONTEXT").is_none(),
+        "forbidden: only owner can claim a dock"
+    );
+    let mut stream =
+        UnixStream::connect(state.join("service.sock")).context("Voyager service unavailable")?;
+    ensure!(
+        getsockopt(&stream, sockopt::PeerCredentials)?.uid() == Uid::effective().as_raw(),
+        "different-user service"
+    );
+    stream.set_read_timeout(Some(Duration::from_secs(20)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    writeln!(stream, "{request}")?;
+    let response = frame(&mut stream)?;
+    if let Some(error) = response["error"].as_str() {
+        bail!("{error}");
+    }
+    let result = response.get("result").context("missing dock result")?;
+    println!("{}", serde_json::to_string(result)?);
+    io::stdout().flush()?;
+    if result["active"] == true {
+        stream.set_read_timeout(None)?;
+        io::copy(&mut stream, &mut io::sink())?;
+    }
+    Ok(())
+}
+
 struct SocketPath(PathBuf);
 impl Drop for SocketPath {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
     }
+}
+
+fn codex_executable() -> String {
+    let program = std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into());
+    let candidates = if program.contains('/') {
+        vec![PathBuf::from(&program)]
+    } else {
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|dir| dir.join(&program))
+            .collect()
+    };
+    candidates
+        .into_iter()
+        .find(|path| {
+            path.metadata()
+                .is_ok_and(|meta| meta.is_file() && meta.mode() & 0o111 != 0)
+        })
+        .and_then(|path| fs::canonicalize(path).ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or(program)
 }
 
 pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
@@ -124,6 +216,8 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         );
     }
     let store = Store::open(&db_path)?;
+    store.0.execute("UPDATE requests SET state='failed',error_code='service_restarted_before_dispatch' WHERE state='pending'", [])?;
+    store.reconcile_coordination()?;
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
@@ -138,7 +232,12 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     }
     let server = codex_path.map(fs::canonicalize).transpose()?;
     let codex = server.as_deref().map(Codex::connect).transpose()?;
+    Credentials::clear_stale(state)?;
+    let executable = codex_executable();
     let mut runtime = Runtime {
+        conversation: conversation::Conversation::start(&executable, state),
+        voice: voice::Voice::new(),
+        credentials: Credentials::new(),
         control: Control::new(&store)?,
         store,
         codex,
@@ -153,14 +252,31 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         creations: HashMap::new(),
         native_calls: Vec::new(),
         state: fs::canonicalize(state)?,
-        executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
+        binary: std::env::current_exe()?,
+        executable,
     };
     let listener = UnixListener::bind(&socket_path)?;
     let _socket = SocketPath(socket_path);
     listener.set_nonblocking(true)?;
+    let instance_path = state.join("instances.sock");
+    if let Ok(meta) = fs::symlink_metadata(&instance_path) {
+        ensure!(
+            meta.file_type().is_socket() && meta.uid() == Uid::effective().as_raw(),
+            "refusing to replace non-socket instance state"
+        );
+        fs::remove_file(&instance_path)?;
+    }
+    let instance_listener = UnixListener::bind(&instance_path)?;
+    let _instance_socket = SocketPath(instance_path);
+    instance_listener.set_nonblocking(true)?;
     eprintln!("Voyager ready; external registrations and managed launches remain separate");
     loop {
-        match listener.accept() {
+        let (accepted, instance_entry) = match instance_listener.accept() {
+            Ok(v) => (Ok(v), true),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => (listener.accept(), false),
+            Err(e) => return Err(e.into()),
+        };
+        match accepted {
             Ok((mut stream, _)) => {
                 stream.set_read_timeout(Some(Duration::from_secs(1)))?;
                 stream.set_write_timeout(Some(Duration::from_secs(1)))?;
@@ -170,8 +286,59 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                             == Uid::effective().as_raw(),
                         "different-user peer"
                     );
-                    let request = frame(&mut stream)?;
+                    let mut request = frame(&mut stream)?;
+                    ensure!(
+                        request.is_object(),
+                        "invalid_input: request must be an object"
+                    );
+                    ensure!(
+                        !["purpose", "coordination_id", "new_session_id"]
+                            .iter()
+                            .any(|field| request.get(*field).is_some()),
+                        "invalid_input: reserved service field"
+                    );
+                    let actor = if instance_entry {
+                        runtime.credentials.actor(
+                            &runtime.store,
+                            &request["credential"],
+                            &runtime.instance,
+                        )?
+                    } else {
+                        authority::owner()
+                    };
+                    request
+                        .as_object_mut()
+                        .context("invalid_input: request")?
+                        .remove("credential");
+                    request["actor"] = actor;
                     runtime.observe()?;
+                    runtime.authorize(&request)?;
+                    if request.get("control_generation").is_none()
+                        && request["actor"]["kind"] == "instance"
+                        && runtime.control.session() == request["actor"]["session_id"].as_str()
+                        && [
+                            "send",
+                            "create",
+                            "launch",
+                            "open",
+                            "background",
+                            "stop-instance",
+                            "shell-exec",
+                            "adjudicate",
+                            "move-vessel",
+                        ]
+                        .iter()
+                        .any(|op| request["op"] == *op)
+                    {
+                        request["control_generation"] =
+                            runtime.control.current()["generation"].clone();
+                    }
+                    if request["op"] == "conversation-attach" {
+                        let result = runtime
+                            .conversation
+                            .attach(string(&request, "client_id")?, stream.try_clone()?)?;
+                        return Ok(Some((result, false)));
+                    }
                     if request["op"] == "dock" {
                         runtime.ensure_connected(string(&request, "session_id")?)?;
                         let peer =
@@ -191,7 +358,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                         .any(|op| request["op"] == *op)
                     {
                         return Ok(runtime
-                            .begin_native(request, stream.try_clone()?)?
+                            .begin_native(request, Some(stream.try_clone()?))?
                             .map(|v| (v, false)));
                     }
                     runtime.dispatch(request).map(Some)
@@ -209,6 +376,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
                                     "invalid_input",
                                     "not_found",
                                     "forbidden",
+                                    "stale_control",
                                     "removed",
                                     "external_owner",
                                     "busy",
@@ -244,6 +412,9 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
 }
 
 struct Runtime {
+    voice: voice::Voice,
+    conversation: conversation::Conversation,
+    credentials: Credentials,
     control: Control,
     store: Store,
     codex: Option<Codex>,
@@ -258,6 +429,7 @@ struct Runtime {
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
     state: PathBuf,
+    binary: PathBuf,
     executable: String,
 }
 
@@ -270,8 +442,8 @@ struct Terminal {
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
     v[field]
         .as_str()
-        .filter(|s| !s.is_empty())
-        .with_context(|| format!("missing {field}"))
+        .filter(|s| !s.trim().is_empty())
+        .with_context(|| format!("invalid_input: missing {field}"))
 }
 
 impl Runtime {
@@ -284,7 +456,18 @@ impl Runtime {
     fn check_control(&self, request: &Value) -> Result<()> {
         if let Some(generation) = request.get("control_generation") {
             ensure!(
-                ["send", "launch", "stop-instance", "shell-exec"].contains(&string(request, "op")?),
+                [
+                    "send",
+                    "create",
+                    "launch",
+                    "open",
+                    "background",
+                    "stop-instance",
+                    "shell-exec",
+                    "adjudicate",
+                    "move-vessel"
+                ]
+                .contains(&string(request, "op")?),
                 "control precondition is only for agent commands"
             );
             let source = self
@@ -301,6 +484,7 @@ impl Runtime {
     }
 
     fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
+        self.authorize(&request)?;
         self.check_control(&request)?;
         if let Some(action) = Action::parse(&request)? {
             return Ok((self.begin_action(&request, action)?, false));
@@ -310,15 +494,62 @@ impl Runtime {
                 .require_registered(string(&request, "session_id")?)?;
         }
         let value = match string(&request, "op")? {
+            "rank" | "supervise" | "report" | "adjudicate" | "escalate" => {
+                self.authority_operation(&request)?
+            }
+            "conversation" => self.conversation.snapshot(
+                request["after"].as_u64().unwrap_or(0),
+                request["client_id"].as_str(),
+            ),
+            "conversation-voice-activity" => self.conversation.voice_activity(&request)?,
+            "conversation-operation" => {
+                self.conversation.receipt(string(&request, "request_id")?)?
+            }
+            "conversation-send" | "conversation-voice-start" | "conversation-voice-stop" => {
+                if request["op"] == "conversation-voice-start" {
+                    ensure!(
+                        self.voice.permits_app() && self.control.session().is_none(),
+                        "forbidden: app voice is not the selected voice surface"
+                    );
+                }
+                self.conversation.request(&request)?
+            }
+            "fleets" | "create-fleet" | "rename-fleet" | "move-vessel" | "remove-fleet" => {
+                self.fleet_operation(&request)?
+            }
+            "voice" => self.select_voice(&request)?,
+            "rename" => self.rename_instance(&request)?,
+            "capabilities" => self.capabilities(&request)?,
+            "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
             "operation" => {
-                self.store
-                    .operation(string(&request, "request_id")?)?
-                    .context("not_found: operation")?
-                    .1
+                let id = string(&request, "request_id")?;
+                let (inputs, mut receipt) = if let Some(operation) = self.store.operation(id)? {
+                    operation
+                } else {
+                    let task = self.store.request(id)?.context("not_found: operation")?;
+                    (
+                        json!({"actor":{"kind":task["actor_kind"],"session_id":task["actor_session_id"]}}),
+                        task,
+                    )
+                };
+                if !authority::is_owner(&request["actor"]) {
+                    let own = inputs["actor"] == request["actor"];
+                    ensure!(
+                        own || receipt["session_id"]
+                            .as_str()
+                            .is_some_and(|s| self.can_read(&request["actor"], s).unwrap_or(false)),
+                        "forbidden: operation outside caller scope"
+                    );
+                }
+                receipt
+                    .as_object_mut()
+                    .context("operation receipt")?
+                    .remove("message");
+                receipt
             }
             "status" => {
-                json!({"instance":self.instance,"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.control.voice()})
+                json!({"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.voice.status(self.control.voice())})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -358,6 +589,25 @@ impl Runtime {
                             .get(session["native_thread_id"].as_str().unwrap())
                             .is_some_and(|(id, _)| session["id"] == *id)
                         || self.captures.contains_key(session["id"].as_str().unwrap());
+                    session["window"] = json!(if session["ownership"] != "managed" {
+                        "unknown"
+                    } else if let Some(viewer) = self
+                        .terminals
+                        .iter()
+                        .rev()
+                        .find(|t| session["id"] == t.session)
+                    {
+                        match viewer.window {
+                            Some(window) => match terminal::exists(window) {
+                                Ok(true) => "open",
+                                Ok(false) => "closed",
+                                Err(_) => "unknown",
+                            },
+                            None => "unknown",
+                        }
+                    } else {
+                        "closed"
+                    });
                     session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
@@ -366,6 +616,28 @@ impl Runtime {
                 }
                 if request["include_removed"] != true {
                     sessions.retain(|s| s["removed_ms"].is_null());
+                }
+                if !authority::is_owner(&request["actor"]) {
+                    for session in &mut sessions {
+                        session
+                            .as_object_mut()
+                            .context("session metadata")?
+                            .retain(|key, _| {
+                                [
+                                    "id",
+                                    "name",
+                                    "kind",
+                                    "rank",
+                                    "supervisor_id",
+                                    "worker_state",
+                                    "capture",
+                                    "ownership",
+                                    "window",
+                                    "removed_ms",
+                                ]
+                                .contains(&key.as_str())
+                            });
+                    }
                 }
                 json!(sessions)
             }
@@ -384,7 +656,30 @@ impl Runtime {
                 .context("not a managed shell")?
                 .output(request["after"].as_u64().unwrap_or(0)),
             "attach-info" => self.attachment(string(&request, "session_id")?)?,
-            "events" => self.store.events(request["after"].as_i64().unwrap_or(0))?,
+            "events" => {
+                let mut page = self.store.events(request["after"].as_i64().unwrap_or(0))?;
+                if let Some(target) = request.get("session_id") {
+                    let id = target.as_str().context("invalid_input: event session ID")?;
+                    ensure!(
+                        self.can_read(&request["actor"], id)?,
+                        "forbidden: event target outside caller scope"
+                    );
+                    page["events"]
+                        .as_array_mut()
+                        .context("event page")?
+                        .retain(|event| event["session_id"] == id);
+                }
+                if !authority::is_owner(&request["actor"]) {
+                    let mut permitted = Vec::new();
+                    for event in page["events"].as_array().context("events missing")? {
+                        if self.can_read(&request["actor"], string(event, "session_id")?)? {
+                            permitted.push(event.clone());
+                        }
+                    }
+                    page["events"] = json!(permitted);
+                }
+                page
+            }
             "stop" => {
                 ensure!(
                     self.creations.is_empty()
@@ -450,6 +745,16 @@ impl Runtime {
     }
 
     fn observe(&mut self) -> Result<()> {
+        self.conversation.observe();
+        if self.conversation.questions_due() {
+            let mut questions = self
+                .escalations()?
+                .as_array()
+                .cloned()
+                .context("owner escalations")?;
+            questions.retain(|q| q["registered"] == true);
+            self.conversation.questions(questions);
+        }
         for index in (0..self.terminals.len()).rev() {
             if self.terminals[index].child.try_wait()?.is_some()
                 && self.terminals[index]
@@ -518,6 +823,7 @@ impl Runtime {
             }
         }
         self.observe_control()?;
+        self.observe_voice()?;
         self.advance_native()?;
         self.advance_creations()?;
         self.advance_operations()?;

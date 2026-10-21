@@ -9,6 +9,7 @@ See the [CLI reference](service.md#commands) for command syntax.
 | Action | Runtime | Native window | Registration |
 | --- | --- | --- | --- |
 | Create / launch | Starts an owned instance | Opens by default; `--background` skips it | Starts capture |
+| Rename | Unchanged | Unchanged | Same identity and capture; display name changes |
 | Open | Keeps the same runtime | Focuses or reopens its viewer | Unchanged |
 | Background | Keeps working | Closes the owned viewer | Capture continues |
 | Stop | Stops the owned runtime | Closes its viewer; `--runtime-only` skips explicit close | Retained |
@@ -50,10 +51,27 @@ independently disowned or escaped processes are outside this contract.
 
 Each viewer has its own child and the exact mapped X11 window ID. Mapping requires
 one window belonging to the live child; ambiguous or unidentified windows fail.
+For Bash, opening also waits for the shell viewer's connection; a Ghostty error
+window alone does not confirm attachment. Absolute executable paths must exist
+and be executable before Ghostty starts. Codex window mapping does not prove a
+completed agent turn.
 Focus uses `_NET_ACTIVE_WINDOW` and confirms the request, not keyboard focus.
 Close uses `_NET_CLOSE_WINDOW`; completion means that mapped window is gone.
 Ghostty may remain resident afterward. A known closed viewer can be reopened
 without restarting the runtime; an unidentified opening is not guessed away.
+
+The service records its Voyager executable path at startup and uses that path
+for Bash viewers and each instance's `VOYAGER_BIN`. Replacing the build artifact
+at the same path does not change it to Linux's ` (deleted)` process label. The
+replacement must remain a compatible CLI; removing it produces a failed open,
+not a new runtime. A service restart is still required to load changed service code.
+
+At startup the service also resolves Codex through `PATH`, or the explicit
+`VOYAGER_CODEX_BIN` path, and retains the canonical executable path for both
+launching and terminal identification. The panel receives that same path through
+`attach-info`; it does not interpret a command name relative to its checkout.
+Missing Codex leaves Bash and the service available; agent creation reports its
+failure without registering an instance.
 
 Voyager launches dedicated Ghostty XWayland clients with
 `--confirm-close-surface=false`. Closing that viewer detaches from service-owned
@@ -80,8 +98,10 @@ helpers return connections and metadata without mutating the store. Waiting
 phases advance between capture passes, keeping other instances responsive.
 JSON stays at protocol and storage boundaries.
 
-The private socket is locked, bounded and same-UID checked. SQLite version-one
-migration is transactional; unsupported newer schemas are refused before writes.
+The private socket is locked, bounded and same-UID checked. SQLite migrations are transactional; version two adds agent authority while
+preserving existing lifecycle state. Version three moves display names into sessions;
+original launch names remain immutable inputs for retry receipts. Unsupported newer
+schemas are refused before writes.
 PTY ioctl calls use live descriptors and valid pointers. Post-fork setup uses
 async-signal-safe calls only; inherited hook descriptor nine is intentional.
 Uncertain or incomplete shell writes are never replayed, and human typeahead
@@ -91,6 +111,18 @@ Voyager's runtime owner handles cleanup explicitly.
 ## Native checks
 
 Normal Cargo/Electron tests use fixtures and real PTYs without model calls.
+The binary-replacement regression checks viewer paths, bound CLI access and
+missing-file failure. A separate real Ghostty/Bash check exercises replacement,
+same-runtime reopen and a failing client command without a false success:
+
+```sh
+VOYAGER_NATIVE_SHELL_DIR="$(mktemp -u /tmp/voyager-shell-XXXXXXXX)" \
+  cargo test --locked --test native_shell_viewer -- --ignored --nocapture
+```
+
+Use a fresh private directory on a graphical Linux session. It saves `proof.json`
+there and stops its own shell and service. It does not exercise a model turn or voice.
+
 The [panel lifecycle proof](../desktop/README.md#lifecycle-experiment) uses two
 real Bash/Ghostty instances. It checks menu hit testing, background/reopen,
 already-closed viewers, stop, capture cutoff, re-registration, and row removal.
@@ -104,5 +136,6 @@ VOYAGER_NATIVE_PROOF_DIR="$HOME/.local/share/voyager-native-lifecycle-proof" \
 ```
 
 Use a fresh private directory. Physical gestures, menu readability and sound
-still require a person. These checks do not establish other platforms, role
-authentication, voice handoff or crash/reboot recovery.
+still require a person. These lifecycle checks do not establish other platforms, voice handoff or
+crash/reboot recovery. [Authority checks](authority.md#checks) cover the separate
+bound-identity and hierarchy contract.

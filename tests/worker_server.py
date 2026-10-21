@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Disposable protocol fixture, never a real model or user's Codex server."""
 import base64
 import hashlib
 import json
@@ -12,8 +11,6 @@ import tomllib
 from pathlib import Path
 
 path = sys.argv[sys.argv.index('--listen') + 1].removeprefix('unix://')
-# The native tool environment can inherit only core variables. The launch must
-# provide connection values through Codex's policy, not process env alone.
 settings = [sys.argv[n + 1] for n, arg in enumerate(sys.argv[:-1]) if arg == '-c']
 policy = tomllib.loads('\n'.join(settings))['shell_environment_policy']['set']
 assert Path(policy['VOYAGER_BIN']).is_file()
@@ -24,6 +21,7 @@ listener.bind(path)
 listener.listen()
 counter = 0
 active = False
+current_turn = None
 lock = threading.Lock()
 
 
@@ -39,11 +37,12 @@ def exact(stream, size):
 
 def metadata():
     return {'id': 'worker-thread', 'sessionId': 'worker-thread', 'cwd': '/synthetic',
-            'status': {'type': 'active' if active else 'idle'}}
+            'status': {'type': 'active' if active else 'idle'},
+            'turns': [{'id': current_turn, 'status': 'inProgress'}] if active else []}
 
 
 def handle(stream):
-    global counter, active
+    global counter, active, current_turn
     write_lock = threading.Lock()
 
     def send(value):
@@ -100,15 +99,30 @@ def handle(stream):
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
                 result = {'data': ['worker-thread'], 'nextCursor': None}
+            elif method == 'thread/realtime/stop':
+                send({'id': r['id'], 'result': {}})
+                if not (Path(policy['VOYAGER_STATE']) / 'voice-stop-unconfirmed').exists():
+                    event('thread/realtime/closed', {})
+                continue
             elif method == 'turn/start':
                 with lock:
                     counter += 1
                     active = True
                     turn = f'worker-turn-{counter}'
+                    current_turn = turn
                 event('turn/started', {'turn': {'id': turn, 'status': 'inProgress'}})
                 event('item/completed', {'turnId': turn, 'item': {'id': 'user', 'type': 'userMessage', 'content': r['params']['input']}})
                 result = {'turn': {'id': turn, 'status': 'inProgress'}}
                 threading.Thread(target=complete, args=(turn,), daemon=True).start()
+            elif method == 'turn/steer':
+                with lock:
+                    expected = r['params']['expectedTurnId']
+                    matches = active and current_turn == expected
+                if not matches:
+                    send({'id': r['id'], 'error': {'code': -32602, 'message': 'expected turn is no longer active'}})
+                    continue
+                event('item/completed', {'turnId': expected, 'item': {'id': 'steered', 'type': 'userMessage', 'content': r['params']['input']}})
+                result = {'turnId': expected}
             send({'id': r['id'], 'result': result})
     except (EOFError, OSError):
         pass

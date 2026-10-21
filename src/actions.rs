@@ -119,3 +119,12 @@ pub fn request_id(request: &Value) -> Result<&str> {
         _ => bail!("invalid_input: request_id must contain 1–128 bytes"),
     }
 }
+
+pub fn name(value: &str) -> Result<&str> {
+    let name = value.trim();
+    ensure!(
+        !name.is_empty() && name.len() <= 100 && !name.chars().any(char::is_control),
+        "invalid_input: use a name of 1–100 bytes without control characters"
+    );
+    Ok(name)
+}
