@@ -146,3 +146,33 @@ but do not each pay the idle 50 ms delay. This matters for docking and placement
 which perform several named reads before attaching. The service-boundary burst
 regression distinguishes queued responsiveness from idle polling; it is not a
 measurement of native window mapping or voice startup.
+
+## Terminal rendering investigation
+
+The opt-in native probe opens only its own disposable Ghostty window and prints
+numbered frames from a Python child. It verifies the window's process identity,
+cycles minimise/restore/resize, and compares raw rendered pixels while checking
+the independent writer heartbeat. It saves its result and terminal stderr outside
+the repository and closes its own window. A stalled screen with an advancing
+heartbeat is reported as a failure, not a completed agent task.
+
+```sh
+cargo build --locked --bin voyager-windows
+python3 desktop/test/native-window-probe.py --probe "$PWD/target/debug/voyager-windows"
+python3 desktop/test/native-window-probe.py --probe "$PWD/target/debug/voyager-windows" --resize-only
+```
+
+Run from a graphical Linux session with Ghostty, xdotool and ImageMagick's
+`import` installed. The window takes focus during the test. The second command
+is a known-different control that omits minimisation. Neither command starts a
+Voyager service, reads existing terminal content or exercises docking/voice.
+
+On Fedora 43 with Ghostty 1.1.3, GTK 4.20.4 and Mutter 49.4, minimise/restore
+cycles reproduced a stalled screen while the terminal and writer remained alive.
+Resize-only cycles stayed responsive in the sampled run. Removing direct mapping,
+slowing the cycle and selecting Cairo did not reliably prevent the stall. These
+observations locate a reproducible failure outside Voyager, but do not prove the
+cause of every reported freeze. No graphics workaround or automatic restart is
+enabled. For a managed Vessel, explicit Background followed by Open replaces its
+viewer while preserving its runtime and capture; stopping the Vessel has different
+semantics. A live native check is still required before claiming this freeze fixed.
