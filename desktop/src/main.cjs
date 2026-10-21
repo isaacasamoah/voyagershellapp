@@ -25,12 +25,17 @@ const stateDir =
   process.env.VOYAGER_STATE || path.join(require('node:os').homedir(), '.local/share/voyagershell');
 if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
-const binary = path.join(root, 'target/debug/voyager');
-const probe = path.join(root, 'target/debug/voyager-windows');
+const binaries = app.isPackaged
+  ? path.join(process.resourcesPath, 'bin')
+  : path.join(root, 'target/debug');
+const binary = path.join(binaries, 'voyager');
+const probe = path.join(binaries, 'voyager-windows');
 const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
 app.commandLine.appendSwitch('ozone-platform', 'x11');
+app.setName('Voyager Shell');
+app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
@@ -759,6 +764,7 @@ function createWindow(width, height) {
     skipTaskbar: true,
     show: false,
     backgroundColor: '#00000000',
+    icon: path.join(__dirname, '../assets/idle.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

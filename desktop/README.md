@@ -92,6 +92,13 @@ native clients without model calls.
 
 ## Testing changes
 
+For the account-local Fedora package and build commands, see
+[install the Fedora prototype](../docs/install-linux.md). Set
+`VOYAGER_INSTALLED_APP=/absolute/path/to/voyagershell` when running the lifetime
+check below to exercise that bundle and its included Rust binaries instead of
+the checkout. Run the check from a different working directory for installation
+proof.
+
 The app/service lifetime check opens real Electron and Ghostty, starts the
 installed private Codex provider without a model turn, and tests UI close/reopen,
 shutdown refusal, stop/remove, retained history and explicit service shutdown:

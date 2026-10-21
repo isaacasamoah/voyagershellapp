@@ -7,8 +7,11 @@ const { once } = require('node:events');
 const { setTimeout: delay } = require('node:timers/promises');
 const exec = promisify(execFile);
 const root = path.resolve(__dirname, '../..');
-const binary = path.join(root, 'target/debug/voyager');
-const electron = require('electron');
+const installed = process.env.VOYAGER_INSTALLED_APP;
+const binary = installed
+  ? path.join(path.dirname(installed), 'resources/bin/voyager')
+  : path.join(root, 'target/debug/voyager');
+const electron = installed || require('electron');
 const state = process.env.VOYAGER_PANEL_LIFECYCLE_DIR;
 assert(state && path.isAbsolute(state), 'Provide a fresh absolute VOYAGER_PANEL_LIFECYCLE_DIR');
 const observations = [];
@@ -28,10 +31,14 @@ async function wait(read, accept, message) {
 }
 async function open() {
   let output = '';
-  app = spawn(electron, [path.join(root, 'desktop'), '--expanded', '--remote-debugging-port=0'], {
-    env: { ...process.env, VOYAGER_STATE: state },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
+  app = spawn(
+    electron,
+    [...(installed ? [] : [path.join(root, 'desktop')]), '--expanded', '--remote-debugging-port=0'],
+    {
+      env: { ...process.env, VOYAGER_STATE: state },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    },
+  );
   app.stderr.on('data', (chunk) => (output += chunk));
   const address = await wait(
     async () => output.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1],
