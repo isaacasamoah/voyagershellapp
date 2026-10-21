@@ -66,6 +66,13 @@ at the same path does not change it to Linux's ` (deleted)` process label. The
 replacement must remain a compatible CLI; removing it produces a failed open,
 not a new runtime. A service restart is still required to load changed service code.
 
+At startup the service also resolves Codex through `PATH`, or the explicit
+`VOYAGER_CODEX_BIN` path, and retains the canonical executable path for both
+launching and terminal identification. The panel receives that same path through
+`attach-info`; it does not interpret a command name relative to its checkout.
+Missing Codex leaves Bash and the service available; agent creation reports its
+failure without registering an instance.
+
 Voyager launches dedicated Ghostty XWayland clients with
 `--confirm-close-surface=false`. Closing that viewer detaches from service-owned
 work. Global settings and external terminals are untouched. See

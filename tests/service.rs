@@ -28,6 +28,40 @@ struct Fixture {
 }
 
 #[test]
+fn codex_found_on_path_has_a_canonical_viewer_executable() {
+    let mut f = Fixture::new();
+    let bin = f.dir.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let executable = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/worker_server.py"
+    ));
+    std::os::unix::fs::symlink(executable, bin.join("codex")).unwrap();
+    let search = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::iter::once(bin).chain(std::env::split_paths(&search));
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env_remove("VOYAGER_CODEX_BIN")
+            .env("PATH", std::env::join_paths(paths).unwrap())
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"path-codex","name":"Agent","cwd":f.dir}));
+    assert_eq!(created["runtime"], "running");
+    let info = f.call(json!({"op":"attach-info","session_id":created["session_id"]}));
+    assert_eq!(
+        info["executable"],
+        fs::canonicalize(executable).unwrap().to_str().unwrap()
+    );
+    f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
+    f.halt();
+}
+
+#[test]
 fn cli_option_spelling_in_message_or_name_remains_data() {
     let mut f = Fixture::new();
     f.start();

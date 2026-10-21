@@ -167,6 +167,26 @@ impl Drop for SocketPath {
     }
 }
 
+fn codex_executable() -> String {
+    let program = std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into());
+    let candidates = if program.contains('/') {
+        vec![PathBuf::from(&program)]
+    } else {
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|dir| dir.join(&program))
+            .collect()
+    };
+    candidates
+        .into_iter()
+        .find(|path| {
+            path.metadata()
+                .is_ok_and(|meta| meta.is_file() && meta.mode() & 0o111 != 0)
+        })
+        .and_then(|path| fs::canonicalize(path).ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or(program)
+}
+
 pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     umask(Mode::from_bits_truncate(0o077));
     private_dir(state)?;
@@ -213,11 +233,9 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     let server = codex_path.map(fs::canonicalize).transpose()?;
     let codex = server.as_deref().map(Codex::connect).transpose()?;
     Credentials::clear_stale(state)?;
+    let executable = codex_executable();
     let mut runtime = Runtime {
-        conversation: conversation::Conversation::start(
-            &std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
-            state,
-        ),
+        conversation: conversation::Conversation::start(&executable, state),
         voice: voice::Voice::new(),
         credentials: Credentials::new(),
         control: Control::new(&store)?,
@@ -235,7 +253,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         native_calls: Vec::new(),
         state: fs::canonicalize(state)?,
         binary: std::env::current_exe()?,
-        executable: std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into()),
+        executable,
     };
     let listener = UnixListener::bind(&socket_path)?;
     let _socket = SocketPath(socket_path);
