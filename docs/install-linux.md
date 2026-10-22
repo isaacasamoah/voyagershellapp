@@ -46,7 +46,8 @@ The installer runs with Electron's
 The app itself retains sandboxed, isolated renderers.
 
 This is a local Fedora prototype, not a signed or published cross-platform
-release. Dedicated Ghostty XWayland windows remain the supported terminal surface.
+release. Ghostty remains the default viewer. The optional xterm viewer requires `/usr/bin/xterm`
+and its full app/service acceptance trial is separate from the existing bundle proof.
 Other Linux distributions, macOS, Windows and automatic updates need separate proof.
 The next Fedora delivery format is a single RPM installed with `dnf`; the archive
 and account-local installer are the initial bundle proof.

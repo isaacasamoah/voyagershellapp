@@ -303,7 +303,7 @@ fn main() -> Result<()> {
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
-            create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] | open SESSION_ID ghostty [--request-id ID]\n\
+            create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty|xterm] | open SESSION_ID ghostty|xterm [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\

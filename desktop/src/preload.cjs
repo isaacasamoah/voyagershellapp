@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld(
     cancelDrag: () => ipcRenderer.invoke('cancel-drag'),
     chooseDirectory: () => ipcRenderer.invoke('choose-directory'),
     createInstance: (input) => ipcRenderer.invoke('create-instance', input),
+    openInstance: (id, terminal, request) =>
+      ipcRenderer.invoke('open-instance', id, terminal, request),
     surfaceInstance: (id) => ipcRenderer.invoke('surface-instance', id),
     createFleet: (name, request) => ipcRenderer.invoke('create-fleet', name, request),
     moveVessel: (id, fleet) => ipcRenderer.invoke('move-vessel', id, fleet),

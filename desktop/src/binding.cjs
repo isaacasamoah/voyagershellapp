@@ -47,7 +47,7 @@ async function terminalSnapshot(pid) {
 }
 async function identifyTerminal(pid, endpoint, snapshot) {
   const { terminal, children } = snapshot || (await terminalSnapshot(pid));
-  if (terminal.executable !== '/usr/bin/ghostty') return null;
+  if (!(endpoint.viewers || ['/usr/bin/ghostty']).includes(terminal.executable)) return null;
   const matches = [];
   for (const frontend of children) {
     const nativeId =

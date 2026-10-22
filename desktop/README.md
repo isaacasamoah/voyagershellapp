@@ -236,3 +236,25 @@ Renderer-injected clicks are insufficient here: explicitly focusing the avatar
 first hides the native ordering bug. Results stay in `visibility-proof.json`.
 Optional `VOYAGER_VISIBILITY_CAPTURE_SCRIPT` and `VOYAGER_VISIBILITY_MONITOR` name
 a local Python monitor-capture helper and connector for desktop screenshots.
+
+## Alternate viewer trial
+
+After building both Rust binaries from this checkout, the existing polish proof
+can select xterm for every created viewer:
+
+```sh
+VOYAGER_STATE="$(mktemp -d /tmp/voyager-xterm-trial-XXXXXXXX)" \
+VOYAGER_PROOF_TERMINAL=xterm npm start -- --expanded --proof-polish
+```
+
+Run from `desktop/` in an owner desktop terminal with signed-in Codex, xterm and
+PulseAudio/PipeWire tools. A bound Voyager instance cannot launch another service;
+do not remove its caller environment to work around that policy. This is a separate
+candidate service and app profile, not an upgrade of the running service.
+
+The trial exercises renderer/preload/IPC/service selection, same-runtime
+background/reopen, window placement and native/app microphone handoff. Dock timings
+span the action to successful attachment/placement and Web Audio start/ended
+callbacks. Those callbacks are not evidence that the speaker played the sound.
+Record loopback or human audible confirmation separately, alongside physical
+selection, typing and dragging. The script is prepared, not a recorded pass.

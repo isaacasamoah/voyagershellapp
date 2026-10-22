@@ -5,7 +5,7 @@ use crate::{
     codex::Codex,
     events,
     shell::Shell,
-    terminal,
+    terminal, viewer,
     worker::Worker,
 };
 use anyhow::{Context, Result, ensure};
@@ -58,10 +58,11 @@ impl Runtime {
         let open = request.get("open").map_or(Ok(true), |v| {
             v.as_bool().context("invalid_input: open must be boolean")
         })?;
-        ensure!(
-            request.get("terminal").is_none_or(|t| t == "ghostty"),
-            "unsupported: choose ghostty"
-        );
+        let viewer = request
+            .get("terminal")
+            .map(viewer::Kind::parse)
+            .transpose()?
+            .unwrap_or(viewer::Kind::Ghostty);
         let (rank, supervisor) = authority::creation(
             &self.store,
             &request["actor"],
@@ -76,7 +77,7 @@ impl Runtime {
             inputs["supervisor_id"] = json!(supervisor);
         }
         inputs["open"] = json!(open);
-        inputs["terminal"] = json!("ghostty");
+        inputs["terminal"] = json!(viewer.as_str());
         if let Some((mut previous, receipt)) = self.store.operation(id)? {
             previous
                 .as_object_mut()
@@ -205,7 +206,9 @@ impl Runtime {
                 request["supervisor_id"].as_str()
             ],
         )?;
-        let mut operation = PendingOperation::new(id, session, Action::Open);
+        let kind = viewer::Kind::parse(&request["terminal"])?;
+        self.viewer_choices.insert(session.to_owned(), kind);
+        let mut operation = PendingOperation::new(id, session, Action::Open(kind));
         operation.receipt["actor"] = request["actor"].clone();
         operation.receipt["action"] = request["op"].clone();
         let record = self.store.session(session)?;
@@ -312,7 +315,10 @@ impl Runtime {
         );
         if matches!(
             action,
-            Action::Stop { .. } | Action::Background | Action::Open | Action::Remove { stop: true }
+            Action::Stop { .. }
+                | Action::Background
+                | Action::Open(_)
+                | Action::Remove { stop: true }
         ) {
             ensure!(
                 record["ownership"] == "managed",
@@ -353,12 +359,14 @@ impl Runtime {
         });
         let mut window_state = "closed";
         for terminal in self.terminals.iter_mut().filter(|t| &t.session == id) {
-            match terminal.window {
-                Some(window) if terminal::exists(window)? => {
+            match terminal.window_state() {
+                "open" => {
                     window_state = "open";
                     break;
                 }
-                None if terminal.child.try_wait()?.is_none() => window_state = "unknown",
+                "unknown" if terminal.window.is_some() || terminal.child.try_wait()?.is_none() => {
+                    window_state = "unknown";
+                }
                 _ => {}
             }
         }
@@ -446,7 +454,7 @@ impl Runtime {
         }
         match std::mem::replace(&mut operation.phase, Phase::Start) {
             Phase::Start => match operation.action {
-                Action::Open => {
+                Action::Open(kind) => {
                     for terminal in self.terminals.iter_mut().rev().filter(|t| t.session == id) {
                         if terminal.child.try_wait()?.is_some() {
                             ensure!(
@@ -470,7 +478,12 @@ impl Runtime {
                                     .is_none_or(|shell| shell.viewer_connected()),
                                 "provider_failed: terminal has no attached shell viewer; close it before reopening"
                             );
+                            ensure!(
+                                terminal.kind == kind,
+                                "viewer_conflict: background the current viewer before selecting another terminal"
+                            );
                             terminal::focus(terminal.child.id())?;
+                            operation.receipt["terminal"] = json!(kind.as_str());
                             operation.receipt["window_id"] = json!(window);
                             operation.receipt["pid"] = json!(terminal.child.id());
                             operation.effect("open", "confirmed");
@@ -483,9 +496,12 @@ impl Runtime {
                         }
                     }
                     let info = self.attachment(&id)?;
-                    let child = terminal::open_instance(&info, &self.store.session(&id)?)?;
+                    let child = viewer::open_instance(kind, &info, &self.store.session(&id)?)?;
                     let pid = child.id();
+                    self.viewer_choices.insert(id.clone(), kind);
+                    operation.receipt["terminal"] = json!(kind.as_str());
                     self.terminals.push(Terminal {
+                        kind,
                         session: id.clone(),
                         child,
                         window: None,

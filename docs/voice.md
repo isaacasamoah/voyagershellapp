@@ -47,7 +47,7 @@ input draft. Voyager sends the default F8 voice shortcut directly to that
 terminal's PTY master. It never uses desktop focus, types `/voice`, submits Enter,
 or reads and rewrites a draft. Custom voice key bindings are not supported.
 
-Before writing the five fixed bytes, `terminal.rs` verifies same-user Ghostty,
+Before writing the five fixed bytes, `terminal.rs` verifies a same-user supported viewer,
 process start time, the mapped window, one PTY master, the exact Codex executable,
 remote server and conversation arguments, the matching stdin slave, and the
 foreground process group. `pidfd_open` anchors the terminal process;
@@ -62,6 +62,11 @@ every audio device. The native check observes microphone streams in addition to
 service receipts. Audible quality, physical dragging and human interruption need
 a user trial. Other Codex versions, accounts, terminals, platforms and Claude
 need their own adapter proof.
+
+The xterm option uses the same identity and PTY-input checks. A native fixture
+confirmed one F8 sequence and rejection of a stale frontend identity on Fedora.
+That is not a Codex microphone/voice pass; repeat the full app/service voice journey
+with xterm before treating it as validated for everyday voice use.
 
 ## Checks
 

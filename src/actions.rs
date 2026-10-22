@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Action {
-    Open,
+    Open(crate::viewer::Kind),
     Background,
     Stop { close: bool },
     Remove { stop: bool },
@@ -19,13 +19,7 @@ impl Action {
             })
         };
         Ok(Some(match request["op"].as_str() {
-            Some("open") => {
-                ensure!(
-                    request["terminal"] == "ghostty",
-                    "unsupported: choose ghostty"
-                );
-                Self::Open
-            }
+            Some("open") => Self::Open(crate::viewer::Kind::parse(&request["terminal"])?),
             Some("background") => Self::Background,
             Some("stop-instance") => Self::Stop {
                 close: boolean("close_window", true)?,
@@ -40,7 +34,7 @@ impl Action {
 
     pub fn name(self) -> &'static str {
         match self {
-            Self::Open => "open",
+            Self::Open(_) => "open",
             Self::Background => "background",
             Self::Stop { .. } => "stop-instance",
             Self::Remove { .. } => "remove",
@@ -49,7 +43,13 @@ impl Action {
     }
 
     pub fn inputs(self, session: &str, generation: Option<&Value>) -> Value {
-        json!({"op":self.name(),"session_id":session,"close_window":matches!(self,Self::Stop{close:true}),"stop":matches!(self,Self::Remove{stop:true}),"control_generation":generation})
+        let mut inputs = json!({"op":self.name(),"session_id":session,"close_window":matches!(self,Self::Stop{close:true}),"stop":matches!(self,Self::Remove{stop:true}),"control_generation":generation});
+        if let Self::Open(kind) = self {
+            if kind != crate::viewer::Kind::Ghostty {
+                inputs["terminal"] = json!(kind.as_str());
+            }
+        }
+        inputs
     }
 }
 
@@ -127,4 +127,24 @@ pub fn name(value: &str) -> Result<&str> {
         "invalid_input: use a name of 1–100 bytes without control characters"
     );
     Ok(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn viewer_choice_is_part_of_the_open_request_identity() {
+        let ghostty = Action::parse(&json!({"op":"open","terminal":"ghostty"}))
+            .unwrap()
+            .unwrap();
+        let xterm = Action::parse(&json!({"op":"open","terminal":"xterm"}))
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            ghostty.inputs("session", None),
+            xterm.inputs("session", None)
+        );
+        assert!(Action::parse(&json!({"op":"open","terminal":"arbitrary-command"})).is_err());
+    }
 }
