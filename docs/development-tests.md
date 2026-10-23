@@ -15,8 +15,10 @@ keyboard focus, GPU, files or network access.
 
 ## Prepare and grant
 
-Build the candidate's debug Rust binaries with `cargo build --locked --bins` and
-install its desktop dependencies with `npm ci` in `desktop/`. The fixed executable
+Build the candidate's debug Rust binaries with `cargo build --locked --bins`.
+In `desktop/`, install the locked dependencies with `npm ci --ignore-scripts`,
+then run the pinned Electron installer with `node node_modules/electron/install.js`.
+The fixed executable
 locations are `target/debug/voyager`, `target/debug/voyager-windows` and
 `desktop/node_modules/electron/dist/electron`. Those resolved files must remain
 inside the granted checkout. Shared or redirected artifact directories are refused.
