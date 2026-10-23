@@ -36,7 +36,7 @@ const executable = path
   .replace(/%/g, '%%');
 fs.writeFileSync(
   path.join(applications, 'voyagershell.desktop'),
-  `[Desktop Entry]\nType=Application\nName=Voyager Shell\nComment=Let's go together. An agent orchestrator that lets you team up.\nExec="${executable}"\nIcon=voyagershell\nTerminal=false\nCategories=Development;\nStartupWMClass=voyagershell\n`,
+  `[Desktop Entry]\nType=Application\nName=Voyager Shell\nComment=Let's go together. An agent orchestrator that lets you team up.\nExec="${executable}" --ozone-platform=x11\nIcon=voyagershell\nTerminal=false\nCategories=Development;\nStartupWMClass=voyagershell\n`,
 );
 console.log(
   `Installed Voyager Shell: ${path.join(current, 'voyagershell')}\nOpen it from Applications. No login startup or system service was installed.`,

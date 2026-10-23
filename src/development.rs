@@ -188,6 +188,7 @@ fn journey(
     let mut command = Command::new(&candidate.electron);
     command
         .arg(candidate.checkout.join("desktop"))
+        .arg("--ozone-platform=x11")
         .arg("--expanded")
         .current_dir(&candidate.checkout)
         .env("VOYAGER_STATE", state)

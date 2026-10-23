@@ -54,6 +54,9 @@ The instance uses its normal caller environment, unchanged:
 "$VOYAGER_BIN" --state "$VOYAGER_STATE" test-stop RUN_ID stop-request
 ```
 
+The Linux runner passes `--ozone-platform=x11` before Electron initializes,
+matching the installed launcher and the native window adapter.
+
 `manual` opens the expanded candidate app for the human. It creates no Vessels
 automatically. Closing this test app ends its run and requests cleanup of the
 candidate service's managed instances. This differs from closing the ordinary app.
