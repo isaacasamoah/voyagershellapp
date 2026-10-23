@@ -4,9 +4,9 @@
   "description": "A small Electron client of the Voyager Rust service",
   "main": "src/main.cjs",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --ozone-platform=x11",
     "test": "node --test test/*.test.cjs",
-    "proof": "electron . --proof",
+    "proof": "electron . --ozone-platform=x11 --proof",
     "package:linux": "node scripts/package-linux.cjs",
     "format:check": "prettier --check .",
     "format": "prettier --write ."

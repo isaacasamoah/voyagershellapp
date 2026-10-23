@@ -13,6 +13,20 @@ run it. Ghostty is required for Vessels. Install and authenticate Codex separate
 to use agent Vessels and Voyager's private chat/voice conversation. Missing Codex
 does not prevent the service or Bash Vessels from running.
 
+The Linux launcher passes `--ozone-platform=x11` before Electron starts. The
+current desktop adapter uses X11 window identities and placement. On a Wayland
+session, selecting X11 later inside the main script can leave the browser on
+Wayland while its software renderer uses X11, producing invisible windows.
+Direct executable launches must also include this flag:
+
+```sh
+~/.local/share/voyagershell-app/current/voyagershell --ozone-platform=x11 --expanded
+```
+
+This is the existing Linux adapter requirement, not a native Wayland or
+cross-platform support claim. Electron documents the launch flag in its
+[Wayland default change](https://www.electronjs.org/blog/electron-38-0).
+
 Opening the app starts or reconnects to the service. Closing the panel leaves work
 running. Use each Vessel's menu to stop/remove it, then the panel's small menu to
 stop the service. No restart or migration of an already running service is forced.

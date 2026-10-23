@@ -150,6 +150,7 @@ fn development_candidate(s: &Service) -> PathBuf {
     let app = root.join("desktop/node_modules/electron/dist/electron");
     fs::write(&app, r##"#!/usr/bin/env python3
 import json, os, pathlib, socket, sys, time
+assert '--ozone-platform=x11' in sys.argv, 'desktop must select X11 at process startup'
 state = pathlib.Path(os.environ['VOYAGER_STATE'])
 def rpc(request):
     with socket.socket(socket.AF_UNIX) as conn:

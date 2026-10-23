@@ -6,6 +6,11 @@ its own interface; Voyager manages the work it starts and records what happens.
 
 We build small, real experiments, try them ourselves, and share the results here.
 
+The Linux Applications launcher selects X11 before Electron starts; direct
+launches require `--ozone-platform=x11` as described in
+[installation instructions](docs/install-linux.md). This avoids the invisible
+window failure when the session otherwise selects Wayland before app code runs.
+
 ## Vision
 
 Let’s go together. We’re building voyagershell to make room for agent-to-agent,
