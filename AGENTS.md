@@ -77,6 +77,21 @@ services implicitly. Prove the installed executable, not just a checkout launch.
 
 Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
 
-Documentation root: `/home/isaac/obsidian/Projects/voyagershellapp`. Read its `status.md` to resume and follow its links to the owning plan and specification. Use the shared `working-docs` skill before producing persistent documents. The existing explainer/, specs/, plans/ and research/ directories are approved; status and log have one owner at the documentation root. This destination policy overrides default output paths in content skills without changing their procedures.
+Development specifications belong in this repository. Start at `docs/SPEC.md`,
+which indexes the module specifications alongside it. Use the canonical
+`spec-driven-development` skill for specifications, `planning-and-task-breakdown`
+for `tasks/plan.md` and its default `tasks/todo.md` task list, and the existing
+build/incremental implementation and Git skills for execution and version control.
+Keep those procedures unchanged for the first trial. Do not create plans before
+specification review or duplicate task status in human-facing project notes.
+
+Human-facing documentation lives at `/home/isaac/obsidian/Projects/voyagershellapp`.
+Read its `status.md` for project navigation. Use `working-docs` for walkthroughs,
+research, reviews and status/log maintenance there; link to the repository-owned
+specifications and plans rather than maintaining editable copies. Its existing
+explainer/, specs/, plans/ and research/ directories retain historical material;
+this policy does not authorize a bulk migration of that history. Status and log
+have one owner at the documentation root. This explicit destination policy takes
+precedence over the current working-docs skill's broader placement defaults.
 
 Use Voyager orchestration only when requested or called for by an approved plan. Project facts remain here; shared procedures remain in skills.

@@ -1,0 +1,105 @@
+# Spec: explicitly resume a saved conversation
+
+Module id: `conversation-resume`. Project: VoyagerShellApp. Draft for review, 24 October 2026.
+The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). Specification approval precedes planning and implementation.
+
+## Objective and scope
+
+The owner can explicitly return to a confirmed stopped, previously managed Codex conversation, preserving its saved history and Voyager identity. The new runtime starts idle. Reopening a terminal, resuming a conversation and submitting work remain distinct actions.
+
+The [worker source inspection](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/src/worker.rs) found that worker creation starts a fresh thread and existing re-registration requires a live endpoint. Neither is a managed stopped-conversation resume operation. A retained registration does not establish a running agent or continued capture.
+
+First scope is active registrations for previously managed Codex conversations, initiated by the local owner through the panel or CLI. The private owner conversation may expose the same named action for an explicit user request. Ordinary Vessel callers gain no new permission. Removed records remain readable but cannot be resumed implicitly; restoring their registration needs separate explicit behavior outside this increment. Bash offers existing new-shell creation, not restoration of old jobs or shell state.
+
+## User journey and invariants
+
+1. Show Resume conversation only when service eligibility permits it. Its description says it opens the saved conversation without continuing the old task. A background but running agent offers Open instead.
+2. The owner selects Resume. Record one immutable operation intent before starting a process. Recheck eligibility at execution; a stale UI cannot cause a second runtime.
+3. Start a new service-owned Codex runtime for the same saved native thread. Verify that the provider returns that identity and an idle conversation before reporting success. Do not substitute `thread/start`, fork history or send a turn on failure. If persisted automation or a goal would start work on resume and the adapter cannot load it idle, refuse with an explanation; do not silently clear that goal or continue it.
+4. Preserve logical Vessel ID, name, current valid assignments, Fleet placement and historical events. Create fresh runtime and capture generations and credentials. Revalidate present authority; do not revive old credentials, temporary grants or dock authority.
+5. Resume the saved working directory and verified effective model/provider, approval and sandbox or named permission profile. Retain compatible user workflow settings. Persist only required nonsecret resume metadata. Do not replace a missing setting with the launcher's permissive defaults. Unavailable or incompatible settings produce a reason and inspection path.
+6. Capture new events after the successful resume boundary and record the gap. Historic turns loaded by the provider remain history; they cannot appear as freshly completed work.
+7. After runtime success, the panel may issue the existing Open operation as a distinct explicit step of the requested Resume-and-open journey. A viewer failure leaves the resumed agent running and offers Open again. It never starts another runtime.
+
+The service can establish ownership only for its actual new child. Persisted PID values are not ownership. A prior confirmed stop/exit and no conflicting current managed operation are required. Lost ownership, a pending earlier start or uncertainty about the old runtime blocks resume. A service restart preserves a previously confirmed stop but must not convert previously running or uncertain work into eligible stopped work. An unresolved legacy record offers Inspect with the recorded state and reason; this increment does not add an automatic ownership-recovery action. This increment does not detect every independently opened copy of a saved thread outside Voyager; retain provider conflicts and do not claim global uniqueness.
+
+## Service contract
+
+The following names and fields are proposed additions. Existing operations keep their current behavior and response shapes.
+
+| Interface | Input | Result |
+|---|---|---|
+| Existing owner list/detail | Existing selection and permission rules | Add a `lifecycle` observation and `resume` eligibility object to each relevant record. |
+| New `resume-instance` operation | `request_id`, `session_id`, `expected_runtime_generation` | Existing lifecycle receipt envelope, with action `resume-instance`, the same logical session ID and the new runtime generation when known. |
+| Existing operation lookup | The immutable request ID | The saved pending or final receipt. Reading it never replays the operation. |
+
+`expected_runtime_generation` is the generation observed when the owner chose Resume. For an eligible legacy record, the service supplies a stable baseline generation after validating its recorded stop evidence. An unverified record cannot invent that baseline.
+
+The additive `lifecycle` object has `runtime` equal to `starting`, `running`, `stopped`, `unknown` or `external`, and a nullable `runtime_generation`. Existing separate window and capture fields remain authoritative for their own observations. `running` means the current service owns a live runtime; `stopped` means exit is confirmed with no conflicting runtime. `external` makes no process-ownership claim. Missing observations are unknown, never stopped.
+
+The additive `resume` object has `state` equal to `eligible`, `pending` or `unavailable`, a nullable `request_id`, and nullable `reason_code` and `reason`. Eligible records carry the expected generation through `lifecycle`. Initial reason codes include `unsupported_kind`, `external_owner`, `registration_removed`, `already_running`, `outcome_unknown`, `settings_unavailable`, `thread_unavailable`, `directory_unavailable` and `forbidden`. Eligibility is an observation, not a reservation or permission grant.
+
+Validate caller, request ID, types, identity, generation and saved metadata at the service boundary. Use the existing error envelope with a stable code and readable message. Reusing a request ID with changed inputs is `request_conflict`. A different request for the same in-progress Vessel is `busy` and identifies the existing operation where authorized. Claim the request and per-Vessel operation atomically before spawning; no check-then-spawn race.
+
+Receipts retain existing `pending`, `completed`, `partial` and `uncertain` meanings. Completed means the same saved thread is loaded idle, the owned runtime is live, fresh credentials are established and capture is connected. Known failed effects use the existing partial/error representation. A timeout or lost reply after an effect becomes uncertain. Repeating the same ID retrieves its record; a new ID cannot bypass unresolved state. Preserve receipt history across restart for this operation. An old completed receipt describes that earlier outcome, not current liveness; callers must refresh lifecycle observations before opening or labelling the agent running. Restart never automatically resumes a thread or restores ownership.
+
+Resume itself leaves the viewer closed. A successful runtime receipt and failed Open receipt must remain distinguishable to every caller. Suggested UI messages are "Conversation resumed; opening terminal" and "Conversation resumed, but the terminal could not open."
+
+## Source ownership, stack and style
+
+Use Rust 2024, the existing SQLite store, Codex adapter and Electron 44.7.0 / Node 24. Add no dependency or generic lifecycle framework. [Official Codex documentation](https://learn.chatgpt.com/docs/app-server) supports resuming a stored thread by ID separately from starting a turn. Codex 0.163.0 schema inspection also found `excludeTurns`; actual runtime/settings behavior still needs native proof. Recheck the installed provider schema before implementation.
+
+`src/service/lifecycle.rs` owns this operation; `src/worker.rs` starts the owned runtime; `src/service/native.rs` retains native request ownership; `src/store.rs` owns persistence. `src/actions.rs` defines typed phases. CLI wiring belongs in `src/bin/voyager.rs`; a private owner tool, if exposed, uses `conversation-tools.json` and `conversation_tools.rs` as a thin caller of the same operation. Read [lifecycle.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/lifecycle.md) and [authority.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/authority.md) before changing those boundaries.
+
+Current workers have one unique session association. The implementation must retain immutable original launch/operation evidence while allowing successive runtime generations for the same Vessel. Plan the minimal transactional schema change and legacy-read behavior before coding it. Do not rewrite original launch inputs to make a new runtime look like the old process.
+
+Follow [CONTRIBUTING](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/CONTRIBUTING.md). Meaningful phases use enums and `Result`; changed source stays comment-free. Existing [actions.rs](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/src/actions.rs) illustrates the style:
+
+```rust
+#[derive(Clone, Copy, PartialEq)]
+pub enum Action {
+    Open(crate::viewer::Kind),
+    Background,
+    Stop { close: bool },
+    Remove { stop: bool },
+    Register,
+}
+```
+
+## Commands
+
+From the selected worktree root, when implementation is authorized:
+
+```sh
+cargo build --locked --bins
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+npm --prefix desktop ci
+npm --prefix desktop run format:check
+npm --prefix desktop test
+```
+
+Extend `tests/service.rs`, `tests/worker_server.py` and authority fixtures as needed. Existing opt-in native lifecycle tests are not proof of this new operation. The later plan must provide a dedicated, authorized native resume test and its exact command. No new CLI syntax is represented as runnable yet.
+
+## Success criteria and verification
+
+| Id | Case and required evidence |
+|---|---|
+| R1 | Create a disposable conversation containing a marker, explicitly stop it and resume it. Logical Vessel and native thread IDs stay the same; owned process and credentials are new. The marker is available after an explicitly requested new query. No new turn starts merely from resume. |
+| R2 | Repeat after service restart following a confirmed stop. Preserve history, settings, name, valid assignments and Fleet placement. Previously live/uncertain records remain blocked. |
+| R3 | Duplicate the same request and race two distinct requests. Exactly one new owned runtime starts. Changed input under one ID refuses. |
+| R4 | Disconnect or terminate the test service during startup. Pending work becomes uncertain and is not automatically retried. The receipt preserves what is known; unrelated processes are untouched. |
+| R5 | Missing thread, missing directory, invalid settings and unsupported provider responses produce readable failures without creating a substitute conversation. A legacy record with insufficient settings is inspectable but ineligible. |
+| R6 | Viewer opening fails after resume. The agent stays running and a later Open attaches to that same runtime. Closing/reopening that viewer does not submit work. |
+| R7 | Old credentials and expired grants refuse. A non-owner caller cannot resume; current assignments remain subject to current service policy. |
+| R8 | Delayed events from the former capture generation do not become new events. Historical turns do not duplicate completed tasks. |
+| R9 | Stopped Bash, external registrations, removed registrations and an already running managed agent are known-different refusals. No unrelated process is signalled. |
+
+Use process fixtures for failure ordering, settings preservation, receipt persistence and live-child ownership. The real provider test proves saved context and idle behavior. Record candidate app/service executables, provider version, timings through ready and viewer attachment, and all observed identities without credentials. Preserve existing service deadlines and responsiveness; unresolved deadlines are uncertainty, not grounds for replay. Require these journeys rather than a synthetic coverage percentage.
+
+## Boundaries and review decisions
+
+Always keep task submission separate and preserve original history. Review any broader recovery policy, automatic restoration, external adoption or configurable permission change before adding it. Never recover ownership from a PID, kill a possibly unrelated runtime, silently increase permissions, or use a new request ID to retry uncertain effects.
+
+Review the first-increment policy for legacy records: recover verified settings where available; otherwise show why resume is unavailable, leaving history and normal new-agent creation accessible. Supporting removed registrations or a settings-repair editor is deferred. The plan must resolve storage details and verify provider settings semantics before implementation; failure to do so cannot be hidden by permissive defaults.
