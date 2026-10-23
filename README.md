@@ -65,6 +65,7 @@ Closing Electron stops voice while the runtime and work continue.
 
 ## Try it
 
+For a Linux bundle, see [install the Fedora prototype](docs/install-linux.md).
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
 Opening the app starts or reconnects to the service. Closing the panel leaves work
 running. After stopping managed Vessels, use the small panel menu's **Stop service**

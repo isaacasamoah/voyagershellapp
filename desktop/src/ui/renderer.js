@@ -422,6 +422,23 @@ $('fleet-form').onsubmit = async (event) => {
     showError(error.message);
   }
 };
+$('panel').addEventListener('pointerdown', (event) => {
+  if (
+    event.button !== 0 ||
+    event.target.closest(
+      'button, input, select, textarea, a, form, .instance-menu, .fleet, #conversation',
+    )
+  )
+    return;
+  event.preventDefault();
+  $('panel').setPointerCapture(event.pointerId);
+  api.beginPanelDrag(event.clientX, event.clientY);
+});
+$('panel').addEventListener('pointerup', (event) => {
+  if ($('panel').hasPointerCapture(event.pointerId))
+    $('panel').releasePointerCapture(event.pointerId);
+});
+$('panel').addEventListener('lostpointercapture', () => api.endPanelDrag());
 $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();

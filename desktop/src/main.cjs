@@ -25,12 +25,18 @@ const stateDir =
   process.env.VOYAGER_STATE || path.join(require('node:os').homedir(), '.local/share/voyagershell');
 if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
-const binary = path.join(root, 'target/debug/voyager');
-const probe = path.join(root, 'target/debug/voyager-windows');
+const binaries = app.isPackaged
+  ? path.join(process.resourcesPath, 'bin')
+  : path.join(root, 'target/debug');
+const binary = path.join(binaries, 'voyager');
+const probe = path.join(binaries, 'voyager-windows');
 const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
 app.commandLine.appendSwitch('ozone-platform', 'x11');
+app.disableHardwareAcceleration();
+app.setName('Voyager Shell');
+app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
@@ -43,6 +49,7 @@ let avatarWin,
   expanded = false,
   seated = false,
   dragging = null,
+  panelDrag = null,
   binding = null;
 const fleets = fleetActions(rpc);
 let fleetData = { fleets: [], assignments: {} },
@@ -298,6 +305,20 @@ function setSeated(value) {
 function raiseSeatedAvatar() {
   if (expanded && seated && !dragging) avatarWin.moveTop();
 }
+app.on('second-instance', async () => {
+  if (!avatarWin || avatarWin.isDestroyed()) return;
+  if (avatarWin.isMinimized()) avatarWin.restore();
+  if (panelWin.isMinimized()) panelWin.restore();
+  try {
+    await setExpanded(true);
+    panelWin.show();
+    panelWin.focus();
+    avatarWin.showInactive();
+    raiseSeatedAvatar();
+  } catch (error) {
+    console.error(error.message);
+  }
+});
 async function setExpanded(value) {
   expanded = value;
   if (value) {
@@ -324,6 +345,7 @@ async function setExpanded(value) {
       await delay(25);
     }
   } else {
+    panelDrag = null;
     setSeated(false);
     panelWin.hide();
     sendState();
@@ -361,7 +383,13 @@ function updateDockHover(snapshot) {
   );
 }
 function updatePointer() {
-  advanceDrag(screen.getCursorScreenPoint());
+  const cursor = screen.getCursorScreenPoint();
+  if (panelDrag)
+    setBoundsIfChanged(panelWin, {
+      x: Math.round(cursor.x - panelDrag.x),
+      y: Math.round(cursor.y - panelDrag.y),
+    });
+  advanceDrag(cursor);
   if (!binding || seated || dragging) setDockHovered(false);
   if ((!binding && !expanded) || hoverBusy || performance.now() - lastHoverProbe < 100) return;
   hoverBusy = true;
@@ -756,9 +784,11 @@ function createWindow(width, height) {
     hasShadow: false,
     resizable: false,
     alwaysOnTop: true,
+    type: process.platform === 'linux' ? 'toolbar' : undefined,
     skipTaskbar: true,
     show: false,
     backgroundColor: '#00000000',
+    icon: path.join(__dirname, '../assets/idle.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -930,6 +960,15 @@ app.whenReady().then(async () => {
   handle('supervise-instance', [panelWin], (id, supervisor, request) =>
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
+  handle('begin-panel-drag', [panelWin], (x, y) => {
+    const bounds = panelWin.getBounds();
+    if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > bounds.width || y > bounds.height)
+      throw Error('Invalid panel drag');
+    panelDrag = { x, y };
+  });
+  handle('end-panel-drag', [panelWin], () => {
+    panelDrag = null;
+  });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)

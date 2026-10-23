@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld(
       return () => ipcRenderer.removeListener('conversation', listener);
     },
     toggle: () => ipcRenderer.invoke('toggle'),
+    beginPanelDrag: (x, y) => ipcRenderer.invoke('begin-panel-drag', x, y),
+    endPanelDrag: () => ipcRenderer.invoke('end-panel-drag'),
     beginDrag: (x, y) => ipcRenderer.invoke('begin-drag', x, y),
     endDrag: () => ipcRenderer.invoke('end-drag'),
     cancelDrag: () => ipcRenderer.invoke('cancel-drag'),

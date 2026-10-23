@@ -69,6 +69,12 @@ The primary checkout tracks `main`. The historical prototype branch is
 packaging use separate task worktrees. Rust checks are defined in CONTRIBUTING.md;
 Electron commands are in desktop/package.json.
 
+Linux packaging is owned by `desktop/scripts/package-linux.cjs`; its account-local
+installer is `desktop/scripts/install-linux.cjs`. Read `docs/install-linux.md`.
+Packaged main-process code locates Rust binaries in `process.resourcesPath/bin`;
+development keeps `target/debug`. Never install login startup or restart existing
+services implicitly. Prove the installed executable, not just a checkout launch.
+
 Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
 
 Documentation root: `/home/isaac/obsidian/Projects/voyagershellapp`. Read its `status.md` to resume and follow its links to the owning plan and specification. Use the shared `working-docs` skill before producing persistent documents. The existing explainer/, specs/, plans/ and research/ directories are approved; status and log have one owner at the documentation root. This destination policy overrides default output paths in content skills without changing their procedures.

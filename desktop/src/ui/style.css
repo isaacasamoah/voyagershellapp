@@ -105,7 +105,8 @@ body[data-connected='true'] #indicator {
   background: #8dccba;
 }
 #panel {
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
+  touch-action: none;
   position: absolute;
   left: 8px;
   right: 8px;
