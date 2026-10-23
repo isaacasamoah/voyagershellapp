@@ -36,6 +36,7 @@ use std::{
 
 mod authority_ops;
 mod conversation;
+mod conversation_files;
 mod conversation_tools;
 mod development_ops;
 mod fleets;

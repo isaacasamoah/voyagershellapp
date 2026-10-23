@@ -33,6 +33,11 @@ pub(super) fn invoke(
         input.len() == props.len() && input.keys().all(|key| props.contains_key(key)),
         "invalid_input: tool fields do not match the named action"
     );
+    match name {
+        "voyager_read_file" => return super::conversation_files::read(state, args),
+        "voyager_search_files" => return super::conversation_files::search(state, args),
+        _ => {}
+    }
     let mut request = args.clone();
     request["request_id"] = json!(id);
     let op = match name {
@@ -64,6 +69,13 @@ pub(super) fn invoke(
         "voyager_rank" => "rank",
         "voyager_supervise" => "supervise",
         "voyager_shell" => "shell-exec",
+        "voyager_shell_read" => {
+            ensure!(
+                args["after"].as_u64().is_some(),
+                "invalid_input: after must be a nonnegative integer"
+            );
+            "shell-read"
+        }
         "voyager_fleets" => "fleets",
         "voyager_create_fleet" => {
             request["name"] = args["goal"].clone();
