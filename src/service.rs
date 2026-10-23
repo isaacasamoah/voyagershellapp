@@ -37,6 +37,7 @@ use std::{
 mod authority_ops;
 mod conversation;
 mod conversation_tools;
+mod development_ops;
 mod fleets;
 mod lifecycle;
 mod native;
@@ -218,6 +219,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     let store = Store::open(&db_path)?;
     store.0.execute("UPDATE requests SET state='failed',error_code='service_restarted_before_dispatch' WHERE state='pending'", [])?;
     store.reconcile_coordination()?;
+    store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.run_state','uncertain','$.error','Parent service restarted; grants expired and runner ownership was not restored.') WHERE json_extract(receipt,'$.action')='test-start' AND json_extract(receipt,'$.run_state') IN ('starting','running','stopping')", [])?;
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
@@ -249,6 +251,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         shells: HashMap::new(),
         terminals: Vec::new(),
         viewer_choices: HashMap::new(),
+        tests: development_ops::Tests::default(),
         operations: HashMap::new(),
         creations: HashMap::new(),
         native_calls: Vec::new(),
@@ -428,6 +431,7 @@ struct Runtime {
     shells: HashMap<String, Shell>,
     terminals: Vec<Terminal>,
     viewer_choices: HashMap<String, crate::viewer::Kind>,
+    tests: development_ops::Tests,
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
@@ -513,6 +517,8 @@ impl Runtime {
                 .require_registered(string(&request, "session_id")?)?;
         }
         let value = match string(&request, "op")? {
+            "test-grant" | "test-revoke" | "test-start" | "test-stop" | "test-runs"
+            | "test-read" => self.test_operation(&request)?,
             "rank" | "supervise" | "report" | "adjudicate" | "escalate" => {
                 self.authority_operation(&request)?
             }
@@ -703,6 +709,7 @@ impl Runtime {
             "stop" => {
                 ensure!(
                     self.creations.is_empty()
+                        && !self.tests.active()
                         && !self.workers.values().any(|w| w.alive)
                         && !self.shells.values().any(|s| s.alive),
                     "stop managed instances explicitly before stopping Voyager"
@@ -765,6 +772,7 @@ impl Runtime {
     }
 
     fn observe(&mut self) -> Result<()> {
+        self.observe_tests()?;
         self.conversation.observe();
         if self.conversation.questions_due() {
             let mut questions = self

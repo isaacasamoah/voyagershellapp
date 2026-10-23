@@ -344,3 +344,56 @@ pub fn creation(
     }
     Ok((selected, supervisor))
 }
+
+pub fn development(actor: &Value, op: &str, granted: bool, owns_run: bool) -> Result<()> {
+    ensure!(
+        [
+            "test-grant",
+            "test-revoke",
+            "test-start",
+            "test-stop",
+            "test-runs",
+            "test-read"
+        ]
+        .contains(&op),
+        "invalid_input: unknown development operation"
+    );
+    if is_owner(actor) {
+        return Ok(());
+    }
+    ensure!(
+        actor["kind"] == "instance",
+        "forbidden: development testing requires an instance"
+    );
+    ensure!(
+        match op {
+            "test-start" => granted,
+            "test-read" | "test-stop" => owns_run,
+            "test-runs" => true,
+            _ => false,
+        },
+        "forbidden: development operation outside caller grant or run ownership"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod development_tests {
+    use super::*;
+
+    #[test]
+    fn development_rights_require_an_explicit_grant_and_do_not_follow_rank() {
+        let agent = json!({"kind":"instance","session_id":"a","rank":"admiral"});
+        let shell = json!({"kind":"terminal","session_id":"a"});
+        assert!(development(&owner(), "test-grant", false, false).is_ok());
+        assert!(development(&agent, "test-grant", true, true).is_err());
+        assert!(development(&agent, "test-start", false, true).is_err());
+        assert!(development(&agent, "test-start", true, false).is_ok());
+        assert!(development(&shell, "test-start", true, true).is_err());
+        assert!(development(&agent, "test-stop", false, true).is_ok());
+        assert!(development(&agent, "test-read", true, false).is_err());
+        assert!(development(&agent, "test-read", false, true).is_ok());
+        assert!(development(&agent, "test-runs", false, false).is_ok());
+        assert!(development(&agent, "test-unknown", true, true).is_err());
+    }
+}

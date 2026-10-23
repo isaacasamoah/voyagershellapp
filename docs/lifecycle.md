@@ -132,6 +132,11 @@ helpers return connections and metadata without mutating the store. Waiting
 phases advance between capture passes, keeping other instances responsive.
 JSON stays at protocol and storage boundaries.
 
+Scoped development runs use a separate helper owned by the authorizing service.
+Their candidate service/profile has its own process maps; cleanup goes through
+that service's existing lifecycle operations. A runner receipt does not prove a
+successful test or completed cleanup. [Development run contract](development-tests.md).
+
 The private socket is locked, bounded and same-UID checked. SQLite migrations are transactional; version two adds agent authority while
 preserving existing lifecycle state. Version three moves display names into sessions;
 original launch names remain immutable inputs for retry receipts. Unsupported newer

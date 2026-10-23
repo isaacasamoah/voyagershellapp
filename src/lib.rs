@@ -2,6 +2,7 @@ mod actions;
 pub mod authority;
 pub mod codex;
 pub mod control;
+pub mod development;
 pub mod events;
 pub mod service;
 pub mod shell;
