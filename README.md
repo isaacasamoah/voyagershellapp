@@ -40,6 +40,11 @@ is our starting point, and we’d love to build toward it with other developers.
   Docking temporarily grants human command authority.
 - Agent messages start an idle turn or steer the observed active turn. The service
   checks the bound caller; it never silently replays a failed or uncertain send.
+- An owner can grant a named agent permission to run a specific development checkout
+  in a fresh service/profile, inspect its result and request cleanup. Manual testing
+  and the existing automated polish journey are separate modes. This experimental
+  [development facility](docs/development-tests.md) does not grant control of the
+  installed app and still requires a live graphical acceptance trial.
 
 The existing end-to-end platform proof is Fedora with dedicated Ghostty XWayland
 windows. An opt-in xterm viewer now shares the launch and verified identity boundary.

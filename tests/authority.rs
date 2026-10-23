@@ -101,6 +101,10 @@ impl Service {
 }
 impl Drop for Service {
     fn drop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_some() {
+            let _ = fs::remove_dir_all(&self.dir);
+            return;
+        }
         if let Ok(mut stream) = UnixStream::connect(self.dir.join("service.sock")) {
             let _ = writeln!(stream, "{}", json!({"op":"list","include_removed":true}));
             let mut line = String::new();
@@ -119,6 +123,274 @@ impl Drop for Service {
         let _ = self.child.wait();
         let _ = fs::remove_dir_all(&self.dir);
     }
+}
+
+fn development_candidate(s: &Service) -> PathBuf {
+    let root = s.dir.join("candidate");
+    for dir in [
+        "target/debug",
+        "desktop/src",
+        "desktop/node_modules/electron/dist",
+    ] {
+        fs::create_dir_all(root.join(dir)).unwrap();
+    }
+    fs::copy(
+        env!("CARGO_BIN_EXE_voyager"),
+        root.join("target/debug/voyager"),
+    )
+    .unwrap();
+    fs::copy(
+        env!("CARGO_BIN_EXE_voyager-windows"),
+        root.join("target/debug/voyager-windows"),
+    )
+    .unwrap();
+    for file in ["Cargo.toml", "desktop/package.json", "desktop/src/main.cjs"] {
+        fs::write(root.join(file), "{}").unwrap();
+    }
+    let app = root.join("desktop/node_modules/electron/dist/electron");
+    fs::write(&app, r##"#!/usr/bin/env python3
+import json, os, pathlib, socket, sys, time
+state = pathlib.Path(os.environ['VOYAGER_STATE'])
+def rpc(request):
+    with socket.socket(socket.AF_UNIX) as conn:
+        conn.connect(str(state / 'service.sock'))
+        conn.sendall((json.dumps(request) + '\n').encode())
+        reply = json.loads(conn.makefile().readline())
+        if 'error' in reply:
+            raise RuntimeError(reply)
+        return reply['result']
+receipt = rpc({'op':'create','kind':'shell','name':'test shell','cwd':str(state),'request_id':'test-shell','open':False})
+while receipt['state'] == 'pending':
+    time.sleep(.02)
+    receipt = rpc({'op':'operation','request_id':'test-shell'})
+assert receipt['state'] == 'completed', receipt
+(state / 'app-ready.json').write_text(json.dumps({'pid':os.getpid(),'service':rpc({'op':'status'})['instance'],'session':receipt['session_id']}))
+print('TEST_SURFACE_READY', flush=True)
+if '--proof-polish' in sys.argv:
+    selection = pathlib.Path(sys.argv[1]) / 'fixture-verdict'
+    verdict = selection.read_text() if selection.exists() else 'pass'
+    (state / 'polish-proof.json').write_text(json.dumps({'verdict':verdict,'observations':['fixture surface only']}))
+while True:
+    time.sleep(.1)
+"##).unwrap();
+    fs::set_permissions(app, fs::Permissions::from_mode(0o700)).unwrap();
+    root
+}
+
+fn development_finished(s: &Service, credential: &Value, request: &str) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let result = s.agent(credential, json!({"op":"operation","request_id":request}));
+        if matches!(result["run_state"].as_str(), Some("finished" | "uncertain")) {
+            return result;
+        }
+        assert!(Instant::now() < deadline, "{result}");
+        thread::sleep(Duration::from_millis(40));
+    }
+}
+
+#[test]
+fn development_grants_scope_runs_and_revocation_cleans_only_the_candidate() {
+    let s = Service::start();
+    let instance = s.create("tester", "codex", None);
+    let peer = s.create("test-peer", "codex", Some("admiral"));
+    let agent = s.context("tester");
+    let other = s.context("test-peer");
+    let checkout = development_candidate(&s);
+    let grant =
+        json!({"op":"test-grant","session_id":instance,"request_id":"grant","checkout":checkout});
+    let start = json!({"op":"test-start","request_id":"manual-run","mode":"manual"});
+    assert_eq!(s.raw(Some(&agent), start.clone())["code"], "forbidden");
+    assert_eq!(s.raw(Some(&agent), grant.clone())["code"], "forbidden");
+    s.owner(grant.clone());
+    assert_eq!(s.owner(grant)["checkout"], json!(checkout));
+    assert_eq!(
+        s.agent(&agent, json!({"op":"capabilities"}))["development_checkout"],
+        json!(checkout)
+    );
+    assert_eq!(s.raw(Some(&other), start.clone())["code"], "forbidden");
+    let mut override_state = start.clone();
+    override_state["state_dir"] = json!(s.dir);
+    assert_eq!(s.raw(Some(&agent), override_state)["code"], "invalid_input");
+    let receipt = s.agent(&agent, start.clone());
+    let run = receipt["run_id"].as_str().unwrap();
+    let state = PathBuf::from(receipt["state_dir"].as_str().unwrap());
+    assert_eq!(s.agent(&agent, start.clone())["run_id"], run);
+    let mut changed = start;
+    changed["mode"] = json!("polish");
+    assert_eq!(s.raw(Some(&agent), changed)["code"], "request_conflict");
+    assert!(
+        s.raw(
+            Some(&agent),
+            json!({"op":"test-start","request_id":"second","mode":"manual"})
+        )
+        .get("error")
+        .is_some()
+    );
+    for op in ["test-read", "test-stop"] {
+        assert_eq!(
+            s.raw(
+                Some(&other),
+                json!({"op":op,"run_id":run,"request_id":"peer-stop"})
+            )["code"],
+            "forbidden"
+        );
+    }
+    assert_eq!(s.agent(&other, json!({"op":"test-runs"})), json!([]));
+    let deadline = Instant::now() + Duration::from_secs(12);
+    while !state.join("app-ready.json").exists() {
+        assert!(
+            Instant::now() < deadline,
+            "{:?}",
+            fs::read_to_string(state.join("test.log"))
+        );
+        thread::sleep(Duration::from_millis(30));
+    }
+    let ready: Value =
+        serde_json::from_slice(&fs::read(state.join("app-ready.json")).unwrap()).unwrap();
+    assert_ne!(
+        ready["service"],
+        s.owner(json!({"op":"status"}))["instance"]
+    );
+    assert!(
+        s.agent(&agent, json!({"op":"test-read","run_id":run}))["text"]
+            .as_str()
+            .unwrap()
+            .contains("TEST_SURFACE_READY")
+    );
+    s.owner(json!({"op":"test-revoke","session_id":instance,"request_id":"revoke"}));
+    assert_eq!(
+        s.raw(
+            Some(&agent),
+            json!({"op":"test-start","request_id":"revoked","mode":"manual"})
+        )["code"],
+        "forbidden"
+    );
+    let done = development_finished(&s, &agent, "manual-run");
+    assert_eq!(done["run_state"], "finished", "{done}");
+    assert_eq!(done["result"]["cleanup"], "completed", "{done}");
+    assert!(!state.join("service.sock").exists());
+    let rows = s.owner(json!({"op":"list"}));
+    assert!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["id"] == peer && r["worker_state"] == "running")
+    );
+    assert_eq!(
+        s.agent(&agent, json!({"op":"test-runs"}))
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        s.agent(
+            &agent,
+            json!({"op":"test-stop","run_id":run,"request_id":"already-stopped"})
+        )["effect"],
+        "stop_requested"
+    );
+    fs::remove_dir_all(state).unwrap();
+}
+
+#[test]
+fn development_proof_distinguishes_pass_rework_and_failed_launch() {
+    let s = Service::start();
+    let instance = s.create("proof-tester", "codex", None);
+    let agent = s.context("proof-tester");
+    let checkout = development_candidate(&s);
+    s.owner(
+        json!({"op":"test-grant","session_id":instance,"request_id":"grant","checkout":checkout}),
+    );
+    for verdict in ["pass", "rework"] {
+        fs::write(checkout.join("desktop/fixture-verdict"), verdict).unwrap();
+        let request = format!("proof-{verdict}");
+        s.agent(
+            &agent,
+            json!({"op":"test-start","request_id":request,"mode":"polish"}),
+        );
+        let done = development_finished(&s, &agent, &request);
+        assert_eq!(done["run_state"], "finished", "{done}");
+        assert_eq!(
+            done["result"]["outcome"]["proof"]["verdict"], verdict,
+            "{done}"
+        );
+        assert_eq!(done["result"]["cleanup"], "completed");
+        fs::remove_dir_all(done["state_dir"].as_str().unwrap()).unwrap();
+    }
+    fs::write(
+        checkout.join("desktop/node_modules/electron/dist/electron"),
+        "#!/bin/sh\nexit 7\n",
+    )
+    .unwrap();
+    s.agent(
+        &agent,
+        json!({"op":"test-start","request_id":"broken-app","mode":"manual"}),
+    );
+    let done = development_finished(&s, &agent, "broken-app");
+    assert_eq!(done["run_state"], "finished", "{done}");
+    assert!(
+        done["result"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("desktop exited")
+    );
+    assert_eq!(done["result"]["cleanup"], "completed");
+    fs::remove_dir_all(done["state_dir"].as_str().unwrap()).unwrap();
+}
+
+#[test]
+fn development_parent_loss_requests_cleanup_without_restoring_authority() {
+    let mut s = Service::start();
+    let instance = s.create("lease-tester", "codex", None);
+    let agent = s.context("lease-tester");
+    let checkout = development_candidate(&s);
+    s.owner(
+        json!({"op":"test-grant","session_id":instance,"request_id":"grant","checkout":checkout}),
+    );
+    let started = s.agent(
+        &agent,
+        json!({"op":"test-start","request_id":"leased-run","mode":"manual"}),
+    );
+    let state = PathBuf::from(started["state_dir"].as_str().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(12);
+    while !state.join("app-ready.json").exists() {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(30));
+    }
+    s.finish(s.owner(json!({"op":"stop-instance","session_id":instance,"request_id":"stop-parent-worker","close_window":false})));
+    s.child.kill().unwrap();
+    s.child.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Ok(result) = voyager_shell::development::read_json(&state.join("test-result.json")) {
+            assert_eq!(result["cleanup"], "completed", "{result}");
+            assert_eq!(result["outcome"]["reason"], "stop_requested");
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(40));
+    }
+    let mut restarted = Service::start_at(s.dir.clone());
+    let runs = restarted.owner(json!({"op":"test-runs"}));
+    assert_eq!(runs[0]["run_state"], "uncertain", "{runs}");
+    assert_eq!(
+        restarted.raw(
+            Some(&agent),
+            json!({"op":"test-start","request_id":"stale","mode":"manual"})
+        )["code"],
+        "forbidden"
+    );
+    let replacement = restarted.create("new-tester", "codex", None);
+    let context = restarted.context("new-tester");
+    assert!(
+        restarted.agent(&context, json!({"op":"capabilities"}))["development_checkout"].is_null()
+    );
+    restarted.finish(restarted.owner(json!({"op":"stop-instance","session_id":replacement,"request_id":"stop-new-worker","close_window":false})));
+    restarted.owner(json!({"op":"stop"}));
+    restarted.child.wait().unwrap();
+    fs::remove_dir_all(state).unwrap();
 }
 
 #[test]
