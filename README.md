@@ -21,7 +21,7 @@ is our starting point, and we’d love to build toward it with other developers.
 
 ## Specification review
 
-The [tracer-bullet usability specifications](docs/SPEC.md) cover conversation
+The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. They are
 drafts for review, not implemented behavior. Planning follows specification approval.
 

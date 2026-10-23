@@ -56,6 +56,6 @@ This file is the repository entry point. The four adjacent module specifications
 
 After specification approval, use the canonical planning skill to produce `tasks/plan.md` and its default task list, `tasks/todo.md`, or the project's explicitly designated tracker. The active plan identifies which approved modules it covers. Follow the existing build and Git skills unchanged for the first trial. No plan or task list has been created yet.
 
-The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are future acceptance requirements. Public operational contracts remain in the owning documents such as [lifecycle](lifecycle.md), [voice](voice.md) and [fleets](fleets.md).
+The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are future acceptance requirements. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
 Human-facing research and project navigation can link to these repository documents. Private incident logs, transcripts and account-local evidence remain outside committed source. Do not maintain a second editable specification elsewhere.

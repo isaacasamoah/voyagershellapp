@@ -77,8 +77,9 @@ services implicitly. Prove the installed executable, not just a checkout launch.
 
 Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
 
-Development specifications belong in this repository. Start at `docs/SPEC.md`,
-which indexes the module specifications alongside it. Use the canonical
+Development specifications belong at the repository root. Start at `SPEC.md`,
+which indexes the named module specifications alongside it. Keep `docs/` for
+technical documentation and guides. Use the canonical
 `spec-driven-development` skill for specifications, `planning-and-task-breakdown`
 for `tasks/plan.md` and its default `tasks/todo.md` task list, and the existing
 build/incremental implementation and Git skills for execution and version control.
