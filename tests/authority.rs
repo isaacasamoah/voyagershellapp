@@ -768,6 +768,22 @@ fn owner_dock_cli_holds_one_connection_and_bound_callers_cannot_claim_it() {
         .unwrap();
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("forbidden"));
+    for operation in [
+        vec!["start"],
+        vec!["serve"],
+        vec!["test-host", "/tmp", "manual"],
+    ] {
+        let denied = Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .arg("--state")
+            .arg(&s.dir)
+            .args(operation)
+            .env("VOYAGER_CALLER", "instance")
+            .env("VOYAGER_SESSION_CONTEXT", s.dir.join("contexts/crew.json"))
+            .output()
+            .unwrap();
+        assert!(!denied.status.success());
+        assert!(String::from_utf8_lossy(&denied.stderr).contains("forbidden"));
+    }
     assert!(s.owner(json!({"op":"status"}))["control"].is_null());
 }
 
