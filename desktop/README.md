@@ -76,8 +76,9 @@ user-facing chat text crosses the named conversation boundary.
 
 The panel and astronaut are separate transparent windows so holding and pulling
 the astronaut can leave the panel in place. A seated astronaut is a child of the
-visible panel; floating detaches that relationship. The native panel background
-is draggable. The astronaut and buttons are excluded from native drag regions so
+visible panel; floating detaches that relationship. Pointer capture moves the
+panel background; controls keep their own input. Linux uses floating toolbar
+windows so helpers are excluded from ordinary window switching. The astronaut and buttons remain separate so
 their clicks reach the renderer.
 
 Terminal docking now also holds a service control connection. Its lifetime is
@@ -91,6 +92,13 @@ checks socket lifetime; `npm start -- --proof-control` exercises two existing
 native clients without model calls.
 
 ## Testing changes
+
+For the account-local Fedora package and build commands, see
+[install the Fedora prototype](../docs/install-linux.md). Set
+`VOYAGER_INSTALLED_APP=/absolute/path/to/voyagershell` when running the lifetime
+check below to exercise that bundle and its included Rust binaries instead of
+the checkout. Run the check from a different working directory for installation
+proof.
 
 The app/service lifetime check opens real Electron and Ghostty, starts the
 installed private Codex provider without a model turn, and tests UI close/reopen,
@@ -228,3 +236,25 @@ Renderer-injected clicks are insufficient here: explicitly focusing the avatar
 first hides the native ordering bug. Results stay in `visibility-proof.json`.
 Optional `VOYAGER_VISIBILITY_CAPTURE_SCRIPT` and `VOYAGER_VISIBILITY_MONITOR` name
 a local Python monitor-capture helper and connector for desktop screenshots.
+
+## Alternate viewer trial
+
+After building both Rust binaries from this checkout, the existing polish proof
+can select xterm for every created viewer:
+
+```sh
+VOYAGER_STATE="$(mktemp -d /tmp/voyager-xterm-trial-XXXXXXXX)" \
+VOYAGER_PROOF_TERMINAL=xterm npm start -- --expanded --proof-polish
+```
+
+Run from `desktop/` in an owner desktop terminal with signed-in Codex, xterm and
+PulseAudio/PipeWire tools. A bound Voyager instance cannot launch another service;
+do not remove its caller environment to work around that policy. This is a separate
+candidate service and app profile, not an upgrade of the running service.
+
+The trial exercises renderer/preload/IPC/service selection, same-runtime
+background/reopen, window placement and native/app microphone handoff. Dock timings
+span the action to successful attachment/placement and Web Audio start/ended
+callbacks. Those callbacks are not evidence that the speaker played the sound.
+Record loopback or human audible confirmation separately, alongside physical
+selection, typing and dragging. The script is prepared, not a recorded pass.

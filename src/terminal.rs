@@ -1,58 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
-use std::{
-    os::unix::process::CommandExt,
-    path::Path,
-    process::{Child, Command, Stdio},
-};
+use std::path::Path;
 
-fn ghostty(cwd: &Path, title: &str) -> Command {
-    let mut command = Command::new("ghostty");
-    command
-        .args([
-            "--gtk-single-instance=false",
-            "--confirm-close-surface=false",
-            &format!("--title={title}"),
-        ])
-        .env("GDK_BACKEND", "x11")
-        .current_dir(cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0);
-    command
-}
-
-pub fn open_instance(info: &Value, session: &Value) -> Result<Child> {
-    let cwd = session["cwd"]
-        .as_str()
-        .context("missing instance directory")?;
-    let title = session["name"].as_str().unwrap_or("Voyager agent");
-    let executable = info["executable"]
-        .as_str()
-        .context("missing native executable")?;
-    if Path::new(executable).is_absolute() {
-        use std::os::unix::fs::PermissionsExt;
-        let metadata = std::fs::metadata(executable)
-            .with_context(|| format!("native executable unavailable: {executable}"))?;
-        ensure!(
-            metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
-            "native executable is not executable: {executable}"
-        );
-    }
-    let args = info["args"]
-        .as_array()
-        .context("missing native arguments")?
-        .iter()
-        .map(|v| v.as_str().context("invalid native argument"))
-        .collect::<Result<Vec<_>>>()?;
-    ghostty(Path::new(cwd), title)
-        .arg("-e")
-        .arg(executable)
-        .args(args)
-        .spawn()
-        .context("open native Ghostty client")
-}
 pub fn window(pid: u32) -> Result<Option<u32>> {
     use x11rb::{
         connection::Connection,
@@ -130,7 +79,15 @@ pub fn close(pid: u32) -> Result<u32> {
 pub fn exists(window: u32) -> Result<bool> {
     use x11rb::protocol::xproto::ConnectionExt;
     let (conn, _) = x11rb::connect(None)?;
-    Ok(conn.get_window_attributes(window)?.reply().is_ok())
+    match conn.get_window_attributes(window)?.reply() {
+        Ok(_) => Ok(true),
+        Err(x11rb::errors::ReplyError::X11Error(error))
+            if error.error_kind == x11rb::protocol::ErrorKind::Window =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub fn voice_toggle(attachment: &Value) -> Result<()> {
@@ -159,7 +116,7 @@ pub fn voice_toggle(attachment: &Value) -> Result<()> {
             "different-user terminal"
         );
         ensure!(
-            fs::read_link(format!("{path}/exe"))? == Path::new("/usr/bin/ghostty"),
+            crate::viewer::Kind::from_executable(&fs::read_link(format!("{path}/exe"))?).is_some(),
             "unsupported terminal"
         );
         let stat = fs::read_to_string(format!("{path}/stat"))?;

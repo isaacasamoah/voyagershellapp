@@ -9,6 +9,12 @@ use serde_json::{Value, json};
 
 impl Runtime {
     pub(super) fn authorize(&self, request: &Value) -> Result<()> {
+        if request["op"]
+            .as_str()
+            .is_some_and(|op| op.starts_with("test-"))
+        {
+            return self.test_authorize(request);
+        }
         let actor = &request["actor"];
         if request["purpose"] == "escalation" && !authority::is_owner(actor) {
             let id = authority::actor_id(actor)?;
@@ -112,6 +118,35 @@ impl Runtime {
         }
         if dock {
             result["dock_generation"] = self.control.current()["generation"].clone();
+        }
+        if actor["kind"] == "instance" {
+            let granted = actor["session_id"]
+                .as_str()
+                .and_then(|id| self.tests.grants.get(id));
+            result["development_checkout"] = json!(granted);
+            let actions = result["permitted_actions"]
+                .as_array_mut()
+                .context("capability actions")?;
+            actions.extend([
+                json!("test-runs"),
+                json!("test-read_owned"),
+                json!("test-stop_owned"),
+            ]);
+            if granted.is_some() {
+                actions.push(json!("test-start"));
+            }
+        }
+        if owner {
+            result["owner_actions"]
+                .as_array_mut()
+                .context("owner actions")?
+                .extend([
+                    json!("test-grant"),
+                    json!("test-revoke"),
+                    json!("test-runs"),
+                    json!("test-read"),
+                    json!("test-stop"),
+                ]);
         }
         Ok(result)
     }

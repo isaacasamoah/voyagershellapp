@@ -113,3 +113,30 @@ test('a missing fleet fails before a runtime starts', async () => {
   );
   assert.deepEqual(calls, [['fleets']]);
 });
+
+test('choosing xterm after a failed viewer open preserves the created runtime', async () => {
+  const calls = [];
+  const create = instanceCreator(async (...args) => {
+    calls.push(args);
+    if (args[0] === 'create') throw Error('Viewer unavailable');
+    if (args[0] === 'operation') return { state: 'partial', session_id: 'retained' };
+    return { state: 'completed', session_id: 'retained' };
+  });
+  const input = { kind: 'shell', name: 'Workbench', cwd: '/project', terminal: 'ghostty' };
+  await assert.rejects(create(input), /same instance/);
+  assert.deepEqual(await create({ ...input, terminal: 'xterm' }), { session: 'retained' });
+  assert.equal(calls.filter((c) => c[0] === 'create').length, 1);
+  assert.deepEqual(calls[2].slice(0, 3), ['open', 'retained', 'xterm']);
+});
+
+test('a viewer choice cannot replace an unacknowledged creation', async () => {
+  let attempts = 0;
+  const create = instanceCreator(async (op) => {
+    if (op === 'create') attempts++;
+    throw Error('Lost reply');
+  });
+  const input = { kind: 'shell', name: 'Workbench', cwd: '/project', terminal: 'ghostty' };
+  await assert.rejects(create(input));
+  await assert.rejects(create({ ...input, terminal: 'xterm' }), /outcome|original/i);
+  assert.equal(attempts, 1);
+});

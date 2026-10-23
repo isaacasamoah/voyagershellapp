@@ -20,6 +20,7 @@ impl Trial {
         let child = Command::new(env!("CARGO_BIN_EXE_voyager"))
             .args(["--state", state.to_str().unwrap(), "serve"])
             .env("VOYAGER_CODEX_BIN", executable)
+            .env("DISPLAY", "invalid-display")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -525,5 +526,33 @@ fn private_assistant_observes_shell_output_and_retains_orchestration() {
     finish(
         &trial,
         tool(&trial, "voyager_stop", json!({"session_id":agent})),
+    );
+}
+
+#[test]
+fn private_open_retains_the_selected_viewer_without_creating_a_runtime() {
+    let trial = Trial::start(FIXTURE);
+    trial.ready();
+    let created = trial.call(json!({"op":"create","kind":"shell","name":"Background viewer","cwd":trial.state,"open":false,"terminal":"xterm","request_id":"viewer-fixture"}));
+    let created = finish(&trial, created);
+    let session = &created["session_id"];
+    let before = trial.call(json!({"op":"attach-info","session_id":session}));
+    let opened = tool(&trial, "voyager_open", json!({"session_id":session}));
+    let id = opened["request_id"].as_str().unwrap();
+    wait(|| trial.call(json!({"op":"operation","request_id":id}))["state"] != "pending");
+    assert_ne!(
+        trial.call(json!({"op":"operation","request_id":id}))["state"],
+        "completed"
+    );
+    let store = voyager_shell::store::Store::open(&trial.state.join("events.sqlite")).unwrap();
+    let (inputs, _) = store.operation(id).unwrap().unwrap();
+    assert_eq!(inputs["terminal"], "xterm");
+    assert_eq!(
+        trial.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        before["pid"]
+    );
+    assert_eq!(
+        trial.call(json!({"op":"list"})).as_array().unwrap().len(),
+        1
     );
 }

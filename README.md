@@ -21,7 +21,7 @@ is our starting point, and we’d love to build toward it with other developers.
 
 ## Current prototype
 
-- **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
+- **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native
   windows open by default.
 - Click a Vessel card to surface its terminal on half a display and minimise
@@ -40,13 +40,21 @@ is our starting point, and we’d love to build toward it with other developers.
   Docking temporarily grants human command authority.
 - Agent messages start an idle turn or steer the observed active turn. The service
   checks the bound caller; it never silently replays a failed or uncertain send.
+- An owner can grant a named agent permission to run a specific development checkout
+  in a fresh service/profile, inspect its result and request cleanup. Manual testing
+  and the existing automated polish journey are separate modes. This experimental
+  [development facility](docs/development-tests.md) does not grant control of the
+  installed app and still requires a live graphical acceptance trial.
 
-The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
+The existing end-to-end platform proof is Fedora with dedicated Ghostty XWayland
+windows. An opt-in xterm viewer now shares the launch and verified identity boundary.
+Its native fixture checks placement, redraw, shortcut input and closure; the full
+app/service, voice and audible docking trial remains pending. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 Rebuilding the executable at the same path preserves viewer and instance CLI paths.
-Bash open receipts also wait for the viewer connection, not just a Ghostty window.
+Bash open receipts also wait for the viewer connection, not just a mapped terminal window.
 
 Explicit supervisor preemption, knowledge extraction and shared graphs are later
 work. Voyager is an experimental prototype.
@@ -68,6 +76,7 @@ Closing Electron stops voice while the runtime and work continue.
 
 ## Try it
 
+For a Linux bundle, see [install the Fedora prototype](docs/install-linux.md).
 See [native instances](docs/instances.md) for setup, then use the panel's **+**.
 Opening the app starts or reconnects to the service. Closing the panel leaves work
 running. After stopping managed Vessels, use the small panel menu's **Stop service**

@@ -38,6 +38,7 @@ mod authority_ops;
 mod conversation;
 mod conversation_files;
 mod conversation_tools;
+mod development_ops;
 mod fleets;
 mod lifecycle;
 mod native;
@@ -219,6 +220,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     let store = Store::open(&db_path)?;
     store.0.execute("UPDATE requests SET state='failed',error_code='service_restarted_before_dispatch' WHERE state='pending'", [])?;
     store.reconcile_coordination()?;
+    store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.run_state','uncertain','$.error','Parent service restarted; grants expired and runner ownership was not restored.') WHERE json_extract(receipt,'$.action')='test-start' AND json_extract(receipt,'$.run_state') IN ('starting','running','stopping')", [])?;
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
@@ -249,6 +251,8 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         workers: HashMap::new(),
         shells: HashMap::new(),
         terminals: Vec::new(),
+        viewer_choices: HashMap::new(),
+        tests: development_ops::Tests::default(),
         operations: HashMap::new(),
         creations: HashMap::new(),
         native_calls: Vec::new(),
@@ -277,6 +281,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => (listener.accept(), false),
             Err(e) => return Err(e.into()),
         };
+        let idle = matches!(&accepted, Err(error) if error.kind() == io::ErrorKind::WouldBlock);
         match accepted {
             Ok((mut stream, _)) => {
                 stream.set_read_timeout(Some(Duration::from_secs(1)))?;
@@ -401,7 +406,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
             Err(e) => return Err(e.into()),
         }
         runtime.observe()?;
-        if runtime.codex.is_none() {
+        if idle && runtime.codex.is_none() {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -426,6 +431,8 @@ struct Runtime {
     workers: HashMap<String, Worker>,
     shells: HashMap<String, Shell>,
     terminals: Vec<Terminal>,
+    viewer_choices: HashMap<String, crate::viewer::Kind>,
+    tests: development_ops::Tests,
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
     native_calls: Vec<NativeCall>,
@@ -435,9 +442,25 @@ struct Runtime {
 }
 
 struct Terminal {
+    kind: crate::viewer::Kind,
     session: String,
     child: Child,
     window: Option<u32>,
+}
+
+impl Terminal {
+    fn window_state(&self) -> &'static str {
+        match self.window.map(terminal::exists) {
+            Some(Ok(true)) => "open",
+            Some(Ok(false)) => "closed",
+            _ => "unknown",
+        }
+    }
+
+    fn finished(&mut self) -> Result<bool> {
+        Ok(self.child.try_wait()?.is_some()
+            && (self.window.is_none() || self.window_state() == "closed"))
+    }
 }
 
 fn string<'a>(v: &'a Value, field: &str) -> Result<&'a str> {
@@ -495,6 +518,8 @@ impl Runtime {
                 .require_registered(string(&request, "session_id")?)?;
         }
         let value = match string(&request, "op")? {
+            "test-grant" | "test-revoke" | "test-start" | "test-stop" | "test-runs"
+            | "test-read" => self.test_operation(&request)?,
             "rank" | "supervise" | "report" | "adjudicate" | "escalate" => {
                 self.authority_operation(&request)?
             }
@@ -550,7 +575,7 @@ impl Runtime {
                 receipt
             }
             "status" => {
-                json!({"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.voice.status(self.control.voice())})
+                json!({"terminal_viewers":crate::viewer::Kind::ALL.map(|kind|json!({"id":kind.as_str(),"executable":kind.executable()})),"instance":self.instance,"conversation":self.conversation.status(),"codex_connected":self.codex.is_some(),"capturing":self.capture_count()?,"owns_agents":!self.creations.is_empty() || self.workers.values().any(|w|w.alive),"owns_shells":self.shells.values().any(|s|s.alive),"control":self.control.current(),"voice":self.voice.status(self.control.voice())})
             }
             "undock" => {
                 json!({"released":self.control.release(&self.store, Some(string(&request,"generation")?), "undocked")?})
@@ -577,6 +602,13 @@ impl Runtime {
                 );
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
+                    session["terminal"] = json!(
+                        self.viewer_choices
+                            .get(session["id"].as_str().unwrap_or(""))
+                            .copied()
+                            .unwrap_or(crate::viewer::Kind::Ghostty)
+                            .as_str()
+                    );
                     let captured = self
                         .workers
                         .values()
@@ -598,14 +630,7 @@ impl Runtime {
                         .rev()
                         .find(|t| session["id"] == t.session)
                     {
-                        match viewer.window {
-                            Some(window) => match terminal::exists(window) {
-                                Ok(true) => "open",
-                                Ok(false) => "closed",
-                                Err(_) => "unknown",
-                            },
-                            None => "unknown",
-                        }
+                        viewer.window_state()
                     } else {
                         "closed"
                     });
@@ -634,6 +659,7 @@ impl Runtime {
                                     "capture",
                                     "ownership",
                                     "window",
+                                    "terminal",
                                     "removed_ms",
                                 ]
                                 .contains(&key.as_str())
@@ -684,6 +710,7 @@ impl Runtime {
             "stop" => {
                 ensure!(
                     self.creations.is_empty()
+                        && !self.tests.active()
                         && !self.workers.values().any(|w| w.alive)
                         && !self.shells.values().any(|s| s.alive),
                     "stop managed instances explicitly before stopping Voyager"
@@ -746,6 +773,7 @@ impl Runtime {
     }
 
     fn observe(&mut self) -> Result<()> {
+        self.observe_tests()?;
         self.conversation.observe();
         if self.conversation.questions_due() {
             let mut questions = self
@@ -757,13 +785,7 @@ impl Runtime {
             self.conversation.questions(questions);
         }
         for index in (0..self.terminals.len()).rev() {
-            if self.terminals[index].child.try_wait()?.is_some()
-                && self.terminals[index]
-                    .window
-                    .map(terminal::exists)
-                    .transpose()?
-                    != Some(true)
-            {
+            if self.terminals[index].finished()? {
                 self.terminals.swap_remove(index).child.wait()?;
             }
         }
@@ -900,5 +922,46 @@ pub fn start(state: &Path) -> Result<Value> {
             "service startup not confirmed; inspect service.log before retrying"
         );
         std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod viewer_tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn unavailable_display_does_not_confirm_viewer_closure() {
+        if std::env::var("VOYAGER_TEST_UNAVAILABLE_DISPLAY").as_deref() != Ok("1") {
+            let output = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "service::viewer_tests::unavailable_display_does_not_confirm_viewer_closure",
+                    "--nocapture",
+                ])
+                .env("VOYAGER_TEST_UNAVAILABLE_DISPLAY", "1")
+                .env("DISPLAY", "invalid-display")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            return;
+        }
+        assert!(terminal::exists(1).is_err());
+        let mut child = Command::new("/bin/true").spawn().unwrap();
+        child.wait().unwrap();
+        let mut viewer = Terminal {
+            kind: crate::viewer::Kind::Xterm,
+            session: "fixture".into(),
+            child,
+            window: Some(1),
+        };
+        assert_eq!(viewer.window_state(), "unknown");
+        assert!(!viewer.finished().unwrap());
+        viewer.window = None;
+        assert!(viewer.finished().unwrap());
     }
 }

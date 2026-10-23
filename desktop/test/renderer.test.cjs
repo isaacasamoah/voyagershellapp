@@ -210,3 +210,37 @@ test('the panel exposes explicit service stop and preserves a refused shutdown',
   assert.equal(closed, 1);
   assert.equal(stopped, 1);
 });
+
+test('creation and explicit reopen use the selected viewer', async () => {
+  const ui = renderer();
+  ui.update();
+  ui.nodes.get('add').onclick();
+  ui.nodes.get('instance-name').value = 'Viewer';
+  ui.nodes.get('instance-terminal').value = 'xterm';
+  await ui.nodes.get('create-form').onsubmit({ preventDefault() {} });
+  assert.equal(ui.calls[0].terminal, 'xterm');
+  const requests = [];
+  ui.api.openInstance = async (...args) => requests.push(args);
+  ui.update({
+    sessions: [
+      {
+        id: 'one',
+        name: 'Viewer',
+        kind: 'codex',
+        rank: 'crew',
+        ownership: 'managed',
+        worker_state: 'running',
+        window: 'closed',
+        terminal: 'xterm',
+      },
+    ],
+  });
+  const items = ui.nodes.get('sessions').querySelectorAll('*');
+  const viewer = items.find((n) => n.tagName === 'select' && n.value === 'xterm');
+  assert.ok(viewer);
+  const open = items.find((n) => n.tagName === 'button' && n.textContent === 'Open viewer');
+  await open.onclick();
+  assert.equal(requests[0][0], 'one');
+  assert.equal(requests[0][1], 'xterm');
+  assert.equal(typeof requests[0][2], 'string');
+});

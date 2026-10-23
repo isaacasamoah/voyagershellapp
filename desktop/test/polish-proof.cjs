@@ -17,7 +17,9 @@ exports.run = async ({
   setExpanded,
   stateDir,
 }) => {
-  const observations = [];
+  const terminal = process.env.VOYAGER_PROOF_TERMINAL || 'ghostty';
+  assert(['ghostty', 'xterm'].includes(terminal));
+  const observations = [{ action: 'viewer-choice', terminal }];
   const owned = [];
   const file = path.join(stateDir, 'polish-proof.json');
   const save = async (verdict, error) =>
@@ -30,7 +32,8 @@ exports.run = async ({
           error,
           limits: [
             'Programmatic panel input and real native windows; physical drag, voice quality and smoothness require Isaac.',
-            'Codex voice adapter on this Linux/Ghostty host only.',
+            'Codex voice adapter on this Linux host and selected viewer only.',
+            'Sound measurements observe Web Audio scheduling and completion, not acoustic output or perceived volume.',
           ],
         },
         null,
@@ -82,7 +85,7 @@ exports.run = async ({
   async function create(kind, name) {
     await setExpanded(true);
     await ui(
-      `document.getElementById('add').click();document.getElementById('instance-kind').value='${kind}';document.getElementById('instance-kind').dispatchEvent(new Event('change'));document.getElementById('instance-name').value=${JSON.stringify(name)};document.getElementById('instance-cwd').value=${JSON.stringify(stateDir)};document.getElementById('create-form').requestSubmit();`,
+      `document.getElementById('add').click();document.getElementById('instance-kind').value='${kind}';document.getElementById('instance-kind').dispatchEvent(new Event('change'));document.getElementById('instance-terminal').value=${JSON.stringify(terminal)};document.getElementById('instance-name').value=${JSON.stringify(name)};document.getElementById('instance-cwd').value=${JSON.stringify(stateDir)};document.getElementById('create-form').requestSubmit();`,
     );
     const found = await wait(
       rows,
@@ -116,7 +119,46 @@ exports.run = async ({
     JSON.parse((await exec('pactl', ['-f', 'json', 'list', 'source-outputs'])).stdout).filter((v) =>
       (v.properties?.['application.name'] || '').includes('codex-voice-host'),
     ).length;
+  const timedDock = async (window) => {
+    await avatar(`window.viewerSoundMarks=[];`);
+    const started = performance.timeOrigin + performance.now();
+    assert(await dock(window));
+    const attached = performance.timeOrigin + performance.now();
+    const sound = await wait(
+      () => avatar(`window.viewerSoundMarks.find(mark=>mark.ended)`),
+      Boolean,
+      'Dock sound did not start and finish in the renderer',
+    );
+    observations.push({
+      action: 'dock-through-sound',
+      terminal,
+      window,
+      attached_ms: attached - started,
+      sound_scheduled_ms: sound.started - started,
+      sound_ended_ms: sound.ended - started,
+      sound_measurement:
+        'Web Audio start and ended callbacks; audible output requires a separate observation',
+    });
+  };
   try {
+    await avatar(`(async()=>{
+      audio ??= new AudioContext();
+      await audio.resume();
+      if(audio.state!=='running')throw Error('Dock sound context is not running');
+      const create=audio.createOscillator.bind(audio);
+      audio.createOscillator=()=>{
+        const tone=create();
+        const start=tone.start.bind(tone);
+        tone.start=(when)=>{
+          const mark={started:performance.timeOrigin+performance.now()};
+          window.viewerSoundMarks.push(mark);
+          tone.addEventListener('ended',()=>{mark.ended=performance.timeOrigin+performance.now();},{once:true});
+          return start(when);
+        };
+        return tone;
+      };
+      window.viewerSoundMarks=[];
+    })()`);
     const { screen } = require('electron');
     const display =
       screen.getAllDisplays().find((d) => /dell/i.test(d.label)) ||
@@ -191,7 +233,15 @@ exports.run = async ({
     const reopened = await surface([shell.id], true);
     assert.equal(reopened.state, 'confirmed');
     observations.push({ action: 'reopen-before-refresh', id: shell.id });
-    const launched = await rpc('create', 'shell', 'proof-cli', 'CLI workbench', stateDir);
+    const launched = await rpc(
+      'create',
+      'shell',
+      'proof-cli',
+      'CLI workbench',
+      stateDir,
+      '--terminal',
+      terminal,
+    );
     owned.push(launched.session_id);
     await wait(
       async () =>
@@ -230,12 +280,12 @@ exports.run = async ({
         const s = await byId(id);
         return (await inventory()).find((w) => w.title === s.name);
       };
-      assert(await dock((await windowFor(a.id)).id));
+      await timedDock((await windowFor(a.id)).id);
       let v = await voice(a.id);
       assert.equal(v.conversation.voice, 'off');
       await wait(microphones, (n) => n === baseline + 1, 'Native microphone did not open');
       observations.push({ action: 'native-voice-A', status: v, microphones: await microphones() });
-      assert(await dock((await windowFor(b.id)).id));
+      await timedDock((await windowFor(b.id)).id);
       v = await voice(b.id);
       assert.equal(v.conversation.voice, 'off');
       await wait(microphones, (n) => n === baseline + 1, 'Voice B microphone did not open');
@@ -257,7 +307,7 @@ exports.run = async ({
         microphones: await microphones(),
       });
       assert.equal(await microphones(), baseline);
-      assert(await dock((await windowFor(a.id)).id));
+      await timedDock((await windowFor(a.id)).id);
       v = await voice(a.id);
       assert.equal(v.conversation.voice, 'off');
       assert(await avatar(`window.voyagerConversation.startVoice().then(()=>false,()=>true)`));

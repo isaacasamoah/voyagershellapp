@@ -168,7 +168,23 @@ function renderState(value) {
     if (s.ownership === 'managed' && s.worker_state === 'running') {
       if (s.window === 'open')
         addAction('Run in background', (request) => api.backgroundInstance(s.id, request));
-      else addAction('Bring forward', () => api.surfaceInstance(s.id));
+      else {
+        addAction('Bring forward', () => api.surfaceInstance(s.id));
+        const viewer = choiceField(
+          actions,
+          'Terminal viewer',
+          [
+            ['ghostty', 'Ghostty'],
+            ['xterm', 'xterm'],
+          ],
+          s.terminal || 'ghostty',
+        );
+        addAction(
+          'Open viewer',
+          (request) => api.openInstance(s.id, viewer.value, request),
+          () => [viewer.value],
+        );
+      }
       addAction('Stop', (request) => api.stopInstance(s.id, request));
     }
     if (s.removed_ms == null) {
@@ -422,6 +438,23 @@ $('fleet-form').onsubmit = async (event) => {
     showError(error.message);
   }
 };
+$('panel').addEventListener('pointerdown', (event) => {
+  if (
+    event.button !== 0 ||
+    event.target.closest(
+      'button, input, select, textarea, a, form, .instance-menu, .fleet, #conversation',
+    )
+  )
+    return;
+  event.preventDefault();
+  $('panel').setPointerCapture(event.pointerId);
+  api.beginPanelDrag(event.clientX, event.clientY);
+});
+$('panel').addEventListener('pointerup', (event) => {
+  if ($('panel').hasPointerCapture(event.pointerId))
+    $('panel').releasePointerCapture(event.pointerId);
+});
+$('panel').addEventListener('lostpointercapture', () => api.endPanelDrag());
 $('avatar').addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   event.preventDefault();
@@ -578,6 +611,7 @@ $('create-form').onsubmit = async (event) => {
   try {
     const result = await api.createInstance({
       kind: $('instance-kind').value,
+      terminal: $('instance-terminal').value || 'ghostty',
       name: $('instance-name').value.trim(),
       cwd: $('instance-cwd').value,
       rank: $('instance-kind').value === 'codex' ? $('instance-rank').value : null,

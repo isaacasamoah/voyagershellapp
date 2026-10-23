@@ -16,6 +16,11 @@ rights over another chain, peers or grandchildren. An unassigned agent can work
 independently and escalate to you. Native harness subagents remain part of their
 parent, with no separate Voyager rank or registration.
 
+Development testing has a separate owner-issued checkout grant. It authorizes
+fresh candidate runs and access to the caller's own run evidence and cleanup,
+independent of rank and docking. It expires on removal or service restart.
+[Development run contract and commands](development-tests.md).
+
 ## Try the panel
 
 Create a Captain and a Crew instance with **+**. Rank starts at Crew; choose

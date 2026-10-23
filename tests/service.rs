@@ -945,19 +945,30 @@ fn replaced_service_binary_keeps_shell_viewer_and_worker_cli_paths_usable() {
     let worker = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"worker-after-rebuild","name":"Agent","cwd":f.dir}));
     assert_eq!(worker["runtime"], "running");
     fs::remove_file(&binary).unwrap();
-    let open = f.call(json!({"op":"open","session_id":session,"terminal":"ghostty","request_id":"missing-viewer-binary"}));
-    assert_eq!(open["state"], "partial");
-    assert!(
-        open["error"]
-            .as_str()
-            .unwrap()
-            .contains("native executable unavailable")
-    );
-    assert!(open["pid"].is_null());
-    assert_eq!(
-        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
-        receipt["runtime_pid"]
-    );
+    for viewer in ["ghostty", "xterm"] {
+        let request = json!({"op":"open","session_id":session,"terminal":viewer,"request_id":format!("missing-{viewer}")});
+        let open = f.call(request.clone());
+        assert_eq!(open["state"], "partial");
+        assert!(
+            open["error"]
+                .as_str()
+                .unwrap()
+                .contains("native executable unavailable")
+        );
+        assert!(open["pid"].is_null());
+        assert_eq!(f.call(request.clone()), open);
+        let mut changed = request;
+        changed["terminal"] = json!(if viewer == "ghostty" {
+            "xterm"
+        } else {
+            "ghostty"
+        });
+        assert!(client(&f.dir, changed).is_err());
+        assert_eq!(
+            f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+            receipt["runtime_pid"]
+        );
+    }
     f.call(json!({"op":"stop-instance","session_id":session}));
     f.call(json!({"op":"stop-instance","session_id":worker["session_id"]}));
     f.halt();
@@ -1345,4 +1356,65 @@ fn version_two_names_move_to_sessions_without_changing_launch_inputs() {
         "Original launch"
     );
     assert_eq!(store.events(0).unwrap(), before);
+}
+
+#[test]
+fn queued_desktop_reads_do_not_each_pay_the_idle_sleep() {
+    let mut f = Fixture::new();
+    f.service = Some(
+        Command::new(env!("CARGO_BIN_EXE_voyager"))
+            .env("VOYAGER_CODEX_BIN", "/missing-provider-for-polling-fixture")
+            .args(["--state", f.dir.to_str().unwrap(), "serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    wait(|| client(&f.dir, json!({"op":"status"})).is_ok());
+    let start = Instant::now();
+    for index in 0..12 {
+        let result = f.call(json!({"op":if index % 2 == 0 {"status"} else {"list"}}));
+        assert!(result.is_object() || result.is_array());
+    }
+    assert!(
+        start.elapsed() < Duration::from_millis(400),
+        "queued reads took {:?}",
+        start.elapsed()
+    );
+    f.halt();
+}
+
+#[test]
+fn viewer_choice_does_not_start_or_replace_a_background_runtime() {
+    let mut f = Fixture::new();
+    f.start();
+    let create = json!({"op":"create","open":false,"kind":"codex","terminal":"xterm","request_id":"viewer-choice","name":"Viewer choice","cwd":f.dir});
+    let mut invalid = create.clone();
+    invalid["terminal"] = json!("arbitrary-command");
+    assert!(client(&f.dir, invalid).is_err());
+    assert!(f.call(json!({"op":"list"})).as_array().unwrap().is_empty());
+    let receipt = f.call(create.clone());
+    assert_eq!(receipt["runtime"], "running");
+    assert_eq!(receipt["window"], "closed");
+    assert_eq!(f.call(create.clone()), receipt);
+    let listed = f.call(json!({"op":"list"}));
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["terminal"], "xterm");
+    assert_eq!(listed[0]["capture"], "connected");
+    assert_eq!(
+        f.call(json!({"op":"status"}))["terminal_viewers"][1]["id"],
+        "xterm"
+    );
+    let mut changed = create;
+    changed["terminal"] = json!("ghostty");
+    assert!(client(&f.dir, changed).is_err());
+    let session = &receipt["session_id"];
+    let attachment = f.call(json!({"op":"attach-info","session_id":session}));
+    f.call(json!({"op":"background","session_id":session}));
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":session}))["pid"],
+        attachment["pid"]
+    );
+    f.call(json!({"op":"stop-instance","session_id":session}));
+    f.halt();
 }

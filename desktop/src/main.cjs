@@ -25,12 +25,18 @@ const stateDir =
   process.env.VOYAGER_STATE || path.join(require('node:os').homedir(), '.local/share/voyagershell');
 if (!stateDir || !path.isAbsolute(stateDir))
   throw Error('Set VOYAGER_STATE to the existing private service directory');
-const binary = path.join(root, 'target/debug/voyager');
-const probe = path.join(root, 'target/debug/voyager-windows');
+const binaries = app.isPackaged
+  ? path.join(process.resourcesPath, 'bin')
+  : path.join(root, 'target/debug');
+const binary = path.join(binaries, 'voyager');
+const probe = path.join(binaries, 'voyager-windows');
 const avatarSize = 104,
   margin = 8,
   collapsedSize = avatarSize + margin * 2;
 app.commandLine.appendSwitch('ozone-platform', 'x11');
+app.disableHardwareAcceleration();
+app.setName('Voyager Shell');
+app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
@@ -43,6 +49,7 @@ let avatarWin,
   expanded = false,
   seated = false,
   dragging = null,
+  panelDrag = null,
   binding = null;
 const fleets = fleetActions(rpc);
 let fleetData = { fleets: [], assignments: {} },
@@ -137,11 +144,18 @@ async function discoverTerminals() {
     await Promise.all(
       [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
         const snapshot = await terminalSnapshot(pid).catch(() => null);
-        if (!snapshot || snapshot.terminal.executable !== '/usr/bin/ghostty') return [];
+        if (!snapshot) return [];
         return (
           await Promise.all(
             endpoints.map((endpoint) =>
-              identifyTerminal(pid, endpoint, snapshot).catch(() => null),
+              identifyTerminal(
+                pid,
+                {
+                  ...endpoint,
+                  viewers: service?.terminal_viewers?.map((viewer) => viewer.executable),
+                },
+                snapshot,
+              ).catch(() => null),
             ),
           )
         ).filter(Boolean);
@@ -217,6 +231,7 @@ function sendState() {
         capture,
         worker_state,
         window,
+        terminal,
         removed_ms,
         rank,
         supervisor_id,
@@ -230,6 +245,7 @@ function sendState() {
         capture,
         worker_state,
         window,
+        terminal,
         removed_ms,
         rank,
         supervisor_id,
@@ -298,6 +314,20 @@ function setSeated(value) {
 function raiseSeatedAvatar() {
   if (expanded && seated && !dragging) avatarWin.moveTop();
 }
+app.on('second-instance', async () => {
+  if (!avatarWin || avatarWin.isDestroyed()) return;
+  if (avatarWin.isMinimized()) avatarWin.restore();
+  if (panelWin.isMinimized()) panelWin.restore();
+  try {
+    await setExpanded(true);
+    panelWin.show();
+    panelWin.focus();
+    avatarWin.showInactive();
+    raiseSeatedAvatar();
+  } catch (error) {
+    console.error(error.message);
+  }
+});
 async function setExpanded(value) {
   expanded = value;
   if (value) {
@@ -324,6 +354,7 @@ async function setExpanded(value) {
       await delay(25);
     }
   } else {
+    panelDrag = null;
     setSeated(false);
     panelWin.hide();
     sendState();
@@ -361,7 +392,13 @@ function updateDockHover(snapshot) {
   );
 }
 function updatePointer() {
-  advanceDrag(screen.getCursorScreenPoint());
+  const cursor = screen.getCursorScreenPoint();
+  if (panelDrag)
+    setBoundsIfChanged(panelWin, {
+      x: Math.round(cursor.x - panelDrag.x),
+      y: Math.round(cursor.y - panelDrag.y),
+    });
+  advanceDrag(cursor);
   if (!binding || seated || dragging) setDockHovered(false);
   if ((!binding && !expanded) || hoverBusy || performance.now() - lastHoverProbe < 100) return;
   hoverBusy = true;
@@ -645,7 +682,7 @@ async function surface(ids, single = false) {
           s.worker_state === 'running',
       )
     )
-      return await rpc('open', id, 'ghostty');
+      return await rpc('open', id, sessions.find((s) => s.id === id)?.terminal || 'ghostty');
     const display = screen.getDisplayMatching(panelWin.getBounds());
     const area = { ...display.workArea };
     if (single) area.width = Math.floor(area.width / 2);
@@ -663,7 +700,15 @@ async function surface(ids, single = false) {
     if (targets.some((target) => !hasViewer(target))) await discoverTerminals();
     const missing = targets.filter((target) => !hasViewer(target));
     if (missing.length) {
-      await Promise.all(missing.map((target) => rpc('open', target.session, 'ghostty')));
+      await Promise.all(
+        missing.map((target) =>
+          rpc(
+            'open',
+            target.session,
+            sessions.find((s) => s.id === target.session)?.terminal || 'ghostty',
+          ),
+        ),
+      );
       sessions = await rpc('list', '--include-removed');
       windows = await inventory();
       await discoverTerminals();
@@ -756,9 +801,11 @@ function createWindow(width, height) {
     hasShadow: false,
     resizable: false,
     alwaysOnTop: true,
+    type: process.platform === 'linux' ? 'toolbar' : undefined,
     skipTaskbar: true,
     show: false,
     backgroundColor: '#00000000',
+    icon: path.join(__dirname, '../assets/idle.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -904,6 +951,20 @@ app.whenReady().then(async () => {
       await refresh();
     }
   }
+  handle('open-instance', [panelWin], async (id, terminal, request) => {
+    if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
+    if (!['ghostty', 'xterm'].includes(terminal)) throw Error('Choose a terminal viewer.');
+    if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
+      throw Error('Invalid action request');
+    try {
+      const result = await rpc('open', id, terminal, '--request-id', request);
+      await refresh();
+      await surface([id], true);
+      return result;
+    } finally {
+      await refresh();
+    }
+  });
   handle('background-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'background'),
   );
@@ -930,6 +991,15 @@ app.whenReady().then(async () => {
   handle('supervise-instance', [panelWin], (id, supervisor, request) =>
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
+  handle('begin-panel-drag', [panelWin], (x, y) => {
+    const bounds = panelWin.getBounds();
+    if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > bounds.width || y > bounds.height)
+      throw Error('Invalid panel drag');
+    panelDrag = { x, y };
+  });
+  handle('end-panel-drag', [panelWin], () => {
+    panelDrag = null;
+  });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)

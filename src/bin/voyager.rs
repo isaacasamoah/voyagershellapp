@@ -167,13 +167,33 @@ fn main() -> Result<()> {
     }
     if args
         .first()
-        .is_some_and(|op| ["start", "serve", "dock"].contains(&op.as_str()))
+        .is_some_and(|op| ["start", "serve", "dock", "test-host"].contains(&op.as_str()))
         && (std::env::var_os("VOYAGER_CALLER").is_some()
             || std::env::var_os("VOYAGER_SESSION_CONTEXT").is_some())
     {
         bail!("forbidden: instance callers cannot start a service or claim a dock");
     }
     let mut request = match args.as_slice() {
+        [op, checkout, mode] if op == "test-host" => {
+            return voyager_shell::development::run(
+                std::path::Path::new(checkout),
+                &state,
+                voyager_shell::development::Mode::parse(mode)?,
+            );
+        }
+        [op, session, id, checkout] if op == "test-grant" => {
+            json!({"op":op,"session_id":session,"request_id":id,"checkout":checkout})
+        }
+        [op, session, id] if op == "test-revoke" => {
+            json!({"op":op,"session_id":session,"request_id":id})
+        }
+        [op, id, mode] if op == "test-start" => json!({"op":op,"request_id":id,"mode":mode}),
+        [op, run, id] if op == "test-stop" => json!({"op":op,"run_id":run,"request_id":id}),
+        [op] if op == "test-runs" => json!({"op":op}),
+        [op, run] if op == "test-read" => json!({"op":op,"run_id":run,"offset":0}),
+        [op, run, offset] if op == "test-read" => {
+            json!({"op":op,"run_id":run,"offset":offset.parse::<u64>()?})
+        }
         [op, session] if op == "dock" => {
             let process = |pid: Option<u32>| -> Result<serde_json::Value> {
                 let pid = pid.ok_or_else(|| {
@@ -303,13 +323,15 @@ fn main() -> Result<()> {
         _ => bail!(
             "usage: voyager [--state PRIVATE_DIR] [--control GENERATION] COMMAND\n\
             start | serve [CODEX_SOCKET] | status | discover | connection-info | register THREAD_ID | list\n\
-            create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty] | open SESSION_ID ghostty [--request-id ID]\n\
+            create codex|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty|xterm] | open SESSION_ID ghostty|xterm [--request-id ID]\n\
             shell-exec SESSION_ID REQUEST_ID COMMAND | shell-read SESSION_ID [CURSOR] | shell-attach SESSION_ID\n\
             send SESSION_ID REQUEST_ID MESSAGE | events [CURSOR] | watch [--pretty] [CURSOR] | stop\n\
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | rename SESSION NAME [--request-id ID] | capabilities [SESSION]\n\
             fleets | create-fleet ID GOAL | rename-fleet FLEET NAME | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
+            test-grant SESSION REQUEST CHECKOUT | test-revoke SESSION REQUEST | test-start REQUEST manual|polish\n\
+            test-runs | test-read RUN [OFFSET] | test-stop RUN REQUEST\n\
             voice app|none|SESSION [--request-id ID] | conversation [AFTER] | chat REQUEST MESSAGE | chat-operation REQUEST\n\
             report REQUEST MESSAGE | escalate REQUEST MESSAGE [--about TASK] | escalations\n\
             adjudicate TARGET REQUEST accept|revise|resolve MESSAGE [--about TASK] [--reply-to ESCALATION]\n\

@@ -51,7 +51,14 @@ pub(super) fn invoke(
         }
         "voyager_events" => "events",
         "voyager_open" => {
-            request["terminal"] = json!("ghostty");
+            let sessions = exchange(state, json!({"op":"list","include_removed":true}), false)?;
+            let session = sessions
+                .as_array()
+                .context("instance list")?
+                .iter()
+                .find(|session| session["id"] == args["session_id"])
+                .context("not_found: instance")?;
+            request["terminal"] = session["terminal"].clone();
             "open"
         }
         "voyager_background" => "background",

@@ -37,7 +37,7 @@ Operations:
   destination, otherwise records the question for the owner. It grants no upward
   instruction authority. Delivery may fail while the question stays recorded.
 - report REQUEST MESSAGE: records your own non-instructive status, no native turn.
-- open TARGET ghostty / background TARGET / stop-instance TARGET: self opening
+- open TARGET ghostty|xterm / background TARGET / stop-instance TARGET: self opening
   and direct-report control, or temporary dock authority. Stop closes the viewer;
   --runtime-only explicitly requests only runtime shutdown.
 - shell-exec TARGET REQUEST COMMAND / shell-read TARGET [CURSOR]: assigned shell

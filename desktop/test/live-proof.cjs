@@ -34,12 +34,12 @@ exports.run = async ({
   );
   assert.equal(
     await region(panelWin, '#panel'),
-    'drag',
-    'The panel background must move its native window',
+    'no-drag',
+    'Panel movement uses pointer capture instead of window-manager drag regions',
   );
   for (const selector of ['#quit', '.session'])
     assert.equal(await region(panelWin, selector), 'no-drag', `${selector} must remain clickable`);
-  receipts.push('Native drag regions exclude the astronaut and panel buttons');
+  receipts.push('Pointer-driven panel movement leaves native controls clickable');
   const existing = getState().records.find((r) => {
     const session = registeredSession(r, getState().sessions);
     return (
