@@ -144,11 +144,18 @@ async function discoverTerminals() {
     await Promise.all(
       [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
         const snapshot = await terminalSnapshot(pid).catch(() => null);
-        if (!snapshot || snapshot.terminal.executable !== '/usr/bin/ghostty') return [];
+        if (!snapshot) return [];
         return (
           await Promise.all(
             endpoints.map((endpoint) =>
-              identifyTerminal(pid, endpoint, snapshot).catch(() => null),
+              identifyTerminal(
+                pid,
+                {
+                  ...endpoint,
+                  viewers: service?.terminal_viewers?.map((viewer) => viewer.executable),
+                },
+                snapshot,
+              ).catch(() => null),
             ),
           )
         ).filter(Boolean);
@@ -224,6 +231,7 @@ function sendState() {
         capture,
         worker_state,
         window,
+        terminal,
         removed_ms,
         rank,
         supervisor_id,
@@ -237,6 +245,7 @@ function sendState() {
         capture,
         worker_state,
         window,
+        terminal,
         removed_ms,
         rank,
         supervisor_id,
@@ -673,7 +682,7 @@ async function surface(ids, single = false) {
           s.worker_state === 'running',
       )
     )
-      return await rpc('open', id, 'ghostty');
+      return await rpc('open', id, sessions.find((s) => s.id === id)?.terminal || 'ghostty');
     const display = screen.getDisplayMatching(panelWin.getBounds());
     const area = { ...display.workArea };
     if (single) area.width = Math.floor(area.width / 2);
@@ -691,7 +700,15 @@ async function surface(ids, single = false) {
     if (targets.some((target) => !hasViewer(target))) await discoverTerminals();
     const missing = targets.filter((target) => !hasViewer(target));
     if (missing.length) {
-      await Promise.all(missing.map((target) => rpc('open', target.session, 'ghostty')));
+      await Promise.all(
+        missing.map((target) =>
+          rpc(
+            'open',
+            target.session,
+            sessions.find((s) => s.id === target.session)?.terminal || 'ghostty',
+          ),
+        ),
+      );
       sessions = await rpc('list', '--include-removed');
       windows = await inventory();
       await discoverTerminals();
@@ -934,6 +951,20 @@ app.whenReady().then(async () => {
       await refresh();
     }
   }
+  handle('open-instance', [panelWin], async (id, terminal, request) => {
+    if (!sessions.some((s) => s.id === id)) throw Error('Unknown instance');
+    if (!['ghostty', 'xterm'].includes(terminal)) throw Error('Choose a terminal viewer.');
+    if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
+      throw Error('Invalid action request');
+    try {
+      const result = await rpc('open', id, terminal, '--request-id', request);
+      await refresh();
+      await surface([id], true);
+      return result;
+    } finally {
+      await refresh();
+    }
+  });
   handle('background-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'background'),
   );

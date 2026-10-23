@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveWindow, registeredSession, resumeThread, windowAt } = require('../src/binding.cjs');
+const { identifyTerminal } = require('../src/binding.cjs');
 const nativeId = '12345678-1234-1234-1234-123456789abc';
 const server = '/private/codex.sock';
 const record = {
@@ -87,4 +88,30 @@ test('minimising preserves a verified attachment but cannot become a new docking
     nativeId,
   );
   assert.match(resolveWindow(hidden, [hidden], [record], new Map(), false).error, /changed/);
+});
+
+test('xterm identification preserves exact native arguments and rejects ambiguous clients', async () => {
+  const terminal = { ...record, executable: '/usr/bin/xterm' };
+  const endpoint = {
+    server,
+    executable: record.frontend.executable,
+    viewers: ['/usr/bin/ghostty', '/usr/bin/xterm'],
+  };
+  const snapshot = { terminal, children: [record.frontend] };
+  assert.equal((await identifyTerminal(10, endpoint, snapshot))?.nativeId, nativeId);
+  assert.equal(await identifyTerminal(10, { ...endpoint, server: '/other' }, snapshot), null);
+  assert.equal(
+    await identifyTerminal(10, endpoint, {
+      ...snapshot,
+      children: [record.frontend, record.frontend],
+    }),
+    null,
+  );
+  assert.equal(
+    await identifyTerminal(10, endpoint, {
+      ...snapshot,
+      terminal: { ...terminal, executable: '/tmp/xterm' },
+    }),
+    null,
+  );
 });

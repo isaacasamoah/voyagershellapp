@@ -27,7 +27,7 @@ fn process(v: &Value) -> Result<()> {
         "different-user terminal"
     );
     ensure!(
-        fs::read_link(format!("{base}/exe"))? == std::path::Path::new("/usr/bin/ghostty"),
+        crate::viewer::Kind::from_executable(&fs::read_link(format!("{base}/exe"))?).is_some(),
         "unsupported terminal"
     );
     let stat = fs::read_to_string(format!("{base}/stat"))?;

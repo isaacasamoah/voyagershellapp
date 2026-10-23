@@ -21,7 +21,7 @@ is our starting point, and we’d love to build toward it with other developers.
 
 ## Current prototype
 
-- **+** creates a named Codex instance or persistent Bash terminal in Ghostty.
+- **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native
   windows open by default.
 - Click a Vessel card to surface its terminal on half a display and minimise
@@ -41,12 +41,15 @@ is our starting point, and we’d love to build toward it with other developers.
 - Agent messages start an idle turn or steer the observed active turn. The service
   checks the bound caller; it never silently replays a failed or uncertain send.
 
-The tested platform is Fedora with dedicated Ghostty XWayland windows. Ordinary
+The existing end-to-end platform proof is Fedora with dedicated Ghostty XWayland
+windows. An opt-in xterm viewer now shares the launch and verified identity boundary.
+Its native fixture checks placement, redraw, shortcut input and closure; the full
+app/service, voice and audible docking trial remains pending. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
 Rebuilding the executable at the same path preserves viewer and instance CLI paths.
-Bash open receipts also wait for the viewer connection, not just a Ghostty window.
+Bash open receipts also wait for the viewer connection, not just a mapped terminal window.
 
 Explicit supervisor preemption, knowledge extraction and shared graphs are later
 work. Voyager is an experimental prototype.

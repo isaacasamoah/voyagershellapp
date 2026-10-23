@@ -51,9 +51,9 @@ independently disowned or escaped processes are outside this contract.
 
 Each viewer has its own child and the exact mapped X11 window ID. Mapping requires
 one window belonging to the live child; ambiguous or unidentified windows fail.
-For Bash, opening also waits for the shell viewer's connection; a Ghostty error
+For Bash, opening also waits for the shell viewer's connection; a terminal error
 window alone does not confirm attachment. Absolute executable paths must exist
-and be executable before Ghostty starts. Codex window mapping does not prove a
+and be executable before the viewer starts. Codex window mapping does not prove a
 completed agent turn.
 Focus uses `_NET_ACTIVE_WINDOW` and confirms the request, not keyboard focus.
 Close uses `_NET_CLOSE_WINDOW`; completion means that mapped window is gone.
@@ -77,6 +77,40 @@ Voyager launches dedicated Ghostty XWayland clients with
 `--confirm-close-surface=false`. Closing that viewer detaches from service-owned
 work. Global settings and external terminals are untouched. See
 [Ghostty's configuration](https://ghostty.org/docs/config/reference#confirm-close-surface).
+
+## Native viewer selection
+
+`viewer.rs` owns the small typed choice of Ghostty and xterm, their executable
+identities and launch arguments. `terminal.rs` owns Linux/X11 window operations
+and verified PTY input; `window_layout.rs` owns native placement. Runtime creation,
+capture and explicit stop remain service lifecycle operations. This is a portable
+boundary in the design, not a macOS, Windows or native Wayland implementation.
+
+Ghostty remains the default. `create --terminal xterm` or `open ID xterm` selects
+the alternate viewer. The panel has the same choice during creation and under
+**Open viewer** for a background instance. Background the existing viewer before
+changing its kind; a live viewer is never silently replaced. The service retains
+the chosen viewer for that instance during its lifetime, including background
+and reopen. The private assistant's open action uses that retained choice.
+Restart does not restore process ownership or this in-memory preference.
+
+Supported executable paths are `/usr/bin/ghostty` and `/usr/bin/xterm`; this slice
+retains the existing Linux executable allowlist rather than accepting arbitrary
+terminal commands. The service advertises those identities to desktop discovery.
+xterm uses its per-window `resizeByPixel` resource so native layout can honor pixel
+rectangles rather than rounding to character cells. See the
+[xterm manual](https://invisible-island.net/xterm/manpage/xterm.html).
+
+Open request identity includes the non-default viewer. Legacy Ghostty request
+inputs remain unchanged so a saved request cannot become a fresh effect after an
+upgrade. A known failed creation/open can reopen the same runtime with an explicit
+new viewer request. An unacknowledged creation cannot change viewer under the same
+request. Neither case resubmits an agent task.
+
+A failed display query means an unknown window, not confirmed closure. Observation
+and receipt snapshots retain that uncertainty instead of terminating the service
+loop. A child whose known window cannot be queried stays recorded. This containment
+is separate from the GTK frame-feedback freeze; it does not repair Ghostty rendering.
 
 ## Capture cutoff
 
@@ -122,6 +156,24 @@ VOYAGER_NATIVE_SHELL_DIR="$(mktemp -u /tmp/voyager-shell-XXXXXXXX)" \
 
 Use a fresh private directory on a graphical Linux session. It saves `proof.json`
 there and stops its own shell and service. It does not exercise a model turn or voice.
+
+The opt-in xterm fixture runs the actual launch, identity, placement and PTY-input
+code on the desktop. It compiles a disposable stdin program with `cc`, verifies
+stale identity refusal and one F8 write, checks 12 minimise/restore cycles with
+changing window pixels, and closes only its own viewer:
+
+```sh
+VOYAGER_VIEWER_PROOF_DIR="$(mktemp -u /tmp/voyager-viewer-XXXXXXXX)" \
+  cargo test --locked --test native_viewer -- --ignored --nocapture
+```
+
+It requires xterm and xdotool. Its `proof.json` is private evidence. It does not
+start a service or model, prove microphone handling, or measure app docking/sound.
+The unavailable-display unit regression retains unknown windows after child exit.
+Full service tests also cover background viewer selection, invalid choices, retry
+identity and failed-open runtime preservation. Bound instance callers cannot start
+a disposable service; run those tests through normal CI or an owner environment
+without changing the caller identity.
 
 The [panel lifecycle proof](../desktop/README.md#lifecycle-experiment) uses two
 real Bash/Ghostty instances. It checks menu hit testing, background/reopen,

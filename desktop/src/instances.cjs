@@ -8,6 +8,8 @@ function instanceCreator(rpc) {
     if (busy) throw Error('An instance is already being opened.');
     if (!input || !['codex', 'shell'].includes(input.kind)) throw Error('Choose an instance type.');
     const { kind, name, cwd } = input;
+    const terminal = input.terminal ?? 'ghostty';
+    if (!['ghostty', 'xterm'].includes(terminal)) throw Error('Choose a terminal viewer.');
     const rank = kind === 'codex' ? (input.rank ?? 'crew') : null;
     const supervisor = input.supervisor ?? null;
     if (kind === 'codex' && !ranks.includes(rank)) throw Error('Choose a rank.');
@@ -18,7 +20,6 @@ function instanceCreator(rpc) {
     if (typeof cwd !== 'string' || !path.isAbsolute(cwd))
       throw Error('Choose an absolute folder path.');
     const key = JSON.stringify([kind, name, cwd, rank, supervisor]);
-    if (!pending || pending.key !== key) pending = { key, id: randomUUID(), session: null };
     busy = true;
     try {
       if (input.fleet != null) {
@@ -26,11 +27,19 @@ function instanceCreator(rpc) {
         if (!data.fleets.some((fleet) => fleet.id === input.fleet))
           throw Error('Choose an existing fleet.');
       }
+      if (!pending || pending.key !== key)
+        pending = { key, id: randomUUID(), session: null, terminal };
+      if (!pending.session && pending.terminal !== terminal)
+        throw Error('Creation outcome is unknown. Retry the original terminal choice first.');
       if (pending.session) {
+        if (pending.openTerminal !== terminal) {
+          pending.openTerminal = terminal;
+          pending.openId = randomUUID();
+        }
         await rpc(
           'open',
           pending.session,
-          'ghostty',
+          terminal,
           '--request-id',
           (pending.openId ||= randomUUID()),
         );
@@ -38,6 +47,7 @@ function instanceCreator(rpc) {
         try {
           const flags = rank ? ['--rank', rank] : [];
           if (supervisor) flags.push('--supervisor', supervisor);
+          if (input.terminal != null) flags.push('--terminal', terminal);
           const receipt = await rpc('create', kind, pending.id, name, cwd, ...flags);
           if (receipt.state !== 'completed' || !receipt.session_id)
             throw Error('This instance did not start. Check the service log.');
