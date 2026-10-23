@@ -33,7 +33,7 @@ impl Service {
             .unwrap();
         let service = Self { dir, child };
         let deadline = Instant::now() + Duration::from_secs(5);
-        while !service.dir.join("service.sock").exists() {
+        while UnixStream::connect(service.dir.join("service.sock")).is_err() {
             assert!(Instant::now() < deadline);
             thread::sleep(Duration::from_millis(10));
         }

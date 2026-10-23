@@ -161,6 +161,8 @@ fn journey(
             .arg(state)
             .arg("serve")
             .current_dir(&candidate.checkout)
+            .env("VOYAGER_STATE", state)
+            .env("VOYAGER_BIN", &candidate.binary)
             .stdin(Stdio::null())
             .spawn()?,
     );
