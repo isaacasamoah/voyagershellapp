@@ -80,7 +80,7 @@ impl Runtime {
             "invalid_input: unsupported development argument"
         );
         if op == "test-runs" {
-            let mut query = self.store.0.prepare("SELECT receipt FROM operations WHERE json_extract(receipt,'$.action')='test-start' AND (?1 OR actor_session_id=?2) ORDER BY rowid DESC LIMIT 64")?;
+            let mut query = self.store.0.prepare("SELECT json_remove(receipt,'$.result') FROM operations WHERE json_extract(receipt,'$.action')='test-start' AND (?1 OR actor_session_id=?2) ORDER BY rowid DESC LIMIT 64")?;
             let rows = query.query_map(
                 rusqlite::params![authority::is_owner(actor), actor["session_id"].as_str()],
                 |row| row.get::<_, String>(0),
@@ -301,6 +301,8 @@ impl Runtime {
             run.lease.take();
             match outcome {
                 Ok(result) => {
+                    run.receipt["cleanup"] = result["cleanup"].clone();
+                    run.receipt["proof_verdict"] = result["outcome"]["proof"]["verdict"].clone();
                     run.receipt["run_state"] = json!(if result["cleanup"] == "completed" {
                         "finished"
                     } else {

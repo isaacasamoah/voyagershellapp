@@ -70,6 +70,8 @@ or copied context. Instance callers cannot directly invoke `test-host`, `start`,
 
 `test-start` acknowledges only `runner_spawned`. The saved operation and
 `test-runs` show `run_state`: starting, running, stopping, finished or uncertain.
+The list omits the full result payload; use `operation START_REQUEST_ID` for the
+complete result and proof observations.
 `finished` means cleanup was confirmed; inspect `result.error` and the proof's
 `verdict` separately to determine whether the experiment succeeded. A failed
 desktop launch can finish with completed cleanup and an error. `test-stop`
