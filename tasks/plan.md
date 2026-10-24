@@ -1,6 +1,6 @@
 # Plan: recoverable docking
 
-Status: D01-D04 passed independent review and packaged verification, 24 October 2026. Ready for owner review. Owner acceptance remains open; merge and rollout are separate decisions.
+Status: D01-D04 passed independent review and packaged verification. During the 24 October owner trial, Isaac approved D05: return automatic recovery to the pre-dock floating positions. D05 is active; merge and rollout remain separate decisions.
 
 ## Scope and outcome
 
@@ -220,3 +220,24 @@ positive-case target with its own recovered panel. That expected refusal and the
 operator-assisted positive comparison are both retained. Improving that optional
 fixture is separate from product review. Voice teardown uncertainty remains
 visible in the evidence and is not represented as confirmed closure.
+
+## D05: restore pre-dock floating positions
+
+Isaac verified docking, undocking and external refusal, then requested that
+minimising or closing a docked terminal restore the controls to their earlier
+floating positions. Keep one in-memory snapshot for the current dock sequence.
+Capture it before a drag moves the avatar, or before a direct dock. Carry it
+through a target-to-target move. Automatic recovery uses the snapshot and the
+existing display clamps. Explicit Applications recovery retains its current-display
+behavior. This adds no persisted layout, process action or permission change.
+
+Verify a failing regression before implementation, including a target transfer,
+removed-display fallback, and a known-different deliberate repositioning. Then
+run isolated native minimise/close trials with both viewers and verify the same
+managed runtime survives. Independently review this refinement and use at most
+one corrective product build if required. Keep the owner's running trial intact.
+
+The D05 reviewer found an overlapping display-event race. The single corrective
+build retains the pending origin until restoration completes or a new explicit
+intent replaces it. The added regression first failed, then passed; a contrasting
+new-position test confirms that a deliberate move supersedes the older recovery.

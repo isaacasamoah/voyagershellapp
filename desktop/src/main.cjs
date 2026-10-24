@@ -72,6 +72,8 @@ const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
+let dockOrigin = null;
+let restoringOrigin = null;
 let controlConnection = null;
 const conversation = conversationClient(stateDir, (value) => {
   for (const client of [avatarWin, panelWin]) {
@@ -270,6 +272,22 @@ function sendState() {
 function avatarPosition() {
   const b = avatarWin.getBounds();
   return { x: b.x + margin, y: b.y + margin };
+}
+function floatingPosition() {
+  return { panel: panelWin.getBounds(), avatar: avatarPosition(), seated };
+}
+async function restoreFloating(position) {
+  const generation = dockGeneration;
+  restoringOrigin = position;
+  const anchor = position && { x: position.panel.x + 108, y: position.panel.y + 44 };
+  await setExpanded(true, anchor);
+  if (generation !== dockGeneration || restoringOrigin !== position) return;
+  if (position && !position.seated) {
+    setSeated(false);
+    placeAvatar(position.avatar.x, position.avatar.y);
+    sendState();
+  }
+  restoringOrigin = null;
 }
 function setBoundsIfChanged(client, bounds) {
   const previous = client.getBounds();
@@ -534,21 +552,22 @@ async function checkDockTarget(id, expected = null) {
   );
 }
 async function refuseDock(reason) {
+  const origin = binding ? dockOrigin : null;
   undock(reason);
   avatarWin.showInactive();
-  await setExpanded(true);
+  await restoreFloating(origin);
   return false;
 }
 async function recoverDisplay() {
   if (!avatarWin || avatarWin.isDestroyed()) return;
+  const origin = binding ? dockOrigin : restoringOrigin || floatingPosition();
   undock('The display changed. Dock again when the terminal is ready.');
-  const p = avatarPosition();
-  placeAvatar(p.x, p.y);
   avatarWin.showInactive();
-  await setExpanded(true);
+  await restoreFloating(origin);
 }
 function undock(message = '') {
   dockGeneration++;
+  restoringOrigin = null;
   const previous = controlConnection;
   controlConnection = null;
   if (previous && service?.control?.generation === previous.attachment.generation)
@@ -568,7 +587,9 @@ async function releaseControl(connection) {
     connection.close();
   }
 }
-async function dock(id, expected = null, droppedAt = performance.now()) {
+async function dock(id, expected = null, droppedAt = performance.now(), origin = null) {
+  origin = binding ? dockOrigin : origin || floatingPosition();
+  restoringOrigin = null;
   if (binding) undock();
   const generation = ++dockGeneration;
   const attempt = { generation, target: id, droppedAt, state: 'checking' };
@@ -642,6 +663,7 @@ async function dock(id, expected = null, droppedAt = performance.now()) {
   });
   controlConnection = connection;
   service = { ...service, control: connection.attachment, voice: connection.voice };
+  dockOrigin = origin;
   binding = { ...fresh, session };
   dockHovered = false;
   selected = session.id;
@@ -1140,6 +1162,7 @@ app.whenReady().then(async () => {
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
   handle('begin-panel-drag', [panelWin], (x, y) => {
+    restoringOrigin = null;
     const bounds = panelWin.getBounds();
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > bounds.width || y > bounds.height)
       throw Error('Invalid panel drag');
@@ -1150,6 +1173,7 @@ app.whenReady().then(async () => {
   });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
+    restoringOrigin = null;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
     dragging = {
@@ -1160,6 +1184,7 @@ app.whenReady().then(async () => {
       held: false,
       moved: false,
       original: avatarPosition(),
+      floating: binding ? dockOrigin : floatingPosition(),
       binding,
       seated,
     };
@@ -1172,7 +1197,12 @@ app.whenReady().then(async () => {
     const previous = dragging;
     dragging = null;
     if (previous.moved && previous.binding) {
-      await dock(previous.binding.window.id, previous.binding);
+      await dock(
+        previous.binding.window.id,
+        previous.binding,
+        performance.now(),
+        previous.floating,
+      );
       return;
     }
     setSeated(previous.seated);
@@ -1186,7 +1216,7 @@ app.whenReady().then(async () => {
     if (!dragging) return;
     const droppedAt = performance.now();
     candidateWin.hide();
-    const { held, moved, candidate } = dragging;
+    const { held, moved, candidate, floating } = dragging;
     dragging = null;
     if (!held && !moved) {
       await setExpanded(!expanded);
@@ -1216,7 +1246,8 @@ app.whenReady().then(async () => {
     if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE()) {
       if (candidate && candidate.window.id !== target.id)
         await refuseDock('The target changed. Try docking again.');
-      else await dock(target.id, candidate?.state === 'ready' ? candidate : null, droppedAt);
+      else
+        await dock(target.id, candidate?.state === 'ready' ? candidate : null, droppedAt, floating);
     } else if (candidate) {
       await refuseDock('The target changed. Try docking again.');
     } else {

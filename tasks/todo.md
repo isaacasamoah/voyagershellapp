@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01-D04 passed independent review and packaged verification, 24 October 2026. Ready for owner review. Each slice used one corrective product build. No merge or installed-app update has occurred.
+Status: D01-D04 passed independent review. The owner trial approved D05, restoring pre-dock floating positions, which is now active. No merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -200,3 +200,11 @@ D04 final verification and independent correction review, 24 October 2026:
 - [x] The approved Fedora timing batches pass: at least 19 of 20 unobstructed docks are audible within two seconds, and at least 19 of 20 recoveries reveal both controls within one second. Every trial recovers correctly. Record slow and failed trials, the viewer used, and any unsupported combinations.
 - [x] Applicable full Rust and desktop checks pass. Run `npm --prefix desktop run package:linux`, then repeat the combined docking/recovery cases and timing batches on the actual packaged app and bundled service in fresh private state. Record executable paths/hashes, display/audio setup, outcomes, limits and cleanup evidence.
 - [ ] Review the packaged docking result with the owner. The next planning cycle is voice handoff; no voice, resume or panel tasks become active automatically. Merge, installation, restart and release remain separate decisions.
+
+## D05: restore the floating controls to their pre-dock positions
+
+- [ ] Capture before moving the avatar into a dock; recover both positions after target loss, including minimise and close. A move between targets retains the original floating positions.
+- [ ] Clamp unavailable positions to a visible display, preserve deliberate floating repositioning, and retain explicit Applications recovery on the current display.
+- [ ] Regression, full desktop checks, native trials with both viewers and independent review pass. Preserve the existing agent/capture and the owner's running trial.
+
+Files: desktop/src/main.cjs, desktop/test/docking.test.cjs, a focused native proof, and docs/desktop.md.

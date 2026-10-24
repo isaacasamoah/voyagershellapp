@@ -62,7 +62,8 @@ function desktop(
     };
     globalThis.rows = [];
     serviceError = null;
-    avatarWin = { isDestroyed:()=>false, showInactive() { calls.push('visible'); }, webContents: { send(name) { calls.push(name); } } };
+    panelWin={getBounds:()=>({x:100,y:120,width:320,height:372})};
+    avatarWin = { getBounds:()=>({x:200,y:156,width:120,height:120}), isDestroyed:()=>false, showInactive() { calls.push('visible'); }, webContents: { send(name) { calls.push(name); } } };
     inventory = async () => [window];
     discoverTerminals = async () => (records = [record]);
     identities = async () => new Map([[10, record], [record.frontend.pid, record.frontend]]);
@@ -338,7 +339,7 @@ test('a display change cancels control and places recovery controls on an availa
   app.run(`avatarPosition=()=>({x:9000,y:9000});placeAvatar=(x,y)=>calls.push('clamp:'+x+','+y);`);
   await app.run('recoverDisplay()');
   assert.equal(app.run('binding'), null);
-  assert.ok(app.context.calls.includes('clamp:9000,9000'));
+  assert.ok(app.context.calls.includes('clamp:208,164'));
   assert.ok(app.context.calls.includes('visible'));
   assert.ok(app.context.calls.includes('panel'));
 });
@@ -461,4 +462,128 @@ test('panel confirmation reasserts workspace visibility after showing its native
  inventory=async()=>[{id:99,visible:pinned,current_workspace:null,workspace:pinned?4294967295:0}];`);
   await app.run('setExpanded(true)');
   assert.equal(app.run('pinned'), true);
+});
+
+function floatingGeometry(app) {
+  app.run(`
+    globalThis.panelBounds={x:100,y:120,width:320,height:372};
+    globalThis.avatarBounds={x:200,y:156,width:120,height:120};
+    panelWin={getBounds:()=>({...panelBounds}),setBounds:b=>Object.assign(panelBounds,b),showInactive(){},setVisibleOnAllWorkspaces(){},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])};
+    Object.assign(avatarWin,{getBounds:()=>({...avatarBounds}),setBounds:b=>Object.assign(avatarBounds,b),setParentWindow(){}});
+    setSeated=value=>{seated=value;};raiseSeatedAvatar=()=>{};
+    setExpanded=realSetExpanded;placePanel=realPlacePanel;placeAvatar=realPlaceAvatar;
+    inventory=async()=>[window,{id:99,visible:true}];
+    seated=true;expanded=true;
+    follow=()=>{setSeated(false);placeAvatar(600,500);};
+    placeAboveTerminal=async()=>({state:'placed'});
+  `);
+}
+
+test('automatic recovery returns the controls to their pre-dock floating positions', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  assert.equal(await app.run('dock(1)'), true);
+  assert.notEqual(app.run('avatarBounds.x'), 200);
+  await app.run("refuseDock('Target minimised')");
+  assert.equal(app.run('panelBounds.x'), 100);
+  assert.equal(app.run('panelBounds.y'), 120);
+  assert.equal(app.run('avatarBounds.x'), 200);
+  assert.equal(app.run('avatarBounds.y'), 156);
+});
+
+test('a target transfer retains the first floating position', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  await app.run('dock(1)');
+  await app.run('dock(1)');
+  await app.run("refuseDock('Target closed')");
+  assert.equal(app.run('panelBounds.x'), 100);
+  assert.equal(app.run('avatarBounds.x'), 200);
+});
+
+test('recovery clamps an old display position and preserves a separate floating avatar', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  app.run('panelBounds.x=1500;avatarBounds.x=1750;avatarBounds.y=600;seated=false;');
+  await app.run('dock(1)');
+  app.run('screen.getDisplayNearestPoint=()=>({workArea:{x:0,y:0,width:1000,height:800}});');
+  await app.run('recoverDisplay()');
+  assert.equal(app.run('panelBounds.x'), 680);
+  assert.equal(app.run('avatarBounds.x'), 880);
+  assert.equal(app.run('avatarBounds.y'), 600);
+  assert.equal(app.run('seated'), false);
+});
+
+test('a later deliberate floating position becomes the next recovery position', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  await app.run('dock(1)');
+  await app.run("refuseDock('Target hidden')");
+  app.run('panelBounds.x=250;avatarBounds.x=350;');
+  await app.run('dock(1)');
+  await app.run("refuseDock('Target hidden')");
+  assert.equal(app.run('panelBounds.x'), 250);
+  assert.equal(app.run('avatarBounds.x'), 350);
+});
+
+test('a pre-drag origin survives the avatar moving before drop', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  app.run(
+    'globalThis.origin=floatingPosition();avatarBounds.x=500;avatarBounds.y=450;seated=false;',
+  );
+  await app.run('dock(1,null,performance.now(),origin)');
+  await app.run("refuseDock('Target hidden')");
+  assert.equal(app.run('panelBounds.x'), 100);
+  assert.equal(app.run('avatarBounds.x'), 200);
+  assert.equal(app.run('seated'), true);
+});
+
+test('late floating restoration cannot move a newer dock', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  app.run('seated=false;');
+  await app.run('dock(1)');
+  app.run('globalThis.finishPanel=null;setExpanded=()=>new Promise(r=>{finishPanel=r;});');
+  const pending = app.run("refuseDock('Target hidden')");
+  app.run("dockGeneration++;binding={session:{id:'new'}};avatarBounds.x=750;finishPanel();");
+  await pending;
+  assert.equal(app.run('avatarBounds.x'), 750);
+  assert.equal(app.run('binding.session.id'), 'new');
+});
+
+test('overlapping display events retain the original separate avatar', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  app.run('avatarBounds.x=700;avatarBounds.y=600;seated=false;');
+  await app.run('dock(1)');
+  app.run('globalThis.maps=[];inventory=()=>new Promise(r=>maps.push(r));');
+  const first = app.run('recoverDisplay()');
+  const second = app.run('recoverDisplay()');
+  app.run('maps[1]([{id:99,visible:true}]);');
+  await second;
+  app.run('maps[0]([{id:99,visible:true}]);');
+  await first;
+  assert.equal(app.run('avatarBounds.x'), 700);
+  assert.equal(app.run('avatarBounds.y'), 600);
+  assert.equal(app.run('seated'), false);
+});
+
+test('a deliberate new floating position supersedes pending automatic recovery', async () => {
+  const app = managedDesktop();
+  floatingGeometry(app);
+  app.run('avatarBounds.x=700;avatarBounds.y=600;seated=false;');
+  await app.run('dock(1)');
+  app.run('globalThis.maps=[];inventory=()=>new Promise(r=>maps.push(r));');
+  const first = app.run('recoverDisplay()');
+  app.run('undock();panelBounds.x=250;avatarBounds.x=800;avatarBounds.y=500;seated=false;');
+  const second = app.run('recoverDisplay()');
+  app.run('maps[1]([{id:99,visible:true}]);');
+  await second;
+  app.run('maps[0]([{id:99,visible:true}]);');
+  await first;
+  assert.equal(app.run('panelBounds.x'), 250);
+  assert.equal(app.run('avatarBounds.x'), 800);
+  assert.equal(app.run('avatarBounds.y'), 500);
+  assert.equal(app.run('restoringOrigin'), null);
 });

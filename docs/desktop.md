@@ -423,3 +423,27 @@ A final participating voice connection can disappear during fixture teardown.
 The resulting outcome_unknown remains separate from successful docking recovery
 and earlier voice destination assertions. Do not describe that status as a
 confirmed voice closure.
+
+
+## Return position after automatic recovery
+
+Before a docking drag moves the avatar, the desktop remembers the floating panel
+and avatar positions and whether the avatar was seated in the panel. A direct
+dock captures the same information before placement. Switching between terminal
+targets retains this origin. Automatic target-loss recovery restores it, using
+the existing display clamps if the original location is no longer available.
+Current panel content still determines its height. No position is persisted.
+
+A pending recovery retains its original positions across overlapping display
+events. The latest recovery may finish that restoration; an older one cannot
+move a newer dock. Explicit docking, undocking or dragging clears the pending
+restoration. Applications recovery still chooses its current display rather than
+returning to the old one. These presentation changes do not affect process
+ownership, capture or service permissions.
+
+The focused native probe is desktop/test/recovery-position-proof.cjs. Load it as
+visibility-proof.cjs through the existing explicit VOYAGER_PROOF_DIRECTORY option
+in a private trial. It uses real pointer drags and native window observations for
+minimise and close with each supported viewer. Display-removal fallback and
+overlapping-event order are deterministic regressions; the focused native trial
+does not claim a physical monitor-removal test.
