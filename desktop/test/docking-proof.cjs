@@ -7,6 +7,7 @@ const { promisify } = require('node:util');
 const { screen, app } = require('electron');
 const { windowAt } = require('../src/binding.cjs');
 const exec = promisify(execFile);
+const { captureOutput } = require('./output-audio.cjs');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 exports.run = async ({
   avatarWin,
@@ -16,6 +17,7 @@ exports.run = async ({
   refresh,
   inventory,
   undock,
+  dock,
   setExpanded,
   getState,
   stateDir,
@@ -190,8 +192,14 @@ exports.run = async ({
       visible: avatarWin.isVisible(),
       panel: panelWin.isVisible(),
       control: status.control,
+      attempt: s.dockAttempts?.at(-1),
       soundRequests: await avatarWin.webContents.executeJavaScript('window.dockingProofSounds'),
     });
+    if (expected === 'ready' && process.env.VOYAGER_PROOF_D02 === '1') {
+      assert(avatarWin.isVisible());
+      assert.equal(s.dockAttempts.at(-1).state, 'placed');
+      assert(s.dockAttempts.at(-1).placedAt >= s.dockAttempts.at(-1).acceptedAt);
+    }
     if (expected !== 'ready') {
       assert(avatarWin.isVisible());
       assert.equal(s.binding, null);
@@ -294,7 +302,19 @@ exports.run = async ({
     });
 
     await capture('managed-hover', candidateWin);
-    await released('managed-accepted', 'ready');
+    if (process.env.VOYAGER_PROOF_D02 === '1') {
+      const { audio } = await captureOutput(stateDir, 'dock-output', () =>
+        released('managed-accepted', 'ready'),
+      );
+      const attempt = getState().dockAttempts.at(-1);
+      assert(audio.onsetObservedAt !== null, 'No output sound was captured');
+      observations.push({
+        label: 'recorded-output',
+        audio,
+        attempt,
+        dropToOutputMs: audio.onsetObservedAt - attempt.droppedAt,
+      });
+    } else await released('managed-accepted', 'ready');
     assert.equal(getState().binding.session.id, vessel);
     undock();
     await wait(
@@ -302,6 +322,58 @@ exports.run = async ({
       (s) => s.control === null,
       'Control did not release',
     );
+    if (process.env.VOYAGER_PROOF_D02 === '1') {
+      const targetNow = (await inventory()).find((w) => w.id === target.id);
+      const cover = (await inventory()).find((w) => w.pid === externalPid);
+      await exec('xdotool', [
+        'windowsize',
+        String(cover.id),
+        String(targetNow.width),
+        String(targetNow.height),
+      ]);
+      await exec('xdotool', [
+        'windowmove',
+        String(cover.id),
+        String(targetNow.x),
+        String(targetNow.y),
+      ]);
+      await exec('xdotool', ['windowactivate', '--sync', String(cover.id)]);
+      const failed = await captureOutput(stateDir, 'failed-placement-output', () =>
+        dock(target.id),
+      );
+      assert.equal(failed.result, false);
+      assert.equal(failed.audio.onsetObservedAt, null);
+      await wait(
+        () => rpc('status'),
+        (s) => s.control === null,
+        'Failed placement retained control',
+      );
+      assert(avatarWin.isVisible());
+      assert(panelWin.isVisible());
+      const attempt = getState().dockAttempts.at(-1);
+      assert(attempt.acceptedAt, 'Failure must occur after service acceptance');
+      assert.equal(attempt.state, 'failed');
+      const managed = (await rpc('list', '--include-removed')).find((s) => s.id === vessel);
+      assert.equal(managed.worker_state, 'running');
+      assert.equal(managed.capture, 'connected');
+      observations.push({
+        label: 'covered-placement-refused',
+        attempt,
+        audio: failed.audio,
+        managed,
+      });
+      await exec('xdotool', ['windowactivate', '--sync', String(target.id)]);
+      const pending = dock(target.id);
+      undock();
+      assert.equal(await pending, false);
+      await wait(
+        () => rpc('status'),
+        (s) => s.control === null,
+        'Invalidated attempt retained control',
+      );
+      assert.equal(getState().dockAttempts.at(-1).state, 'superseded');
+      observations.push({ label: 'invalidated-attempt', attempt: getState().dockAttempts.at(-1) });
+    }
     assert.equal((await hover(target)).state, 'ready');
     const soundsBefore = await avatarWin.webContents.executeJavaScript(
       'window.dockingProofSounds.length',

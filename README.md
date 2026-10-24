@@ -24,8 +24,9 @@ is our starting point, and we’d love to build toward it with other developers.
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
 approved. The [docking implementation plan](tasks/plan.md) is in progress. Its
-first slice implements clear refusal of unsupported docking targets. The remaining
-requirements do not describe implemented behavior yet.
+first two slices implement clear refusal of unsupported targets and require
+visible placement before docking feedback. Recovery after target loss and
+Applications recovery are not implemented yet.
 
 ## Current prototype
 

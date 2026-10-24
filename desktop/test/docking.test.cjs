@@ -6,15 +6,17 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const sourcePath = path.resolve(__dirname, '../src/main.cjs');
 
-function desktop() {
+function desktop(
+  connect = async () => {
+    throw Error('Unexpected control attachment');
+  },
+) {
   const nativeRequire = createRequire(sourcePath);
   const context = vm.createContext({
     require(name) {
       if (name === './control.cjs')
         return {
-          connectControl: async () => {
-            throw Error('Unexpected control attachment');
-          },
+          connectControl: connect,
         };
       if (name !== 'electron') return nativeRequire(name);
       return {
@@ -42,7 +44,7 @@ function desktop() {
   vm.runInContext(
     `
     globalThis.calls = [];
-    globalThis.window = { id: 1, pid: 10, visible: true };
+    globalThis.window = { id: 1, pid: 10, visible: true, x:0,y:0,width:400,height:400 };
     globalThis.record = {
       pid: 10, start: '100', executable: '/usr/bin/xterm', external: true,
       nativeId: 'thread', server: '/server',
@@ -180,4 +182,90 @@ test('a late check from before leaving cannot replace the re-entry result', asyn
   assert.equal(app.run('dragging.candidate.state'), 'refused');
   assert.equal(app.run('dragging.candidate.reason'), 'Current target stopped');
   assert.equal(app.context.calls.includes('Old target ready'), false);
+});
+
+function managedDesktop() {
+  let close;
+  const connection = { attachment: { generation: 'accepted' }, close() {} };
+  const app = desktop(async (_state, _request, onClose) => {
+    close = onClose;
+    return connection;
+  });
+  app.run(`
+    record.external = false;
+    rows = [{id:'managed',server:'/server',native_thread_id:'thread',ownership:'managed',worker_state:'running',capture:'connected'}];
+    globalThis.releases = [];
+    releaseControl = async c => releases.push(c.attachment.generation);
+  `);
+  return { ...app, disconnect: () => close() };
+}
+
+test('accepted control with failed placement restores controls without a sound', async () => {
+  const app = managedDesktop();
+  app.run("placeAboveTerminal = async () => ({state:'failed',reason:'Target covered'});");
+  assert.equal(await app.run('dock(1)'), false);
+  assert.equal(app.run('binding'), null);
+  assert.equal(app.context.calls.includes('dock-sound'), false);
+  assert.ok(app.context.calls.includes('visible'));
+  assert.deepEqual(Array.from(app.context.releases), ['accepted']);
+});
+
+test('a superseded placement does not report success', async () => {
+  const app = managedDesktop();
+  app.run("placeAboveTerminal = async () => ({state:'superseded'});");
+  assert.equal(await app.run('dock(1)'), false);
+  assert.equal(app.context.calls.includes('dock-sound'), false);
+});
+
+test('one visible placement produces one success sound', async () => {
+  const app = managedDesktop();
+  app.run("placeAboveTerminal = async () => ({state:'placed'});");
+  assert.equal(await app.run('dock(1)'), true);
+  assert.equal(app.context.calls.filter((c) => c === 'dock-sound').length, 1);
+});
+
+test('invalidating an in-flight placement releases its attachment', async () => {
+  const app = managedDesktop();
+  app.run(
+    'globalThis.finishPlacement=null;placeAboveTerminal=()=>new Promise(r=>{finishPlacement=r;});',
+  );
+  const pending = app.run('dock(1)');
+  while (!app.run('finishPlacement')) await new Promise((r) => setImmediate(r));
+  app.run("dockGeneration++;finishPlacement({state:'superseded'});");
+  assert.equal(await pending, false);
+  assert.equal(app.run('binding'), null);
+  assert.deepEqual(Array.from(app.context.releases), ['accepted']);
+  assert.equal(app.context.calls.includes('dock-sound'), false);
+});
+
+test('control disconnect during placement restores the floating controls', async () => {
+  const app = managedDesktop();
+  app.run(
+    'globalThis.finishPlacement=null;placeAboveTerminal=()=>new Promise(r=>{finishPlacement=r;});',
+  );
+  const pending = app.run('dock(1)');
+  while (!app.run('finishPlacement')) await new Promise((r) => setImmediate(r));
+  app.disconnect();
+  app.run("finishPlacement({state:'placed'});");
+  assert.equal(await pending, false);
+  assert.equal(app.run('binding'), null);
+  assert.ok(app.context.calls.includes('visible'));
+  assert.equal(app.context.calls.includes('dock-sound'), false);
+});
+
+test('an old control acknowledgement cannot select or attach after invalidation', async () => {
+  let accept;
+  const app = desktop(() => new Promise((r) => (accept = r)));
+  app.run(
+    `record.external=false;rows=[{id:'managed',server:'/server',native_thread_id:'thread',ownership:'managed',worker_state:'running',capture:'connected'}];globalThis.releases=[];releaseControl=async c=>releases.push(c.attachment.generation);`,
+  );
+  const pending = app.run('dock(1)');
+  while (!accept) await new Promise((r) => setImmediate(r));
+  app.run('dockGeneration++;');
+  accept({ attachment: { generation: 'old' }, close() {} });
+  assert.equal(await pending, false);
+  assert.equal(app.run('binding'), null);
+  assert.equal(app.run('selected'), null);
+  assert.deepEqual(Array.from(app.context.releases), ['old']);
+  assert.equal(app.context.calls.includes('dock-sound'), false);
 });

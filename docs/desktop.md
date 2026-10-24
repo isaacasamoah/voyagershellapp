@@ -137,10 +137,12 @@ run the service independently of the terminal clients for persistence.
 5. Try an ordinary external terminal using the same supported viewer. It must
    refuse and leave the service's registration list unchanged.
 
-Successful placement and sound remain separate requirements. The current
-placement path can still hide an accepted marker when its target is covered,
-then request a success sound. The next docking slice addresses that behavior;
-passing the refusal checks does not establish reliable complete docking.
+A drop reports success only after the service accepts its control attachment
+and the native window inventory confirms a visible avatar above the intended
+terminal. Only that attempt requests a docking sound. Covered targets, failed
+placement and superseded attempts cannot report success. Failure releases the
+attachment and reveals the floating controls. Recovery after a previously
+successful dock and independent Applications recovery remain later slices.
 
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
@@ -175,8 +177,9 @@ separate from window placement, runtime ownership and capture.
 `voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
 only a window belonging to its calling process. Its separate layout operation
 arranges identified managed terminals as described in [Vessels and fleets](fleets.md).
-Neither operation types into a terminal. Electron checks the actual native stack after asking for placement. A covered
-marker hides rather than painting over another X11 app. Linux hover uses a
+Neither operation types into a terminal. `placement.cjs` returns placed, failed
+or superseded after checking the native stack and current attempt. It does not
+hide the avatar to represent successful placement. Linux hover uses a
 bounded pointer/button probe while a dock or panel is visible, because Electron forwards ignored
 mouse movement only on macOS/Windows; it does not inject input. Native Wayland
 windows are absent from this inventory, so occlusion by those windows is unproved.
@@ -234,6 +237,22 @@ It verifies that the external server and conversation survive the refusal,
 then stops only the disposable resources it created. The pointer check verifies
 its actual position before clicking. The recorded D01 trials use the external
 monitor; mixed-scale pointer behavior on the laptop display remains unproved.
+
+Set `VOYAGER_PROOF_D02=1` on the native Codex comparison to require visible
+placement and capture output audio. The fixture records only a bounded interval
+from the unmuted output monitor, requires silence before the action, and checks
+that covered placement produces no sound. It does not record the microphone.
+A valid run records the drop, acceptance, placement and sound-request times,
+then the observed sound onset and end. Output-monitor timestamps are measured
+when audio chunks arrive; they are conservative observations rather than room
+microphone measurements. The final timing batch and packaged proof remain pending.
+
+The main process retains at most 32 docking attempt records in memory. They
+answer which attempt was accepted, whether placement completed, and where time
+was spent before the sound request. The proof reader can collect them without
+terminal contents or credentials. Service authorization and its deadlines do
+not change. `control.cjs` accepts only a reply matching the requested generation,
+Vessel, window and both process identities.
 
 The older `--proof-registration` check describes the superseded external-docking
 behavior and is not a current acceptance test. Its historical evidence below

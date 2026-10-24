@@ -63,6 +63,14 @@ Verification:
 - Demonstrate that the hidden-avatar return path or a deliberately failed placement fails the new acceptance check.
 - On the real candidate, perform a valid dock, a failed placement and a delayed/invalidated attempt. Hear or record the success sound and verify there is none for failures. Extend `desktop/test/polish-proof.cjs` with these observations and run it after extension using the plan's command. Record initial timing trials now; complete the approved batch at the final checkpoint.
 
+Build evidence pending independent review, 24 October 2026:
+
+- Regression tests first detected false success after failed/superseded placement, malformed native geometry, a wrong target in an accepted response, and an attachment retained after invalidation. The fixes pass all 63 desktop tests.
+- Native Codex journeys passed with xterm and Ghostty. A valid drop visibly places the avatar and produces recorded output audio. Covered placement is accepted by the service but then fails visibly, releases control, keeps the managed runtime/capture running and records no output sound. An invalidated attempt leaves no attachment.
+- Output recording requires an unmuted sink and quiet baseline. Its onset/end observations use the main-process monotonic clock at audio chunk receipt. This is output-monitor evidence, not a room microphone measurement or the final timing batch.
+- The extended polish/voice journey passed with both viewers. One earlier xterm cleanup failed with changed terminal window identity, then the follow-up passed. The earlier failure and verified cleanup remain recorded; its cause is unresolved and is not claimed fixed by D02.
+- D03 target-loss recovery, D04 Applications recovery, the 20-trial batches and packaged checks remain open. D02 stays unchecked until independent review passes.
+
 Dependencies: D01.
 
 Likely files: `desktop/src/main.cjs`, `desktop/src/control.cjs`, `desktop/test/control.test.cjs`, `desktop/test/polish-proof.cjs`, `docs/desktop.md`.

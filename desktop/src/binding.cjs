@@ -104,6 +104,15 @@ function resolveDockTarget(window, windows, records, identities, sessions, expec
       resolveWindow(window, windows, [expected.record], identities).error)
   )
     return refuse('This terminal has changed. Try docking again.');
+  if (
+    window &&
+    (!Number.isSafeInteger(window.id) ||
+      window.id <= 0 ||
+      ![window.x, window.y, window.width, window.height].every(Number.isFinite) ||
+      window.width <= 0 ||
+      window.height <= 0)
+  )
+    return refuse('The desktop returned invalid terminal bounds.');
   const target = resolveWindow(window, windows, records, identities);
   if (target.error) return refuse(target.error);
   const matches = sessions.filter(

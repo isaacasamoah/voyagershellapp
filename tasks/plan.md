@@ -1,6 +1,6 @@
 # Plan: recoverable docking
 
-Status: Approved for the build trial, 24 October 2026. D01 is the selected increment; the task list records its completion evidence. D02-D04 remain pending.
+Status: Approved for the build trial, 24 October 2026. D01 passed independent review; D02 is being built and verified. D03-D04 remain pending.
 
 ## Scope and outcome
 
@@ -156,3 +156,18 @@ have one corrective build after review. Re-review that correction; if required
 issues remain, report them and stop rather than starting another correction or
 building dependent slices. This instruction does not authorize merging,
 installation, main-service restart or release. The final review remains human-owned.
+
+## D02 implementation notes
+
+D02 uses a small placement module so native stack checks and explicit outcomes
+can be tested without adding another state framework to the main process.
+The complete behavior also changes binding validation and control response
+checks, with their existing tests. Native proof and output recording are test
+code; no audio capture is added to the product. This exceeds the five-file
+estimate because the same accepted-to-visible journey crosses those boundaries.
+The in-memory attempt records are bounded to 32 and contain no terminal content.
+
+The broader polish proof now resolves native windows by verified process identity,
+because Codex can change its title after launch. It activates the intended window
+before the unobstructed docking comparison. This does not change product discovery
+or permit docking onto external agents.

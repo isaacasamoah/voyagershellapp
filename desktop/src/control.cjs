@@ -1,8 +1,6 @@
 const net = require('node:net');
 const path = require('node:path');
 
-// Keep this connection open for exactly as long as the desktop is attached.
-// No automatic reconnect: a new connection requires another deliberate dock.
 function connectControl(stateDir, request, onClose) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(path.join(stateDir, 'service.sock'));
@@ -25,7 +23,25 @@ function connectControl(stateDir, request, onClose) {
         const response = JSON.parse(buffer);
         if (response.error) throw Error(response.error);
         const result = response.result;
-        if (!result?.active || result.attachment?.generation !== request.generation)
+        const attachment = result?.attachment;
+        if (
+          result?.active !== true ||
+          !Number.isSafeInteger(request.window_id) ||
+          request.window_id <= 0 ||
+          !request.session_id ||
+          !['generation', 'session_id', 'window_id'].every(
+            (key) => attachment?.[key] === request[key],
+          ) ||
+          !['terminal', 'frontend'].every(
+            (key) =>
+              Number.isSafeInteger(request[key]?.pid) &&
+              request[key].pid > 0 &&
+              typeof request[key].start === 'string' &&
+              /^[0-9]+$/.test(request[key].start) &&
+              attachment?.[key]?.pid === request[key].pid &&
+              attachment?.[key]?.start === request[key].start,
+          )
+        )
           throw Error('Control attachment was not accepted');
         clearTimeout(timer);
         acknowledged = true;

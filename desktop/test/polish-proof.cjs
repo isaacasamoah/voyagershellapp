@@ -16,6 +16,7 @@ exports.run = async ({
   undock,
   setExpanded,
   stateDir,
+  getState,
 }) => {
   const terminal = process.env.VOYAGER_PROOF_TERMINAL || 'ghostty';
   assert(['ghostty', 'xterm'].includes(terminal));
@@ -120,10 +121,16 @@ exports.run = async ({
       (v.properties?.['application.name'] || '').includes('codex-voice-host'),
     ).length;
   const timedDock = async (window) => {
+    await exec('xdotool', ['windowactivate', '--sync', String(window)], { timeout: 3000 });
+    await refresh();
     await avatar(`window.viewerSoundMarks=[];`);
     const started = performance.timeOrigin + performance.now();
     assert(await dock(window));
     const attached = performance.timeOrigin + performance.now();
+    const attempt = getState().dockAttempts.at(-1);
+    assert.equal(attempt.state, 'placed');
+    assert(avatarWin.isVisible());
+    assert(attempt.placedAt >= attempt.acceptedAt);
     const sound = await wait(
       () => avatar(`window.viewerSoundMarks.find(mark=>mark.ended)`),
       Boolean,
@@ -131,6 +138,7 @@ exports.run = async ({
     );
     observations.push({
       action: 'dock-through-sound',
+      attempt,
       terminal,
       window,
       attached_ms: attached - started,
@@ -275,11 +283,22 @@ exports.run = async ({
       30,
     );
     try {
-      const windowFor = async (id) => {
-        await refresh();
-        const s = await byId(id);
-        return (await inventory()).find((w) => w.title === s.name);
-      };
+      const windowFor = (id) =>
+        wait(
+          async () => {
+            await refresh();
+            const session = await byId(id);
+            const record = getState().records.find(
+              (r) =>
+                !r.external &&
+                r.server === session.server &&
+                r.nativeId === session.native_thread_id,
+            );
+            return record && (await inventory()).find((w) => w.pid === record.pid && w.visible);
+          },
+          Boolean,
+          'Managed native viewer must be identifiable',
+        );
       await timedDock((await windowFor(a.id)).id);
       let v = await voice(a.id);
       assert.equal(v.conversation.voice, 'off');

@@ -1,3 +1,4 @@
+const { placeAboveTarget } = require('./placement.cjs');
 const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -65,6 +66,7 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
+const dockAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
@@ -184,36 +186,23 @@ function syncLayer() {
   if (!terminal && !avatarWin.isVisible()) avatarWin.showInactive();
 }
 async function placeAboveTerminal() {
-  if (layer === 'floating' || !binding) return;
+  if (layer === 'floating' || !binding) return { state: 'superseded' };
   const target = binding.window.id;
   const generation = dockGeneration;
-  const avatar = avatarWin.getNativeWindowHandle().readUInt32LE();
-  let stack = await inventory();
-  if (generation !== dockGeneration || layer === 'floating' || binding?.window.id !== target)
-    return;
   const p = avatarPosition();
-  const center = screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 });
-  if (windowBehindAvatar(stack, center)?.id !== target) {
-    avatarWin.hide();
-    setDockHovered(false);
-    return;
-  }
-  if (!avatarWin.isVisible()) avatarWin.showInactive();
-  const a = stack.findIndex((w) => w.id === avatar),
-    t = stack.findIndex((w) => w.id === target);
-  if (t >= 0 && a > t) return;
-  await exec(probe, ['above', String(avatar), String(target)], { timeout: 2000 });
-  const deadline = performance.now() + 1000;
-  while (layer !== 'floating' && binding?.window.id === target) {
-    stack = await inventory();
-    const a = stack.findIndex((w) => w.id === avatar),
-      t = stack.findIndex((w) => w.id === target);
-    if (t >= 0 && a > t) return;
-    if (performance.now() >= deadline)
-      throw Error(`The desktop did not place the docked marker (avatar ${a}, terminal ${t})`);
-    await delay(25);
-  }
+  return placeAboveTarget({
+    avatar: avatarWin,
+    target,
+    point: screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 }),
+    excluded: [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE()),
+    current: () =>
+      generation === dockGeneration && layer !== 'floating' && binding?.window.id === target,
+    inventory,
+    above: (avatar, terminal) =>
+      exec(probe, ['above', String(avatar), String(terminal)], { timeout: 2000 }),
+  });
 }
+
 function sendState() {
   syncLayer();
   const state = {
@@ -533,40 +522,78 @@ async function releaseControl(connection) {
     connection.close();
   }
 }
-async function dock(id, expected = null) {
+async function dock(id, expected = null, droppedAt = performance.now()) {
   if (binding) undock();
   const generation = ++dockGeneration;
+  const attempt = { generation, target: id, droppedAt, state: 'checking' };
+  dockAttempts.push(attempt);
+  if (dockAttempts.length > 32) dockAttempts.shift();
+  const superseded = () => {
+    if (generation === dockGeneration) return false;
+    attempt.state = 'superseded';
+    return true;
+  };
   let fresh;
   try {
     const target = await checkDockTarget(id, expected);
-    if (generation !== dockGeneration) return false;
-    if (target.state !== 'ready') return refuseDock(target.reason);
+    if (superseded()) return false;
+    if (target.state !== 'ready') {
+      Object.assign(attempt, { state: 'refused', reason: target.reason });
+      return refuseDock(target.reason);
+    }
     fresh = await checkDockTarget(id, target);
-    if (generation !== dockGeneration) return false;
-    if (fresh.state !== 'ready') return refuseDock(fresh.reason);
+    if (superseded()) return false;
+    if (fresh.state !== 'ready') {
+      Object.assign(attempt, { state: 'refused', reason: fresh.reason });
+      return refuseDock(fresh.reason);
+    }
   } catch {
-    if (generation !== dockGeneration) return false;
-    return refuseDock('Could not verify this terminal. Try again.');
+    if (superseded()) return false;
+    Object.assign(attempt, {
+      state: 'failed',
+      reason: 'Could not verify this terminal. Try again.',
+    });
+    return refuseDock(attempt.reason);
   }
   const session = fresh.session;
   const identity = ({ pid, start }) => ({ pid, start });
-  const connection = await connectControl(
-    stateDir,
-    {
-      generation: randomUUID(),
-      session_id: session.id,
-      window_id: fresh.window.id,
-      terminal: identity(fresh.record),
-      frontend: identity(fresh.record.frontend),
-    },
-    () => {
-      if (controlConnection === connection) undock('Control attachment ended.');
-    },
-  );
-  if (generation !== dockGeneration) {
+  let connection;
+  let closed = false;
+  try {
+    connection = await connectControl(
+      stateDir,
+      {
+        generation: randomUUID(),
+        session_id: session.id,
+        window_id: fresh.window.id,
+        terminal: identity(fresh.record),
+        frontend: identity(fresh.record.frontend),
+      },
+      () => {
+        closed = true;
+        if (connection && controlConnection === connection)
+          refuseDock('Control attachment ended.').catch((error) => console.error(error.message));
+      },
+    );
+  } catch {
+    if (superseded()) return false;
+    Object.assign(attempt, {
+      state: 'failed',
+      reason: 'Could not attach control. Try docking again.',
+    });
+    return refuseDock(attempt.reason);
+  }
+  if (closed || generation !== dockGeneration) {
     await releaseControl(connection);
+    attempt.state = 'superseded';
+    if (closed && generation === dockGeneration) return refuseDock('Control attachment ended.');
     return false;
   }
+  Object.assign(attempt, {
+    acceptedAt: performance.now(),
+    attachment: connection.attachment.generation,
+    state: 'accepted',
+  });
   controlConnection = connection;
   service = { ...service, control: connection.attachment, voice: connection.voice };
   binding = { ...fresh, session };
@@ -577,14 +604,34 @@ async function dock(id, expected = null) {
   follow();
   sendState();
   try {
-    await placeAboveTerminal();
+    const placement = await placeAboveTerminal();
+    if (superseded()) {
+      attempt.state = 'superseded';
+      if (controlConnection === connection) undock();
+      return false;
+    }
+    if (placement.state === 'superseded') {
+      attempt.state = 'superseded';
+      undock();
+      return false;
+    }
+    if (placement.state !== 'placed') {
+      Object.assign(attempt, { state: 'failed', reason: placement.reason });
+      return refuseDock(placement.reason);
+    }
+    Object.assign(attempt, { placedAt: performance.now(), state: 'placed' });
   } catch (error) {
-    console.error(error.message);
-    undock('Agent registered; the desktop could not place its marker.');
-    return false;
+    if (superseded()) {
+      attempt.state = 'superseded';
+      if (controlConnection === connection) undock();
+      return false;
+    }
+    Object.assign(attempt, { state: 'failed', reason: 'The desktop could not place the avatar.' });
+    return refuseDock(attempt.reason);
   }
-  if (generation !== dockGeneration) return false;
+  if (superseded()) return false;
   avatarWin.webContents.send('dock-sound', 'dock');
+  attempt.soundRequestedAt = performance.now();
   return true;
 }
 function follow() {
@@ -1066,6 +1113,7 @@ app.whenReady().then(async () => {
   });
   handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
+    const droppedAt = performance.now();
     candidateWin.hide();
     const { held, moved, candidate } = dragging;
     dragging = null;
@@ -1097,7 +1145,7 @@ app.whenReady().then(async () => {
     if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE()) {
       if (candidate && candidate.window.id !== target.id)
         await refuseDock('The target changed. Try docking again.');
-      else await dock(target.id, candidate?.state === 'ready' ? candidate : null);
+      else await dock(target.id, candidate?.state === 'ready' ? candidate : null, droppedAt);
     } else if (candidate) {
       await refuseDock('The target changed. Try docking again.');
     } else {
@@ -1198,6 +1246,7 @@ app.whenReady().then(async () => {
         setExpanded,
         park,
         getState: () => ({
+          dockAttempts,
           sessions,
           windows,
           records,

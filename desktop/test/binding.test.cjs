@@ -160,3 +160,13 @@ test('dropping after the hovered client changes refuses rather than selecting it
     'refused',
   );
 });
+
+test('malformed native geometry refuses before attachment', () => {
+  for (const changes of [{ width: 0 }, { height: -1 }, { x: NaN }, { y: Infinity }, { id: 0 }]) {
+    const window = { ...a, ...changes };
+    assert.equal(
+      resolveDockTarget(window, [window], [managed], identities, [session]).state,
+      'refused',
+    );
+  }
+});
