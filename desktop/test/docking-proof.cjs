@@ -178,6 +178,55 @@ exports.run = async ({
     assert.equal(cue.reason, result.reason);
     return result;
   };
+  const leaveAndReturn = async (target) => {
+    const area =
+      screen.getAllDisplays().find((d) => !d.internal)?.workArea ||
+      screen.getPrimaryDisplay().workArea;
+    panelWin.setPosition(area.x + area.width - 360, area.y + 80);
+    panelWin.showInactive();
+    panelWin.moveTop();
+    await refresh();
+    const p = panelWin.getBounds();
+    const outside = { x: p.x + p.width / 2, y: p.y + p.height - 50 };
+    await move(outside);
+    const excluded = [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE());
+    assert.equal(
+      windowAt(await inventory(), screen.dipToScreenPoint(outside), excluded)?.id,
+      panelWin.getNativeWindowHandle().readUInt32LE(),
+      'Re-entry control must be over Voyager panel, not a desktop corner',
+    );
+    await wait(
+      () => getState().dragging?.candidate,
+      (c) => c?.outside && c.state === 'refused',
+      'Leaving the target must invalidate its cue',
+    );
+    assert.equal(candidateWin.isVisible(), false);
+    panelWin.hide();
+    await refresh();
+    const returnedTarget = (await inventory()).find((w) => w.id === target.id);
+    await move(
+      screen.screenToDipPoint({
+        x: returnedTarget.x + returnedTarget.width / 2,
+        y: returnedTarget.y + returnedTarget.height / 2,
+      }),
+    );
+    await wait(
+      () => getState().dragging?.candidate,
+      (c) => c?.state === 'ready' && c.window.id === target.id,
+      'Returning must recheck the same target',
+    );
+    assert(candidateWin.isVisible());
+    const returnedCue = await candidateWin.webContents.executeJavaScript(
+      `({state:document.body.dataset.state,reason:document.getElementById('reason').textContent})`,
+    );
+    assert.equal(returnedCue.state, 'ready');
+    assert.equal(returnedCue.reason, 'Release to dock');
+    observations.push({
+      label: 'hover-reentry',
+      cue: returnedCue,
+      visible: candidateWin.isVisible(),
+    });
+  };
   const released = async (label, expected) => {
     const point = screen.dipToScreenPoint(screen.getCursorScreenPoint());
     const excluded = [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE());
@@ -294,36 +343,7 @@ exports.run = async ({
     const target = (await inventory()).find((w) => w.pid === record.pid);
     const eligible = await hover(target);
     assert.equal(eligible.state, 'ready');
-    await move({ x: 1, y: 1 });
-    await wait(
-      () => getState().dragging?.candidate,
-      (c) => c?.outside && c.state === 'refused',
-      'Leaving the target must invalidate its cue',
-    );
-    assert.equal(candidateWin.isVisible(), false);
-    const returnedTarget = (await inventory()).find((w) => w.id === target.id);
-    await move(
-      screen.screenToDipPoint({
-        x: returnedTarget.x + returnedTarget.width / 2,
-        y: returnedTarget.y + returnedTarget.height / 2,
-      }),
-    );
-    await wait(
-      () => getState().dragging?.candidate,
-      (c) => c?.state === 'ready' && c.window.id === target.id,
-      'Returning must recheck the same target',
-    );
-    assert(candidateWin.isVisible());
-    const returnedCue = await candidateWin.webContents.executeJavaScript(
-      `({state:document.body.dataset.state,reason:document.getElementById('reason').textContent})`,
-    );
-    assert.equal(returnedCue.state, 'ready');
-    assert.equal(returnedCue.reason, 'Release to dock');
-    observations.push({
-      label: 'hover-reentry',
-      cue: returnedCue,
-      visible: candidateWin.isVisible(),
-    });
+    await leaveAndReturn(target);
 
     await capture('managed-hover', candidateWin);
     if (process.env.VOYAGER_PROOF_D02 === '1') {
@@ -370,6 +390,7 @@ exports.run = async ({
     if (process.env.VOYAGER_PROOF_BATCH === '1') {
       for (let i = 0; i < 20; i++) {
         assert.equal((await hover(target)).state, 'ready');
+        await leaveAndReturn(target);
         const beforeSounds = await avatarWin.webContents.executeJavaScript(
           'window.dockingProofSounds.length',
         );
@@ -478,6 +499,9 @@ exports.run = async ({
   } catch (error) {
     observations.push({
       label: 'failure-state',
+      dragging: getState().dragging,
+      windows: await inventory().catch(() => []),
+      cursor: screen.getCursorScreenPoint(),
       records: getState().records,
       service: await rpc('status').catch(() => null),
       connection: await rpc('connection-info').catch(() => null),

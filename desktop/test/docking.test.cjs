@@ -348,7 +348,7 @@ test('a native query failure during panel recovery does not stop later refreshes
   app.run(`
     setExpanded=realSetExpanded;
     setSeated=value=>{seated=value;};
-    panelWin={showInactive(){calls.push('panel');},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])};
+    panelWin={setVisibleOnAllWorkspaces(){},showInactive(){calls.push('panel');},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])};
     inventory=async()=>{throw Error('Native inventory unavailable');};
   `);
   await assert.doesNotReject(app.run('refresh()'));
@@ -438,7 +438,7 @@ test('Applications recovery uses its chosen display while native bounds still re
   app.run(`
     setExpanded=realSetExpanded;placePanel=realPlacePanel;placeAvatar=realPlaceAvatar;
     avatarWin.setBounds=bounds=>calls.push({avatar:bounds});
-    Object.assign(panelWin,{isVisible:()=>false,getBounds:()=>({x:5,y:5,width:320,height:372}),setBounds:bounds=>calls.push({panel:bounds}),showInactive(){},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])});
+    Object.assign(panelWin,{setVisibleOnAllWorkspaces(){},isVisible:()=>false,getBounds:()=>({x:5,y:5,width:320,height:372}),setBounds:bounds=>calls.push({panel:bounds}),showInactive(){},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])});
   `);
   await app.handlers.get('second-instance')();
   const requested = app.context.calls.filter((c) => c?.panel).at(-1).panel;
@@ -451,4 +451,14 @@ test('an Applications launch carries its GNOME display context into recovery', a
   app.run('screen.getPrimaryDisplay=()=>({workArea:{x:2000,y:0,width:1000,height:800}})');
   await app.handlers.get('second-instance')(null, [], '', { gnomeApplications: true });
   assert.equal(app.run('recoveryAttempts.at(-1).display.x'), 2000);
+});
+
+test('panel confirmation reasserts workspace visibility after showing its native window', async () => {
+  const app = desktop();
+  app.run(`setExpanded=realSetExpanded;setSeated=value=>{seated=value;};placePanel=()=>{};raiseSeatedAvatar=()=>{};
+ avatarWin.setParentWindow=()=>{};globalThis.shown=false;globalThis.pinned=false;
+ panelWin={showInactive(){shown=true;},setVisibleOnAllWorkspaces(value){pinned=shown&&value;},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])};
+ inventory=async()=>[{id:99,visible:pinned,current_workspace:null,workspace:pinned?4294967295:0}];`);
+  await app.run('setExpanded(true)');
+  assert.equal(app.run('pinned'), true);
 });

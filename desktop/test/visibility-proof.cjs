@@ -73,6 +73,45 @@ exports.run = async ({
   }
   try {
     await save('running');
+    if (process.env.VOYAGER_PROOF_COLD_START === '1') {
+      assert(
+        getState().expanded && panelWin.isVisible() && avatarWin.isVisible(),
+        'Cold Applications launch must reveal both controls',
+      );
+      assert.equal(getState().recoveryAttempts.at(-1)?.state, 'presented');
+      await delay(600);
+      const panelDom = await panelWin.webContents.executeJavaScript(
+        `({hidden:document.getElementById('panel').hidden,display:getComputedStyle(document.getElementById('panel')).display,view:document.body.dataset.view})`,
+      );
+      assert.equal(panelDom.hidden, false);
+      assert.notEqual(panelDom.display, 'none');
+      await fs.writeFile(
+        path.join(stateDir, 'cold-panel-renderer.png'),
+        (await panelWin.webContents.capturePage()).toPNG(),
+      );
+      const stack = await inventory();
+      observations.push({
+        label: 'cold-applications-start',
+        panelDom,
+        candidate: getState().candidate,
+        recovery: getState().recoveryAttempts.at(-1),
+        windows: stack.filter((w) => w.pid === process.pid),
+      });
+      await exec(
+        'python3',
+        [
+          path.join(__dirname, 'native-capture.py'),
+          JSON.stringify(screen.getPrimaryDisplay().bounds),
+          path.join(stateDir, 'cold-applications.png'),
+        ],
+        { timeout: 20000 },
+      );
+      await save('running');
+      for (const workspace of ['1', '0']) {
+        await exec('xdotool', ['set_desktop', workspace]);
+        await delay(700);
+      }
+    }
     await setExpanded(false);
     const area = (screen.getAllDisplays().find((d) => !d.internal) || screen.getPrimaryDisplay())
       .workArea;

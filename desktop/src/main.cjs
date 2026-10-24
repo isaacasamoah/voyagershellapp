@@ -368,6 +368,7 @@ async function setExpanded(value, position) {
     placePanel(position);
     sendState();
     panelWin.showInactive();
+    panelWin.setVisibleOnAllWorkspaces(true);
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
     const deadline = performance.now() + 2000;
     while (expanded && seated) {
@@ -1238,7 +1239,15 @@ app.whenReady().then(async () => {
   await refresh();
   await conversation.poll();
   conversationTimer = setInterval(() => conversation.poll(), 250);
-  if (process.argv.includes('--expanded')) await setExpanded(true);
+  try {
+    if (process.argv.includes('--expanded') || process.argv.includes('--from-applications'))
+      await recoverControls(launchContext());
+  } catch (error) {
+    platformError = `Could not confirm the controls: ${error.message}`;
+    avatarWin.showInactive();
+    sendState();
+    console.error(platformError);
+  }
   if (
     !globalShortcut.register('Control+Alt+V', () => {
       if (binding) avatarWin.webContents.send('dock-sound', 'undock');

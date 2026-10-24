@@ -350,8 +350,9 @@ These checks establish the exercised Fedora XWayland behavior only.
 
 ## Applications and keyboard recovery
 
-Opening the same candidate again releases its control attachment and reveals the
-existing panel and avatar. It keeps the managed runtime and capture. Ctrl+Alt+V
+Opening the candidate through Applications reveals both controls on first launch
+and on later launches. A later launch releases its control attachment and reveals
+the existing panel and avatar. It keeps the managed runtime and capture. Ctrl+Alt+V
 uses the same recovery operation. A later dock supersedes an unfinished recovery.
 The recovery does not submit work or start a replacement agent.
 
@@ -393,3 +394,18 @@ The pointer fixture uses logical desktop coordinates. Mutter's
 [49.0 monitor-stream transform](https://github.com/GNOME/mutter/blob/49.0/src/backends/meta-screen-cast-monitor-stream.c)
 expects stream pixels, so the fixture applies each monitor's scale. X11 pointer
 readback is only a check over XWayland windows, not over GNOME's own grid.
+
+
+The native panel's all-workspace membership is reasserted after showing it. A
+fresh GNOME session can otherwise report no current workspace and leave the
+initial panel on workspace zero. This does not relax terminal eligibility:
+unknown terminal workspace observations still refuse docking. Initial panel
+confirmation errors are reported without skipping the keyboard shortcut or the
+refresh and pointer timers. The owner can retry recovery without restarting work.
+
+The native re-entry proof now moves onto Voyager's own panel and verifies that
+native target before returning to the same terminal. It repeats this in each
+batch trial. The earlier test assumed the desktop corner was an empty target;
+one packaged Ghostty run failed that assumption. The exact event sequence in
+that failure remains unknown. It is retained rather than presented as a repaired
+Ghostty defect.

@@ -156,6 +156,20 @@ D04 initial build evidence, pending independent review:
 - Packaged combined proof and fresh-context D04 review remain pending. D04 is
   deliberately unchecked until those required checks are resolved.
 
+D04 independent review requested changes. The single corrective build:
+
+- Adds failing-then-passing startup tests for a cold Applications launch and a
+  failed panel confirmation that must not skip recovery setup.
+- Reasserts native panel workspace visibility after showing it. A fresh GNOME
+  proof now shows both controls while current-workspace metadata is still absent.
+  It records a compositor screenshot, then performs real workspace switching and
+  native shortcut tests. Terminal eligibility still treats missing observations
+  as unknown.
+- Makes the hover re-entry test use a verified native panel target rather than an
+  unchecked desktop corner, and repeats the contrast in each timing trial.
+- All 82 desktop tests pass. Corrected packaged combined evidence and re-review
+  remain required before marking the slice complete.
+
 ## Checkpoint D-B: accept the docking capability
 
 - [ ] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.

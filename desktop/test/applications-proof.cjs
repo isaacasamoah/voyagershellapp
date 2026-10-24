@@ -197,6 +197,16 @@ exports.run = async ({
     const row = (await rpc('list')).find((s) => s.id === vessel);
     assert.equal(row.worker_state, 'running');
     assert.equal(row.capture, 'connected');
+    if (display)
+      await exec(
+        'python3',
+        [
+          path.join(__dirname, 'native-capture.py'),
+          JSON.stringify(screen.getDisplayNearestPoint({ x: display.x, y: display.y }).bounds),
+          path.join(stateDir, label + '.png'),
+        ],
+        { timeout: 20000 },
+      );
     observations.push({
       label,
       elapsed_ms,
