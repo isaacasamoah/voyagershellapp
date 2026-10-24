@@ -53,8 +53,8 @@ function renderState(value) {
     : value.docked && !value.seated
       ? 'docked'
       : 'floating';
-  $('connection').textContent = value.serviceError ? 'Offline' : '';
-  $('connection').hidden = !value.serviceError;
+  $('connection').textContent = value.serviceError ? 'Offline' : value.dockError || '';
+  $('connection').hidden = !value.serviceError && !value.dockError;
   $('avatar').title =
     value.platformError || value.dockError || (value.docked ? 'Master control' : '');
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));

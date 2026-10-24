@@ -56,8 +56,13 @@ exports.run = async ({
     });
   }
   async function move(point) {
-    const physical = screen.dipToScreenPoint(point);
-    await input(['move', physical.x, physical.y, screen.getDisplayNearestPoint(point).scaleFactor]);
+    await input(['move', point.x, point.y, 1]);
+    const probe = path.join(path.dirname(getState().candidate.service), 'voyager-windows');
+    const actual = screen.screenToDipPoint(JSON.parse((await exec(probe, [])).stdout).pointer);
+    assert(
+      Math.abs(actual.x - point.x) <= 2 && Math.abs(actual.y - point.y) <= 2,
+      'Native pointer did not reach requested position',
+    );
   }
   async function clickAvatar() {
     const bounds = avatarWin.getBounds();
@@ -68,6 +73,45 @@ exports.run = async ({
   }
   try {
     await save('running');
+    if (process.env.VOYAGER_PROOF_COLD_START === '1') {
+      assert(
+        getState().expanded && panelWin.isVisible() && avatarWin.isVisible(),
+        'Cold Applications launch must reveal both controls',
+      );
+      assert.equal(getState().recoveryAttempts.at(-1)?.state, 'presented');
+      await delay(600);
+      const panelDom = await panelWin.webContents.executeJavaScript(
+        `({hidden:document.getElementById('panel').hidden,display:getComputedStyle(document.getElementById('panel')).display,view:document.body.dataset.view})`,
+      );
+      assert.equal(panelDom.hidden, false);
+      assert.notEqual(panelDom.display, 'none');
+      await fs.writeFile(
+        path.join(stateDir, 'cold-panel-renderer.png'),
+        (await panelWin.webContents.capturePage()).toPNG(),
+      );
+      const stack = await inventory();
+      observations.push({
+        label: 'cold-applications-start',
+        panelDom,
+        candidate: getState().candidate,
+        recovery: getState().recoveryAttempts.at(-1),
+        windows: stack.filter((w) => w.pid === process.pid),
+      });
+      await exec(
+        'python3',
+        [
+          path.join(__dirname, 'native-capture.py'),
+          JSON.stringify(screen.getPrimaryDisplay().bounds),
+          path.join(stateDir, 'cold-applications.png'),
+        ],
+        { timeout: 20000 },
+      );
+      await save('running');
+      for (const workspace of ['1', '0']) {
+        await exec('xdotool', ['set_desktop', workspace]);
+        await delay(700);
+      }
+    }
     await setExpanded(false);
     const area = (screen.getAllDisplays().find((d) => !d.internal) || screen.getPrimaryDisplay())
       .workArea;
@@ -102,7 +146,7 @@ exports.run = async ({
       assert.equal(top?.id, avatarId, `${label}: native panel must not cover the astronaut`);
     }
     await check('standalone');
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (process.env.VOYAGER_PROOF_KEYBOARD === '1' ? 0 : 3); i++) {
       await clickAvatar();
       assert(panelWin.isVisible(), 'Native click should open the panel');
       await check(`reopened-${i}`);
@@ -202,11 +246,16 @@ exports.run = async ({
       'visibility-shell',
       'Visibility terminal',
       stateDir,
+      '--terminal',
+      process.env.VOYAGER_PROOF_TERMINAL || 'ghostty',
     );
     vessel = created.session_id;
     await refresh();
-    const ownWindow = getState().windows.find((w) => w.title === 'Visibility terminal');
+    const record = getState().records.find((r) => r.nativeId === 'visibility-shell');
+    const ownWindow = record && getState().windows.find((w) => w.pid === record.pid);
     assert(ownWindow, 'Disposable native terminal must be mapped');
+    await setExpanded(false);
+    await exec('xdotool', ['windowactivate', '--sync', String(ownWindow.id)], { timeout: 3000 });
     assert(await dock(ownWindow.id));
     await delay(350);
     assert.equal(
@@ -218,10 +267,27 @@ exports.run = async ({
     undock();
     await setExpanded(true);
     await check('returned-from-terminal');
-    await clickAvatar();
-    await check('returned-collapsed');
-    await clickAvatar();
-    await check('returned-reopened');
+    if (process.env.VOYAGER_PROOF_KEYBOARD !== '1') {
+      await clickAvatar();
+      await check('returned-collapsed');
+      await clickAvatar();
+      await check('returned-reopened');
+    }
+    if (process.env.VOYAGER_PROOF_D04 === '1')
+      await require('./applications-proof.cjs').run({
+        avatarWin,
+        panelWin,
+        rpc,
+        inventory,
+        dock,
+        getState,
+        setExpanded,
+        stateDir,
+        vessel,
+        target: ownWindow.id,
+        input,
+        observations,
+      });
     await save('pass');
     console.log('Native panel visibility journey passed.');
   } catch (error) {

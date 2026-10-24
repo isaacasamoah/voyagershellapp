@@ -23,8 +23,14 @@ is our starting point, and we’d love to build toward it with other developers.
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved; the [docking implementation plan](tasks/plan.md) is ready for review. These
-requirements do not describe implemented behavior yet.
+approved. The [docking implementation plan](tasks/plan.md) is ready for owner review.
+Its four slices implement clear refusal of unsupported targets, visible placement
+before sound, recovery after target loss, and independent Applications recovery.
+The owner-trial refinement restores the floating controls to their pre-dock
+positions, clamped to an available display when necessary.
+All four passed independent review and packaged Fedora checks. The task list
+records test setup limits and voice teardown uncertainty. Owner acceptance,
+merge and installation remain separate decisions.
 
 ## Current prototype
 
@@ -38,7 +44,9 @@ requirements do not describe implemented behavior yet.
   See [Vessels and fleets](docs/fleets.md).
 - **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
-- Docking selects the human control attachment. Undocking or closing Electron
+- Docking requires a verified running, connected managed agent. Hover and drop
+  check the same eligibility rules; external or changed targets refuse with a
+  visible explanation and no implicit registration. Undocking or closing Electron
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
@@ -53,10 +61,10 @@ requirements do not describe implemented behavior yet.
   [development facility](docs/development-tests.md) does not grant control of the
   installed app and still requires a live graphical acceptance trial.
 
-The existing end-to-end platform proof is Fedora with dedicated Ghostty XWayland
-windows. An opt-in xterm viewer now shares the launch and verified identity boundary.
-Its native fixture checks placement, redraw, shortcut input and closure; the full
-app/service, voice and audible docking trial remains pending. Ordinary
+The packaged candidate has Fedora GNOME/XWayland evidence with dedicated Ghostty
+and xterm windows. Native trials cover placement, target-loss recovery, voice
+routing and recorded docking output. The task list preserves fixture setup and
+voice teardown limits; owner acceptance remains open. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
@@ -64,7 +72,7 @@ Rebuilding the executable at the same path preserves viewer and instance CLI pat
 Bash open receipts also wait for the viewer connection, not just a mapped terminal window.
 
 Explicit supervisor preemption, knowledge extraction and shared graphs are later
-work. Voyager is an experimental prototype.
+work. Voyager is an experimental tracer-bullet build.
 
 ## Talk to Voyager
 
