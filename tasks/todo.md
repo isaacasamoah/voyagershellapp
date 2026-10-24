@@ -47,7 +47,7 @@ Estimated scope: medium, up to five files. Keep current service control authoriz
 
 ## D02: complete a valid dock visibly and audibly
 
-- [ ] D02 complete.
+- [x] D02 complete.
 
 Take the eligible target through accepted control attachment, confirmed visible placement and one success sound. Handle failed placement and late replies within the same journey.
 
@@ -69,8 +69,8 @@ Build evidence pending independent review, 24 October 2026:
 - Native Codex journeys passed with xterm and Ghostty. A valid drop visibly places the avatar and produces recorded output audio. Covered placement is accepted by the service but then fails visibly, releases control, keeps the managed runtime/capture running and records no output sound. An invalidated attempt leaves no attachment.
 - Output recording requires an unmuted sink and quiet baseline. Its onset/end observations use the main-process monotonic clock at audio chunk receipt. This is output-monitor evidence, not a room microphone measurement or the final timing batch.
 - The extended polish/voice journey passed with both viewers. One earlier xterm cleanup failed with changed terminal window identity, then the follow-up passed. The earlier failure and verified cleanup remain recorded; its cause is unresolved and is not claimed fixed by D02.
-- Initial review found that a visible but misplaced avatar could pass placement. The single corrective build adds off-target, malformed-bounds and delayed-move regressions. Native bounds must now reach the requested position within two physical pixels. Corrected xterm and Ghostty trials record matching source/executable manifests, independently checked native bounds and compositor images of the avatar over the terminal. All 66 desktop tests pass. Correction review remains pending.
-- D03 target-loss recovery, D04 Applications recovery, the 20-trial batches and packaged checks remain open. D02 stays unchecked until independent review passes.
+- Initial review found that a visible but misplaced avatar could pass placement. The single corrective build adds off-target, malformed-bounds and delayed-move regressions. Native bounds must now reach the requested position within two physical pixels. Corrected xterm and Ghostty trials record matching source/executable manifests, independently checked native bounds and compositor images of the avatar over the terminal. All 66 desktop tests pass. Correction review passed with no Required or Critical findings.
+- D03 target-loss recovery, D04 Applications recovery, the 20-trial batches and packaged checks remain open. D02 passed independent correction review.
 
 Dependencies: D01.
 
@@ -80,8 +80,8 @@ Estimated scope: medium, up to five files. The useful result is the complete doc
 
 ## Checkpoint D-A
 
-- [ ] D01-D02 pass their controlled regressions and real candidate journeys. Applicable checks/builds pass, and observed evidence is linked outside Git.
-- [ ] Preserve refusal, placement and sound evidence for the final owner review. The authorized completion run in the plan permits continuing after independent review.
+- [x] D01-D02 pass their controlled regressions and real candidate journeys. Applicable checks/builds pass, and observed evidence is linked outside Git.
+- [x] Preserve refusal, placement and sound evidence for the final owner review. The authorized completion run in the plan permits continuing after independent review.
 
 ## D03: recover when a docked target becomes unusable
 
