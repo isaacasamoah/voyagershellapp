@@ -83,8 +83,12 @@ technical documentation and guides. Use the canonical
 `spec-driven-development` skill for specifications, `planning-and-task-breakdown`
 for `tasks/plan.md` and its default `tasks/todo.md` task list, and the existing
 build/incremental implementation and Git skills for execution and version control.
-Keep those procedures unchanged for the first trial. Do not create plans before
-specification review or duplicate task status in human-facing project notes.
+Keep those procedures unchanged for the first trial. Plan and implement one
+capability at a time in the approved map order. The active plan and task list name
+that capability; slices deliver complete, testable behavior rather than technical
+layers. Later-capability notes are reference material, not an executable task queue.
+Do not create plans before specification review or duplicate task status in
+human-facing project notes.
 
 Human-facing documentation lives at `/home/isaac/obsidian/Projects/voyagershellapp`.
 Read its `status.md` for project navigation. Use `working-docs` for walkthroughs,

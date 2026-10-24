@@ -46,7 +46,7 @@ Each module specification defines its successful journey, a deliberately differe
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The [implementation plan](tasks/plan.md) and [task list](tasks/todo.md) are now drafted for review. No product implementation has started.
+Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) are drafted for review. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. No product implementation has started.
 
 ## Review and development workflow
 
@@ -54,7 +54,7 @@ The capability boundaries, build order and four module specifications are approv
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-The active plan uses `tasks/plan.md` and its task list uses `tasks/todo.md`, following spec-driven-development and its canonical planning-and-task-breakdown skill. It identifies the governing specification for each task. Follow the existing build and Git skills unchanged for the first trial. Review and approve the plan before implementation.
+Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The active `tasks/plan.md` and `tasks/todo.md` currently cover only `docking-recovery`. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are future acceptance requirements. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
