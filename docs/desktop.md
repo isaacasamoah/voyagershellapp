@@ -142,7 +142,8 @@ and the native window inventory confirms a visible avatar above the intended
 terminal. Only that attempt requests a docking sound. Covered targets, failed
 placement and superseded attempts cannot report success. Failure releases the
 attachment and reveals the floating controls. Recovery after a previously
-successful dock and independent Applications recovery remain later slices.
+successful dock releases control and restores the floating controls. Applications
+recovery is undergoing native verification in the fourth slice.
 
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
@@ -345,3 +346,50 @@ current configuration, apply temporary arrangement/scale changes, then restore
 and compare the configuration even after failure. The test uses
 [Mutter's versioned display interface](https://github.com/GNOME/mutter/blob/49.0/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml).
 These checks establish the exercised Fedora XWayland behavior only.
+
+
+## Applications and keyboard recovery
+
+Opening the same candidate again releases its control attachment and reveals the
+existing panel and avatar. It keeps the managed runtime and capture. Ctrl+Alt+V
+uses the same recovery operation. A later dock supersedes an unfinished recovery.
+The recovery does not submit work or start a replacement agent.
+
+On stock GNOME, Applications appears on the primary monitor. XWayland may retain
+an old pointer position while the GNOME grid owns input. The launching process
+passes an explicit Applications-launch flag through Electron's single-instance data;
+that path chooses the grid's primary display. Keyboard and ordinary command-line
+recovery use the pointer display. The installer adds `--from-applications` to its desktop entry. Inherited terminal
+environment variables do not identify an Applications launch. Custom launchers or GNOME extensions that move
+the grid are not established by this trial. This small selector is in
+`desktop/src/recovery.cjs`; it is not a cross-platform window-management framework.
+
+The platform facts come from [GNOME Shell 49.0's overview monitor constraint](https://github.com/GNOME/gnome-shell/blob/49.0/js/ui/overview.js),
+[Electron 44.7's single-instance data](https://github.com/electron/electron/blob/v44.7.0/docs/api/app.md#apprequestsingleinstancelockadditionaldata).
+The requested panel anchor is passed directly into placement because native
+bounds can still report the old monitor immediately after a move.
+
+`VOYAGER_PROOF_D04=1` extends the visibility proof with a temporary, separately
+named Applications entry. The operator selects that exact candidate in the real
+GNOME grid while docked and after failed placement. Twenty further launches use
+that same desktop entry, measuring request through both native windows being
+visible. Runtime and capture identity must survive every trial. The launcher is
+removed afterward. `VOYAGER_PROOF_KEYBOARD=1` uses actual key events in an isolated
+desktop so the installed app's shortcut is not replaced.
+
+`VOYAGER_PROOF_BATCH=1 VOYAGER_PROOF_D02=1` extends the docking proof with twenty
+actual pointer drops and output-monitor recordings. Every drop must visibly
+place the avatar and request exactly one sound. At least nineteen recordings
+must begin within two seconds. All slow and failed runs remain evidence.
+
+For packaged trials, `VOYAGER_PROOF_APP` selects the built executable in the native
+Codex fixture. The service is its bundled `resources/bin/voyager`, not the checkout
+binary. Explicit proof flags can load the harness from an absolute
+`VOYAGER_PROOF_DIRECTORY`; normal launch does not load this code. Source, harness,
+package and bundled binary hashes are recorded before and after each trial.
+No proof flag installs or restarts the main app.
+
+The pointer fixture uses logical desktop coordinates. Mutter's
+[49.0 monitor-stream transform](https://github.com/GNOME/mutter/blob/49.0/src/backends/meta-screen-cast-monitor-stream.c)
+expects stream pixels, so the fixture applies each monitor's scale. X11 pointer
+readback is only a check over XWayland windows, not over GNOME's own grid.

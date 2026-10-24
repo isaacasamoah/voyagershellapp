@@ -11,6 +11,7 @@ function desktop(
     throw Error('Unexpected control attachment');
   },
 ) {
+  const handlers = new Map();
   const nativeRequire = createRequire(sourcePath);
   const context = vm.createContext({
     require(name) {
@@ -20,6 +21,13 @@ function desktop(
         };
       if (name !== 'electron') return nativeRequire(name);
       return {
+        screen: {
+          getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+          screenToDipPoint: (p) => p,
+          getDisplayNearestPoint: (point) => ({
+            workArea: { x: point.x >= 1000 ? 1000 : 0, y: 0, width: 1000, height: 800 },
+          }),
+        },
         app: {
           commandLine: { appendSwitch() {} },
           disableHardwareAcceleration() {},
@@ -28,7 +36,9 @@ function desktop(
           setPath() {},
           requestSingleInstanceLock: () => true,
           whenReady: () => ({ then() {} }),
-          on() {},
+          on(name, callback) {
+            handlers.set(name, callback);
+          },
         },
       };
     },
@@ -59,6 +69,7 @@ function desktop(
     rpc = async (action) => { calls.push(action); return rows; };
     sendState = () => {};
     globalThis.realSetExpanded = setExpanded;
+    globalThis.realPlacePanel=placePanel;globalThis.realPlaceAvatar=placeAvatar;
     setExpanded = async () => { calls.push('panel'); };
     placeAboveTerminal = async () => {};
     follow = () => {};
@@ -66,7 +77,7 @@ function desktop(
   `,
     context,
   );
-  return { context, run: (code) => vm.runInContext(code, context) };
+  return { context, handlers, run: (code) => vm.runInContext(code, context) };
 }
 
 test('the drop path refuses an external client without registration or a success sound', async () => {
@@ -367,4 +378,77 @@ test('a late refresh error cannot release a newer dock', async () => {
   assert.equal(app.run('binding.session.id'), 'new');
   assert.equal(app.run('busy'), false);
   assert.equal(app.context.releases.length, 0);
+});
+
+function recoveryWindows(app) {
+  app.run(`
+    Object.assign(avatarWin,{isMinimized:()=>false,moveTop(){},setParentWindow(){},getBounds:()=>({x:0,y:0,width:120,height:120})});
+    panelWin={isMinimized:()=>false,show(){calls.push('panel-shown');},focus(){calls.push('focused');}};
+    candidateWin={hide(){calls.push('cue-hidden');}};
+    desktopSnapshot=async()=>({pointer:{x:1500,y:200}});
+    placeAvatar=(x,y)=>calls.push('placed:'+x+','+y);
+    raiseSeatedAvatar=()=>{};
+  `);
+}
+
+test('Applications recovery releases the dock and reveals both controls on the current display', async () => {
+  const app = await dockedRefresh();
+  recoveryWindows(app);
+  await app.handlers.get('second-instance')();
+  assert.equal(app.run('binding'), null);
+  assert.deepEqual(Array.from(app.context.releases), ['accepted']);
+  assert.equal(app.run('recoveryAttempts.at(-1).display.x'), 1000);
+  assert.ok(app.context.calls.includes('panel-shown'));
+  assert.ok(app.context.calls.includes('visible'));
+  await app.run('refresh()');
+  assert.equal(app.run('binding'), null);
+});
+
+test('repeated recovery does not create or stop an agent', async () => {
+  const app = await dockedRefresh();
+  recoveryWindows(app);
+  await app.handlers.get('second-instance')();
+  await app.handlers.get('second-instance')();
+  assert.equal(app.run('binding'), null);
+  assert.deepEqual(Array.from(app.context.releases), ['accepted']);
+  assert.equal(app.context.calls.includes('create'), false);
+  assert.equal(app.context.calls.includes('stop-instance'), false);
+});
+
+test('a late recovery query cannot move or focus controls after a new dock', async () => {
+  const app = await dockedRefresh();
+  recoveryWindows(app);
+  app.run(
+    'globalThis.finishRecovery=null;desktopSnapshot=()=>new Promise(r=>{finishRecovery=r;});',
+  );
+  const pending = app.handlers.get('second-instance')();
+  while (!app.run('finishRecovery')) await new Promise((r) => setImmediate(r));
+  app.run(
+    "dockGeneration++;binding={session:{id:'new'}};finishRecovery({pointer:{x:1500,y:200}});",
+  );
+  await pending;
+  assert.equal(app.run('binding.session.id'), 'new');
+  assert.equal(app.context.calls.includes('focused'), false);
+  assert.equal(app.context.calls.includes('panel'), false);
+});
+
+test('Applications recovery uses its chosen display while native bounds still report the old position', async () => {
+  const app = await dockedRefresh();
+  recoveryWindows(app);
+  app.run(`
+    setExpanded=realSetExpanded;placePanel=realPlacePanel;placeAvatar=realPlaceAvatar;
+    avatarWin.setBounds=bounds=>calls.push({avatar:bounds});
+    Object.assign(panelWin,{isVisible:()=>false,getBounds:()=>({x:5,y:5,width:320,height:372}),setBounds:bounds=>calls.push({panel:bounds}),showInactive(){},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])});
+  `);
+  await app.handlers.get('second-instance')();
+  const requested = app.context.calls.filter((c) => c?.panel).at(-1).panel;
+  assert(requested.x >= 1000, 'Panel returned to the old display');
+});
+
+test('an Applications launch carries its GNOME display context into recovery', async () => {
+  const app = await dockedRefresh();
+  recoveryWindows(app);
+  app.run('screen.getPrimaryDisplay=()=>({workArea:{x:2000,y:0,width:1000,height:800}})');
+  await app.handlers.get('second-instance')(null, [], '', { gnomeApplications: true });
+  assert.equal(app.run('recoveryAttempts.at(-1).display.x'), 2000);
 });

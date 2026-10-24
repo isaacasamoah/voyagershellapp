@@ -184,3 +184,25 @@ The native recovery helper and bounded monitor trial are test code. They extend
 the existing polish journey without a new test service or product framework.
 Their file scope exceeds the initial estimate because actual workspace and
 monitor behavior could not be established by renderer fixtures alone.
+
+## D04 implementation notes
+
+Applications and keyboard recovery share one operation that releases control,
+clears drag state and restores the existing controls. The requested panel anchor
+is explicit so asynchronous native geometry cannot send the panel back to the
+previous display. A small GNOME launch-context selector handles the stock
+Applications grid, whose primary-monitor position is independent of stale
+XWayland pointer observations. Keyboard recovery retains pointer-based placement.
+Custom desktop extensions and other platforms need their own verification.
+
+The final proof includes actual grid selection and repeated launches of that same
+temporary entry. Keyboard verification uses a separate GNOME desktop and actual
+XTest keys because the installed app already owns Ctrl+Alt+V. The isolated
+session initializes real workspace state before launching the candidate; it does
+not inject fake window metadata. The fresh-session missing-metadata failure is
+retained as a limitation for review.
+
+Native pointer scaling, packaged harness loading, audio timing batches and
+candidate hashing are test support for the same user outcome. Their file scope
+exceeds the initial estimate. No installed launcher, active shortcut or main
+service is changed.

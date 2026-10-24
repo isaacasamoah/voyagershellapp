@@ -1,4 +1,5 @@
 const { placeAboveTarget } = require('./placement.cjs');
+const { launchContext, recoveryDisplay } = require('./recovery.cjs');
 const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -40,7 +41,7 @@ app.disableHardwareAcceleration();
 app.setName('Voyager Shell');
 app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
-const primaryInstance = app.requestSingleInstanceLock();
+const primaryInstance = app.requestSingleInstanceLock(launchContext());
 if (!primaryInstance) app.quit();
 
 let avatarWin,
@@ -67,6 +68,7 @@ let service = null,
   dockError = '';
 let busy = false;
 const dockAttempts = [];
+const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
@@ -273,8 +275,7 @@ function setBoundsIfChanged(client, bounds) {
   const previous = client.getBounds();
   if (Object.keys(bounds).some((key) => previous[key] !== bounds[key])) client.setBounds(bounds);
 }
-function placePanel() {
-  const p = avatarPosition();
+function placePanel(p = avatarPosition()) {
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
   const height = Math.min(area.height, panelHeight());
@@ -314,21 +315,48 @@ function setSeated(value) {
 function raiseSeatedAvatar() {
   if (expanded && seated && !dragging) avatarWin.moveTop();
 }
-app.on('second-instance', async () => {
+async function recoverControls(context) {
   if (!avatarWin || avatarWin.isDestroyed()) return;
+  undock();
+  const generation = dockGeneration;
+  const attempt = { generation, requestedAt: performance.now(), state: 'requested' };
+  recoveryAttempts.push(attempt);
+  if (recoveryAttempts.length > 32) recoveryAttempts.shift();
+  dragging = null;
+  panelDrag = null;
+  candidateWin.hide();
   if (avatarWin.isMinimized()) avatarWin.restore();
   if (panelWin.isMinimized()) panelWin.restore();
+  avatarWin.showInactive();
+  let cursor = screen.getCursorScreenPoint();
   try {
-    await setExpanded(true);
-    panelWin.show();
-    panelWin.focus();
-    avatarWin.showInactive();
-    raiseSeatedAvatar();
+    cursor = screen.screenToDipPoint((await desktopSnapshot()).pointer);
   } catch (error) {
     console.error(error.message);
   }
-});
-async function setExpanded(value) {
+  if (generation !== dockGeneration) {
+    attempt.state = 'superseded';
+    return;
+  }
+  const area = recoveryDisplay(screen, cursor, context).workArea;
+  attempt.display = area;
+  attempt.cursor = cursor;
+  await setExpanded(true, { x: area.x + area.width - avatarSize - 24, y: area.y + 28 });
+  if (generation !== dockGeneration) {
+    attempt.state = 'superseded';
+    return;
+  }
+  panelWin.show();
+  panelWin.focus();
+  avatarWin.showInactive();
+  raiseSeatedAvatar();
+  Object.assign(attempt, { state: 'presented', presentedAt: performance.now() });
+}
+app.on('second-instance', (_event, _argv, _cwd, context) =>
+  recoverControls(context).catch((error) => console.error(error.message)),
+);
+
+async function setExpanded(value, position) {
   expanded = value;
   if (value) {
     if (binding) {
@@ -337,7 +365,7 @@ async function setExpanded(value) {
       return;
     }
     setSeated(true);
-    placePanel();
+    placePanel(position);
     sendState();
     panelWin.showInactive();
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
@@ -1214,8 +1242,7 @@ app.whenReady().then(async () => {
   if (
     !globalShortcut.register('Control+Alt+V', () => {
       if (binding) avatarWin.webContents.send('dock-sound', 'undock');
-      undock();
-      setExpanded(true).catch((error) => console.error(error.message));
+      recoverControls().catch((error) => console.error(error.message));
     })
   )
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
@@ -1252,26 +1279,31 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
+    const proofDirectory = process.env.VOYAGER_PROOF_DIRECTORY || path.join(__dirname, '../test');
+    if (!path.isAbsolute(proofDirectory)) throw Error('Proof directory must be absolute');
     require(
-      process.argv.includes('--proof-fleet-creation')
-        ? '../test/fleet-creation-proof.cjs'
-        : process.argv.includes('--proof-visibility')
-          ? '../test/visibility-proof.cjs'
-          : process.argv.includes('--proof-polish')
-            ? '../test/polish-proof.cjs'
-            : process.argv.includes('--proof-fleets')
-              ? '../test/fleets-proof.cjs'
-              : process.argv.includes('--proof-authority')
-                ? '../test/authority-proof.cjs'
-                : process.argv.includes('--proof-lifecycle')
-                  ? '../test/lifecycle-proof.cjs'
-                  : process.argv.includes('--proof-control')
-                    ? '../test/control-proof.cjs'
-                    : process.argv.includes('--proof-registration')
-                      ? '../test/registration-proof.cjs'
-                      : process.argv.includes('--proof-docking')
-                        ? '../test/docking-proof.cjs'
-                        : '../test/live-proof.cjs',
+      path.join(
+        proofDirectory,
+        process.argv.includes('--proof-fleet-creation')
+          ? 'fleet-creation-proof.cjs'
+          : process.argv.includes('--proof-visibility')
+            ? 'visibility-proof.cjs'
+            : process.argv.includes('--proof-polish')
+              ? 'polish-proof.cjs'
+              : process.argv.includes('--proof-fleets')
+                ? 'fleets-proof.cjs'
+                : process.argv.includes('--proof-authority')
+                  ? 'authority-proof.cjs'
+                  : process.argv.includes('--proof-lifecycle')
+                    ? 'lifecycle-proof.cjs'
+                    : process.argv.includes('--proof-control')
+                      ? 'control-proof.cjs'
+                      : process.argv.includes('--proof-registration')
+                        ? 'registration-proof.cjs'
+                        : process.argv.includes('--proof-docking')
+                          ? 'docking-proof.cjs'
+                          : 'live-proof.cjs',
+      ),
     )
       .run({
         avatarWin,
@@ -1288,7 +1320,9 @@ app.whenReady().then(async () => {
         setExpanded,
         park,
         getState: () => ({
+          candidate: { app: process.execPath, service: binary, packaged: app.isPackaged },
           dockAttempts,
+          recoveryAttempts,
           sessions,
           windows,
           records,

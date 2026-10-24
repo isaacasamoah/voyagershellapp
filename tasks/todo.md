@@ -138,6 +138,24 @@ Likely files: `desktop/src/main.cjs`, `desktop/test/control.test.cjs`, `desktop/
 
 Estimated scope: medium, up to four files. The separately named launcher is a temporary test artifact, not a change to the installed Applications entry.
 
+D04 initial build evidence, pending independent review:
+
+- All 79 desktop tests, 53 ordinary Rust tests, formatting and Clippy pass.
+- Actual GNOME Applications selections recover while docked and after failed
+  placement with both viewers. Twenty repeated launches per viewer all restore
+  controls within one second. Runtime and capture identities remain unchanged.
+- Native Ctrl+Alt+V recovery passes in an isolated GNOME/XWayland desktop. Its
+  initial missing-workspace and remote-input failures are retained; XTest key
+  events prove the shortcut without replacing the installed app's registration.
+- Twenty actual pointer drops per viewer all produce recorded output within two
+  seconds, with visible native placement and one sound request per attempt.
+  The largest observed onset is 267 ms. Output-monitor timing is not room audio.
+- A failing inherited-environment regression tightened launcher identification:
+  the candidate desktop entry now passes an explicit Applications flag. This
+  final launcher wiring will be verified on the packaged candidate.
+- Packaged combined proof and fresh-context D04 review remain pending. D04 is
+  deliberately unchecked until those required checks are resolved.
+
 ## Checkpoint D-B: accept the docking capability
 
 - [ ] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.

@@ -36,7 +36,7 @@ exports.run = async ({
           cleanup,
           limits: [
             process.env.VOYAGER_PROOF_D02 === '1'
-              ? 'D02 native placement and output-monitor audio evidence on Fedora GNOME/XWayland. No room microphone measurement. Final timing batch and packaged proof remain pending.'
+              ? 'D02 native placement and output-monitor audio evidence on Fedora GNOME/XWayland. No room microphone measurement. The candidate identity and any timing batch are recorded separately in observations.'
               : 'D01 native eligibility evidence on Fedora GNOME/XWayland. Sound counts are IPC requests, not audible output.',
           ],
         },
@@ -100,7 +100,17 @@ exports.run = async ({
       actual: screen.getCursorScreenPoint(),
     });
     await wait(
-      () => screen.getCursorScreenPoint(),
+      async () =>
+        screen.screenToDipPoint(
+          JSON.parse(
+            (
+              await exec(
+                path.join(path.dirname(getState().candidate.service), 'voyager-windows'),
+                [],
+              )
+            ).stdout,
+          ).pointer,
+        ),
       (cursor) => Math.abs(cursor.x - point.x) < 3 && Math.abs(cursor.y - point.y) < 3,
       'Native cursor did not reach the requested point',
     );
@@ -355,6 +365,39 @@ exports.run = async ({
           path.join(stateDir, 'native-docked-terminal.png'),
         ],
         { timeout: 20000 },
+      );
+    }
+    if (process.env.VOYAGER_PROOF_BATCH === '1') {
+      for (let i = 0; i < 20; i++) {
+        assert.equal((await hover(target)).state, 'ready');
+        const beforeSounds = await avatarWin.webContents.executeJavaScript(
+          'window.dockingProofSounds.length',
+        );
+        const { audio } = await captureOutput(stateDir, `batch-${i + 1}`, () =>
+          released(`batch-accepted-${i + 1}`, 'ready'),
+        );
+        const attempt = getState().dockAttempts.at(-1);
+        assert(audio.onsetObservedAt !== null, 'No output sound captured in timing batch');
+        assert(audio.endObservedAt >= audio.onsetObservedAt);
+        assert.equal(
+          await avatarWin.webContents.executeJavaScript('window.dockingProofSounds.length'),
+          beforeSounds + 1,
+        );
+        observations.push({
+          label: `docking-timing-${i + 1}`,
+          viewer,
+          candidate: getState().candidate,
+          attempt,
+          audio,
+          dropToOutputMs: audio.onsetObservedAt - attempt.droppedAt,
+        });
+        await save('running');
+      }
+      const trials = observations.filter((o) => o.label.startsWith('docking-timing-'));
+      assert.equal(trials.length, 20);
+      assert(
+        trials.filter((t) => t.dropToOutputMs <= 2000).length >= 19,
+        'Docking output exceeded the approved timing target',
       );
     }
     assert.equal(getState().binding.session.id, vessel);

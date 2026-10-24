@@ -13,7 +13,9 @@ run it. Ghostty is required for Vessels. Install and authenticate Codex separate
 to use agent Vessels and Voyager's private chat/voice conversation. Missing Codex
 does not prevent the service or Bash Vessels from running.
 
-Opening the app starts or reconnects to the service. Closing the panel leaves work
+Opening the app starts or reconnects to the service. The desktop entry passes
+`--from-applications` so stock GNOME recovery uses the Applications grid's primary
+display rather than a stale XWayland pointer position. Closing the panel leaves work
 running. Use each Vessel's menu to stop/remove it, then the panel's small menu to
 stop the service. No restart or migration of an already running service is forced.
 

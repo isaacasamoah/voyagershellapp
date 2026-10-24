@@ -120,9 +120,17 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
             .stderr(Stdio::null())
             .spawn()?,
     );
+    let packaged = std::env::var_os("VOYAGER_PROOF_APP").map(PathBuf::from);
+    let service_binary = match &packaged {
+        Some(app) => app
+            .parent()
+            .context("package directory")?
+            .join("resources/bin/voyager"),
+        None => PathBuf::from(env!("CARGO_BIN_EXE_voyager")),
+    };
     let service_log = fs::File::create(state.join("service.log"))?;
     let mut daemon = Owned(
-        Command::new(env!("CARGO_BIN_EXE_voyager"))
+        Command::new(&service_binary)
             .arg("--state")
             .arg(&state)
             .arg("serve")
@@ -138,10 +146,19 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
         thread::sleep(Duration::from_millis(50));
     }
     let desktop_log = fs::File::create(state.join("desktop.log"))?;
+    let mut app_command = Command::new(
+        packaged
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| root.join("desktop/node_modules/electron/dist/electron")),
+    );
+    if packaged.is_none() {
+        app_command.arg(root.join("desktop"));
+    }
     let mut desktop = Owned(
-        Command::new(root.join("desktop/node_modules/electron/dist/electron"))
+        app_command
             .args(["--ozone-platform=x11", "--expanded", "--proof-docking"])
-            .arg(root.join("desktop"))
+            .env("VOYAGER_PROOF_DIRECTORY", root.join("desktop/test"))
             .env("VOYAGER_STATE", &state)
             .env("VOYAGER_PROOF_EXTERNAL_PID", terminal.0.id().to_string())
             .env("VOYAGER_PROOF_EXTERNAL_THREAD", thread_id)
@@ -150,7 +167,7 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
             .stderr(desktop_log)
             .spawn()?,
     );
-    let deadline = Instant::now() + Duration::from_secs(100);
+    let deadline = Instant::now() + Duration::from_secs(240);
     let result = loop {
         if let Some(status) = desktop.0.try_wait()? {
             break Ok(status);

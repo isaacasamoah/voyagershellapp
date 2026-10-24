@@ -26,8 +26,9 @@ resume, current-work presentation, voice handoffs and docking recovery. The spec
 approved. The [docking implementation plan](tasks/plan.md) is in progress. Its
 first two slices implement clear refusal of unsupported targets and require
 visible placement before docking feedback. The third slice restores controls
-after target loss and is undergoing native verification and independent review.
-Applications recovery is not implemented yet.
+after target loss. Those three slices passed independent review. The fourth
+slice restores both controls through Applications and is undergoing native
+verification. Packaged acceptance and final review remain pending.
 
 ## Current prototype
 
