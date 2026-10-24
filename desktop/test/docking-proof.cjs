@@ -159,6 +159,9 @@ exports.run = async ({
         `({state:document.body.dataset.state,reason:document.getElementById('reason').textContent})`,
       ),
     });
+    const cue = observations.at(-1).cue;
+    assert.equal(cue.state, result.state);
+    assert.equal(cue.reason, result.reason);
     return result;
   };
   const released = async (label, expected) => {
@@ -259,6 +262,37 @@ exports.run = async ({
     const target = (await inventory()).find((w) => w.pid === record.pid);
     const eligible = await hover(target);
     assert.equal(eligible.state, 'ready');
+    await move({ x: 1, y: 1 });
+    await wait(
+      () => getState().dragging?.candidate,
+      (c) => c?.outside && c.state === 'refused',
+      'Leaving the target must invalidate its cue',
+    );
+    assert.equal(candidateWin.isVisible(), false);
+    const returnedTarget = (await inventory()).find((w) => w.id === target.id);
+    await move(
+      screen.screenToDipPoint({
+        x: returnedTarget.x + returnedTarget.width / 2,
+        y: returnedTarget.y + returnedTarget.height / 2,
+      }),
+    );
+    await wait(
+      () => getState().dragging?.candidate,
+      (c) => c?.state === 'ready' && c.window.id === target.id,
+      'Returning must recheck the same target',
+    );
+    assert(candidateWin.isVisible());
+    const returnedCue = await candidateWin.webContents.executeJavaScript(
+      `({state:document.body.dataset.state,reason:document.getElementById('reason').textContent})`,
+    );
+    assert.equal(returnedCue.state, 'ready');
+    assert.equal(returnedCue.reason, 'Release to dock');
+    observations.push({
+      label: 'hover-reentry',
+      cue: returnedCue,
+      visible: candidateWin.isVisible(),
+    });
+
     await capture('managed-hover', candidateWin);
     await released('managed-accepted', 'ready');
     assert.equal(getState().binding.session.id, vessel);

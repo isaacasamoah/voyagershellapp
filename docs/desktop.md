@@ -209,6 +209,7 @@ VOYAGER_STATE=/absolute/fresh/private/state VOYAGER_PROOF_TERMINAL=xterm \
 ```
 
 Run from the checkout root in a GNOME graphical session. Repeat with `ghostty`.
+Leaving and returning to a target starts a fresh hover check and restores its cue.
 The check exercises external refusal, a valid managed target and a target stopped
 between hover and drop. It records screenshots, registration equality, control
 identity and sound-request counts in `docking-proof.json` under the private state

@@ -134,3 +134,50 @@ test('losing the hovered window retains a refusal for the later drop', () => {
   assert.equal(app.run('dragging.candidate?.state'), 'refused');
   assert.match(app.run('dragging.candidate.reason'), /unavailable|changed/);
 });
+
+test('returning to the same terminal rechecks and restores its hover cue', async () => {
+  const app = desktop();
+  app.run(`
+    panelWin = { getNativeWindowHandle: () => Buffer.from([99, 0, 0, 0]) };
+    candidateWin = { hide() { calls.push('hidden'); } };
+    showDockCandidate = (target, result) => calls.push(result.state);
+    checkDockTarget = async () => ({state: 'ready', reason: 'Release to dock'});
+    dragging = {};
+    previewDock(window);
+  `);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.run('dragging.candidate.state'), 'ready');
+  app.run('previewDock(null); previewDock(window);');
+  assert.equal(app.run('dragging.candidate.state'), 'checking');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.run('dragging.candidate.state'), 'ready');
+  assert.deepEqual(Array.from(app.context.calls), [
+    'checking',
+    'ready',
+    'hidden',
+    'checking',
+    'ready',
+  ]);
+});
+
+test('a late check from before leaving cannot replace the re-entry result', async () => {
+  const app = desktop();
+  app.run(`
+    panelWin = { getNativeWindowHandle: () => Buffer.from([99, 0, 0, 0]) };
+    candidateWin = { hide() {} };
+    showDockCandidate = (target, result) => calls.push(result.reason);
+    globalThis.pending = [];
+    checkDockTarget = () => new Promise(resolve => pending.push(resolve));
+    dragging = {};
+    previewDock(window);
+    previewDock(null);
+    previewDock(window);
+    pending[1]({state: 'refused', reason: 'Current target stopped'});
+  `);
+  await new Promise((resolve) => setImmediate(resolve));
+  app.run("pending[0]({state: 'ready', reason: 'Old target ready'});");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.run('dragging.candidate.state'), 'refused');
+  assert.equal(app.run('dragging.candidate.reason'), 'Current target stopped');
+  assert.equal(app.context.calls.includes('Old target ready'), false);
+});

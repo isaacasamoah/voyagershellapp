@@ -37,7 +37,7 @@ Additional verification, 24 October 2026:
 - The real external Codex comparison passed with xterm and Ghostty. Hover and drop refused the independently launched conversation without registration or attachment. The external server remained alive and its conversation remained readable. Managed Codex acceptance and a stop during hover also passed.
 - The new Rust integration test checks the desktop proof verdict. A failed native run demonstrated why a zero Electron exit status alone was insufficient. The test requires one external setup turn before opening the native client.
 - All 50 desktop tests, formatting, the full Rust suite and Clippy passed. An earlier full Rust run during a concurrent desktop trial exceeded the queued-read timing limit. The isolated test and the later full suite passed; the earlier result remains recorded.
-- A fresh-context reviewer is checking D01. Completion remains open until its required findings are resolved within the authorized single corrective build.
+- The fresh-context reviewer found that leaving and returning to the same target left its cue hidden and refused. The one corrective build adds re-entry and stale-reply regressions, restarts checking on re-entry, and verifies the rendered cue in both native Codex trials. All 52 desktop tests pass. Correction review remains pending.
 
 Dependencies: the owner approved the revised plan for this build trial.
 

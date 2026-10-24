@@ -473,12 +473,13 @@ function previewDock(target) {
       gesture.candidate = {
         ...gesture.candidate,
         state: 'refused',
+        outside: true,
         reason: 'This terminal is unavailable. Try docking again.',
       };
     candidateWin.hide();
     return;
   }
-  if (gesture.candidate?.window.id === target.id) return;
+  if (gesture.candidate?.window.id === target.id && !gesture.candidate.outside) return;
   const candidate = { window: target, state: 'checking', reason: 'Checking this terminal…' };
   gesture.candidate = candidate;
   showDockCandidate(target, candidate);
