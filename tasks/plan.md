@@ -1,12 +1,12 @@
 # Plan: recoverable docking
 
-Status: Draft for review, 24 October 2026. The governing specification is approved. This revised plan and its tasks still require review before implementation.
+Status: Approved for the build trial, 24 October 2026. D01 is the selected increment; the task list records its completion evidence. D02-D04 remain pending.
 
 ## Scope and outcome
 
 Implement only [docking-recovery](../SPEC-docking-recovery.md). The owner can dock onto a verified supported terminal, hear success only when docking is actually visible, understand a refusal, and recover the controls without restarting an agent.
 
-The four approved specifications remain unchanged. The initiative order remains docking, voice, resume, then panel. The [task list](todo.md) contains only the four docking slices. [Later-capability notes](future-capability-notes.md) preserve useful investigation from the superseded combined plan; they are reference material, not an active build queue. After docking is complete and reviewed, prepare the voice plan using what we learned. No task has started.
+The four approved specifications remain unchanged. The initiative order remains docking, voice, resume, then panel. The [task list](todo.md) contains only the four docking slices. [Later-capability notes](future-capability-notes.md) preserve useful investigation from the superseded combined plan; they are reference material, not an active build queue. After docking is complete and reviewed, prepare the voice plan using what we learned.
 
 ## Build complete behaviors
 
@@ -25,7 +25,7 @@ A slice stays open until its own real journey is observed. A unit test or accept
 
 ## Existing code to build on
 
-The [documentation branch](https://github.com/isaacasamoah/voyagershellapp/pull/24) still has unchanged product code. Recheck these observations against the chosen implementation revision:
+The implementation branch starts from the [approved documentation branch](https://github.com/isaacasamoah/voyagershellapp/pull/24). The following observations describe the starting code and guided the slices:
 
 - [Binding](../desktop/src/binding.cjs) already verifies process start identity, executable and window matching. Extend this rather than building another discovery system.
 - [The desktop main process](../desktop/src/main.cjs) uses different hover/drop checks and can register an external agent during a drop. `placeAboveTerminal()` can hide the avatar and return, after which its caller can reach the success-sound path.
@@ -51,10 +51,11 @@ Do not change runtime ownership, rank policy or the existing `dock` request shap
 
 Follow the governing spec and the project's Definition of Done. Each new regression test must first detect the old behavior or a deliberately invalid test setup. Use small, bounded diagnostics without terminal contents, credentials or private reasoning.
 
-Run from the selected worktree root. These are future implementation commands, not checks claimed to have run during planning.
+Run from the selected worktree root. The task list records which checks have run for the selected increment.
 
 ```sh
 npm --prefix desktop ci
+node desktop/node_modules/electron/install.js
 npm --prefix desktop run format:check
 npm --prefix desktop test
 ```
@@ -124,4 +125,23 @@ Run the resulting packaged executable and bundled Rust service against fresh pri
 
 The main risks are late asynchronous replies, window-state uncertainty, sound being scheduled but unheard, and accidentally exercising the installed build. The generation checks, explicit placement results and real-candidate evidence address them. Ghostty's separate rendering freeze is not repaired by this work; report it if it prevents a required journey from passing rather than claiming a fix.
 
-The owner approved the capability behavior and timing targets. This document asks for review of the implementation slices and test approach. After docking is complete and reviewed, prepare a separate active plan for voice. Retain later investigation as reference and use Git history to preserve this plan; do not overwrite unfinished work or invent an automatic archive policy.
+The owner approved the capability behavior and timing targets. The owner authorized the first build trial after reviewing the vertical slices. After docking is complete and reviewed, prepare a separate active plan for voice. Retain later investigation as reference and use Git history to preserve this plan; do not overwrite unfinished work or invent an automatic archive policy.
+
+## D01 implementation notes
+
+The slice needs eight product/test files rather than the five-file estimate:
+shared identity validation, main-process drag handling, candidate HTML/CSS,
+the panel reason, binding tests, main-process regression tests and a native
+pointer proof. These belong to the same refusal journey. Existing control-socket
+code and service authorization remain unchanged. README and the owning desktop
+guide describe the behavior; the plan and task list retain their existing roles.
+
+The native proof exposed a lost-target case: closing the terminal during a drag
+cleared the remembered target, so dropping showed no reason. A failing regression
+test now guards the fix. An earlier run also reproduced the separate D02 case of
+accepted control and a sound request while the avatar was hidden. D01's valid-target
+comparison records that observation without treating it as placement acceptance.
+
+`npm ci` installs this Electron package without its binary. The explicit installed
+package's `install.js` supplies the pinned runtime. Native checks must verify that
+binary exists before launch. Do not substitute the installed main app.

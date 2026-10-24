@@ -2,8 +2,9 @@
 
 Voyager's Electron client shows the local Rust service through a floating glass
 astronaut and a small panel. The native terminal remains your conversational
-interface. Docking registers an identified session or rejoins its registration,
-then selects it as [current control](control.md). Undocking records a release.
+interface. Docking selects [current control](control.md) only for a running,
+connected, registered agent managed by this service. It never registers an
+external terminal. Undocking records a release.
 Neither undocking nor quitting Electron
 stops capture or a service-owned worker.
 
@@ -50,7 +51,8 @@ Holding the astronaut leaves the panel visible. Pulling it away lifts it out
 with a short falling tone; returning to the panel or a supported terminal uses
 the inverse rising tone. A stationary hold is silent. Escape during a pull
 restores the previous attachment. The highlight clears on release. Moving a
-standalone astronaut never opens the panel automatically.
+standalone astronaut leaves the panel closed unless docking refuses. A refusal
+opens the panel with a readable reason and keeps the avatar visible.
 
 **Only the terminal-docked marker fades.** It sits centrally in the lower third
 as an overlay above the terminal, so the terminal can have an opaque background.
@@ -86,48 +88,24 @@ registration/capture and opens Ghostty. Docking selects control; it does not
 create a second registration. The bare Bash has command capture and agent access
 through `shell-exec` / `shell-read`, with no conversational interface.
 
-## Register an existing supported client
+## Identify a supported client
 
-This setup proves part of the mechanism. It does **not** fulfil the product
-brief of docking onto a normally opened terminal. The separate ordinary-discovery acceptance test must
-start with a user-opened terminal and an ordinary Codex launch, without a special
-launcher, injected identity or pre-registration. A simpler implementation must
-still perform that requested workflow. Keep window placement, agent identity,
-capture and process ownership as separate, explicitly proved capabilities.
+Docking supports dedicated Ghostty XWayland and xterm windows for managed Codex
+and Bash instances. The desktop verifies the viewer executable, process start
+identity and direct client. Codex must use the service's explicit Unix endpoint
+and fixed thread UUID. Bash must use the service's exact attachment arguments.
+A title, working folder or old registration does not establish eligibility.
 
-The first adapter is **Codex in a dedicated Ghostty XWayland window**, with one
-direct native client launched against an explicit Unix endpoint and fixed thread
-UUID. It supports the native command below, with optional `--no-alt-screen`:
+External clients can still be discovered or explicitly registered through the
+service, but cannot be docked through the desktop. Registration does not transfer
+process ownership. General terminal adoption remains future work.
 
-```sh
-codex --remote "unix://$CODEX_SOCKET" resume "$THREAD_ID" --no-alt-screen
-```
-
-The conversation must already exist and be loaded. A session picker, `--last`,
-tabs, an implicit default daemon, extra shell layers, and switching threads inside
-that client are unsupported. Launch arguments establish the fixed resume target;
-they cannot report later in-app thread switches. This is a bounded integration,
-not detection of every running CLI. No native agent is restarted by docking.
-
-Start the [service](service.md) against that same explicit socket. Set
-`VOYAGER_CODEX_BIN` when starting it to the native executable your terminal uses;
-different CLI/daemon installations may have different executable paths.
-
-For a separate demo window, from a graphical-session terminal:
-
-```sh
-GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
-  -e /absolute/path/to/codex --remote "unix://$CODEX_SOCKET" \
-  resume "$THREAD_ID" --no-alt-screen
-```
-
-The 11 October external-lead run recorded read-only native terminal turns after a full-access
-setup turn. Do not assume the remote terminal preserves the setup permissions.
-The tested Codex 0.162.1 remote resume rejected permission CLI flags. That external-client policy drift remains unresolved. New managed creation has
-separate native YOLO evidence in the [panel journey](panel-journey.md). Voyager requests YOLO when creating a worker;
-docking does not intentionally grant permissions.
-No transparency setting is required or changed. The Ghostty flag gives this
-prototype an unambiguous window-to-process mapping; it is not a visual requirement.
+The service's `attach-info` response establishes that it still holds the managed
+runtime. The desktop also requires one matching registration, running state and
+connected capture. Missing, removed, ambiguous or disconnected records refuse.
+Tabs, multiple windows for one viewer process and extra shell layers cannot
+establish the required one-to-one identity. Later in-app thread switches remain
+unsupported because launch arguments cannot report them.
 
 Build and open Voyager:
 
@@ -136,7 +114,7 @@ cargo build --locked --bins
 cd desktop
 npm ci
 node node_modules/electron/install.js
-VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start -- --expanded
+VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start -- --ozone-platform=x11 --expanded
 ```
 
 Use your actual private state directory. Start from the graphical session so
@@ -145,22 +123,24 @@ run the service independently of the terminal clients for persistence.
 
 ## Try the journey
 
-1. Start the native conversation and open its dedicated terminal before docking.
-   It is discoverable but unregistered; Voyager has not captured its history.
-2. Pull the astronaut from the panel onto that terminal. Electron verifies the
-   candidate window with a passive outline; that preview does not register it.
-   On release it checks the
-   native executable, process/start identity, explicit endpoint and thread. The
-   Rust service checks that the thread is loaded and acknowledges registration.
-3. Converse normally. Supported future user/assistant messages and lifecycle
-   events are recorded. Repeated docking keeps the same registration.
-4. Hover over the astronaut, then pull it away. Capture continues; nothing is
-   unregistered. The keyboard alternative is Ctrl+Alt+V.
-5. Dock again to rejoin. An unrelated same-title terminal must be refused.
-6. Use the [worker commands](workers.md) from the native agent or a script to start
-   one managed worker. Open its native interface in another terminal. Docking to
-   that worker joins its existing registration. Window creation remains a desktop
-   action, independent of the service's worker lifetime.
+1. Create a disposable Codex or Bash instance through the panel and open its
+   supported terminal viewer.
+2. Pull the astronaut onto the terminal. A neutral dashed outline says that
+   Voyager is checking it. Only a verified target gets the solid outline and
+   "Release to dock". Other windows show a refusal reason.
+3. Release the astronaut. The desktop repeats the live checks and retains the
+   process identity established during hover. A stopped or replaced client
+   cannot silently become a new target. Refusal leaves visible controls and a
+   reason in the panel, without registration or a success sound.
+4. Converse normally in an accepted managed terminal. Pull the astronaut away
+   to release control. The runtime and capture continue.
+5. Try an ordinary external terminal using the same supported viewer. It must
+   refuse and leave the service's registration list unchanged.
+
+Successful placement and sound remain separate requirements. The current
+placement path can still hide an accepted marker when its target is covered,
+then request a success sound. The next docking slice addresses that behavior;
+passing the refusal checks does not establish reliable complete docking.
 
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
@@ -181,10 +161,16 @@ registration does not guarantee they survive their original terminal closing.
 
 Electron main calls the Rust service CLI; the isolated renderer receives only
 presentation state. `connection-info` reveals connection identity without
-subscribing or importing conversation history. `register` is called only on a
-verified drop. Process identities are rechecked after acknowledgement before the
-avatar joins. Registration may succeed even if subsequent visual placement fails;
-the agent still appears in the service registry.
+subscribing or importing conversation history. Hover and drop call the same
+`resolveDockTarget` eligibility check. Each check uses its own window, service
+and process observations so a concurrent refresh cannot replace its inputs.
+Only the current drag can publish its hover result. A target that disappears
+leaves a refusal attached to that drag, so releasing it still explains the failure.
+
+A drop repeats discovery and checks the hovered identity before requesting the
+existing service control attachment. The desktop creates no registration and
+grants no rights. The service still authorizes control. Process identity remains
+separate from window placement, runtime ownership and capture.
 
 `voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
 only a window belonging to its calling process. Its separate layout operation
@@ -212,19 +198,28 @@ mouse events using a 1×1 region at the transparent corner, outside the artwork;
 the interactive avatar has its full input region restored. See the
 [pinned Electron implementation](https://github.com/electron/electron/blob/v44.7.0/shell/browser/ui/electron_desktop_window_tree_host_linux.cc#L226).
 
-The separate **live registration proof makes one real model request**:
+The D01 refusal check uses real native pointer events and disposable external
+and managed Bash windows. Start a candidate with fresh private state, after
+building its Rust binaries and installing its Electron runtime:
 
 ```sh
-VOYAGER_STATE=/absolute/private/state \
-VOYAGER_DEMO_THREAD=exact-native-thread-uuid \
-npm start -- --proof-registration
+VOYAGER_STATE=/absolute/fresh/private/state VOYAGER_PROOF_TERMINAL=xterm \
+  ./desktop/node_modules/electron/dist/electron --ozone-platform=x11 \
+  ./desktop --expanded --proof-docking
 ```
 
-Use only a deliberately selected demo conversation. The check rejects an unrelated
-same-title window, registers the selected existing session, records a harmless
-user/assistant marker exchange while detached and verifies the same registration
-on rejoin. Receipts stay in the private state directory. First registration and
-rejoining an earlier registration are reported separately.
+Run from the checkout root in a GNOME graphical session. Repeat with `ghostty`.
+The check exercises external refusal, a valid managed target and a target stopped
+between hover and drop. It records screenshots, registration equality, control
+identity and sound-request counts in `docking-proof.json` under the private state
+directory. It stops its disposable managed instance and external viewer, then
+exits Electron. Stop the isolated service separately with `voyager --state DIR stop`.
+It makes no model turn or microphone request. IPC sound counts do not prove
+acoustic output, and managed eligibility is not proof of D02 placement reliability.
+
+The older `--proof-registration` check describes the superseded external-docking
+behavior and is not a current acceptance test. Its historical evidence below
+does not authorize or establish general terminal adoption.
 
 Earlier on 11 October, the user physically docked the selected native terminal
 and its subsequent user/assistant exchange was captured. That establishes the

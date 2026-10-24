@@ -16,6 +16,7 @@ const {
   terminalSnapshot,
   identifyTerminal,
   resolveWindow,
+  resolveDockTarget,
   registeredSession,
   windowAt,
 } = require('./binding.cjs');
@@ -103,16 +104,16 @@ async function desktopSnapshot() {
   const { stdout } = await exec(probe, [], { timeout: 2000, maxBuffer: 1024 * 1024 });
   return JSON.parse(stdout);
 }
-async function identities() {
+async function identities(candidates = records) {
   const result = new Map();
-  for (const pid of new Set(records.flatMap((r) => [r.pid, r.frontend.pid]))) {
+  for (const pid of new Set(candidates.flatMap((r) => [r.pid, r.frontend.pid]))) {
     try {
       result.set(pid, await processIdentity(pid));
     } catch {}
   }
   return result;
 }
-async function discoverTerminals() {
+async function discoverTerminals(currentWindows = windows, currentSessions = sessions) {
   const endpoints = [];
   if (service?.codex_connected) {
     const info = await rpc('connection-info');
@@ -122,7 +123,7 @@ async function discoverTerminals() {
       external: true,
     });
   }
-  const managed = sessions.filter(
+  const managed = currentSessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
   );
   endpoints.push(
@@ -142,7 +143,7 @@ async function discoverTerminals() {
   );
   const found = (
     await Promise.all(
-      [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
+      [...new Set(currentWindows.map((w) => w.pid))].map(async (pid) => {
         const snapshot = await terminalSnapshot(pid).catch(() => null);
         if (!snapshot) return [];
         return (
@@ -163,6 +164,7 @@ async function discoverTerminals() {
     )
   ).flat();
   records = found;
+  return found;
 }
 function windowBehindAvatar(stack, point) {
   const overlays = [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE());
@@ -442,25 +444,72 @@ function advanceDrag(p, now = performance.now()) {
   if (dragging.moved) {
     placeAvatar(p.x - dragging.x, p.y - dragging.y);
     const target = windowBehindAvatar(windows, screen.dipToScreenPoint(p));
-    if (
-      target &&
-      records.filter((r) => r.pid === target.pid).length === 1 &&
-      windows.filter((w) => w.pid === target.pid).length === 1
-    ) {
-      const top = screen.screenToDipPoint({ x: target.x, y: target.y });
-      const bottom = screen.screenToDipPoint({
-        x: target.x + target.width,
-        y: target.y + target.height,
-      });
-      setBoundsIfChanged(candidateWin, {
-        x: top.x,
-        y: top.y,
-        width: bottom.x - top.x,
-        height: bottom.y - top.y,
-      });
-      if (!candidateWin.isVisible()) candidateWin.showInactive();
-    } else candidateWin.hide();
+    previewDock(target);
   }
+}
+function showDockCandidate(target, result) {
+  const top = screen.screenToDipPoint({ x: target.x, y: target.y });
+  const bottom = screen.screenToDipPoint({
+    x: target.x + target.width,
+    y: target.y + target.height,
+  });
+  setBoundsIfChanged(candidateWin, {
+    x: top.x,
+    y: top.y,
+    width: bottom.x - top.x,
+    height: bottom.y - top.y,
+  });
+  candidateWin.webContents
+    .executeJavaScript(
+      `document.body.dataset.state = ${JSON.stringify(result.state)}; document.getElementById('reason').textContent = ${JSON.stringify(result.reason)};`,
+    )
+    .catch((error) => console.error(error.message));
+  if (!candidateWin.isVisible()) candidateWin.showInactive();
+}
+function previewDock(target) {
+  const gesture = dragging;
+  if (!target || target.id === panelWin.getNativeWindowHandle().readUInt32LE()) {
+    if (gesture.candidate)
+      gesture.candidate = {
+        ...gesture.candidate,
+        state: 'refused',
+        reason: 'This terminal is unavailable. Try docking again.',
+      };
+    candidateWin.hide();
+    return;
+  }
+  if (gesture.candidate?.window.id === target.id) return;
+  const candidate = { window: target, state: 'checking', reason: 'Checking this terminal…' };
+  gesture.candidate = candidate;
+  showDockCandidate(target, candidate);
+  checkDockTarget(target.id)
+    .catch(() => ({ state: 'refused', reason: 'Could not verify this terminal. Try again.' }))
+    .then((result) => {
+      if (dragging !== gesture || gesture.candidate !== candidate) return;
+      gesture.candidate = { ...candidate, ...result };
+      showDockCandidate(target, result);
+    });
+}
+async function checkDockTarget(id, expected = null) {
+  if (serviceError || platformError)
+    return { state: 'refused', reason: serviceError || platformError };
+  const currentWindows = await inventory();
+  const currentSessions = await rpc('list', '--include-removed');
+  const currentRecords = await discoverTerminals(currentWindows, currentSessions);
+  return resolveDockTarget(
+    currentWindows.find((w) => w.id === id),
+    currentWindows,
+    currentRecords,
+    await identities(currentRecords),
+    currentSessions,
+    expected,
+  );
+}
+async function refuseDock(reason) {
+  undock(reason);
+  avatarWin.showInactive();
+  await setExpanded(true);
+  return false;
 }
 function undock(message = '') {
   dockGeneration++;
@@ -483,42 +532,22 @@ async function releaseControl(connection) {
     connection.close();
   }
 }
-async function dock(id) {
-  if (serviceError || platformError) throw Error(serviceError || platformError);
+async function dock(id, expected = null) {
   if (binding) undock();
   const generation = ++dockGeneration;
-  windows = await inventory();
-  sessions = await rpc('list', '--include-removed');
-  await discoverTerminals();
-  const target = resolveWindow(
-    windows.find((w) => w.id === id),
-    windows,
-    records,
-    await identities(),
-  );
-  if (target.error) {
-    undock(target.error);
-    return false;
+  let fresh;
+  try {
+    const target = await checkDockTarget(id, expected);
+    if (generation !== dockGeneration) return false;
+    if (target.state !== 'ready') return refuseDock(target.reason);
+    fresh = await checkDockTarget(id, target);
+    if (generation !== dockGeneration) return false;
+    if (fresh.state !== 'ready') return refuseDock(fresh.reason);
+  } catch {
+    if (generation !== dockGeneration) return false;
+    return refuseDock('Could not verify this terminal. Try again.');
   }
-  if (target.record.external) await rpc('register', target.record.nativeId);
-  sessions = await rpc('list', '--include-removed');
-  windows = await inventory();
-  const fresh = resolveWindow(
-    windows.find((w) => w.id === id),
-    windows,
-    [target.record],
-    await identities(),
-  );
-  if (generation !== dockGeneration) return false;
-  if (fresh.error) {
-    undock(fresh.error);
-    return false;
-  }
-  const session = registeredSession(fresh.record, sessions);
-  if (!session || session.capture !== 'connected') {
-    undock('This agent is disconnected.');
-    return false;
-  }
+  const session = fresh.session;
   const identity = ({ pid, start }) => ({ pid, start });
   const connection = await connectControl(
     stateDir,
@@ -1024,7 +1053,7 @@ app.whenReady().then(async () => {
     const previous = dragging;
     dragging = null;
     if (previous.moved && previous.binding) {
-      await dock(previous.binding.window.id);
+      await dock(previous.binding.window.id, previous.binding);
       return;
     }
     setSeated(previous.seated);
@@ -1037,7 +1066,7 @@ app.whenReady().then(async () => {
   handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
     candidateWin.hide();
-    const { held, moved } = dragging;
+    const { held, moved, candidate } = dragging;
     dragging = null;
     if (!held && !moved) {
       await setExpanded(!expanded);
@@ -1064,9 +1093,13 @@ app.whenReady().then(async () => {
       avatarWin.webContents.send('dock-sound', 'dock');
       return;
     }
-    if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE())
-      await dock(target.id);
-    else {
+    if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE()) {
+      if (candidate && candidate.window.id !== target.id)
+        await refuseDock('The target changed. Try docking again.');
+      else await dock(target.id, candidate?.state === 'ready' ? candidate : null);
+    } else if (candidate) {
+      await refuseDock('The target changed. Try docking again.');
+    } else {
       undock();
     }
     sendState();
@@ -1117,6 +1150,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-docking') ||
     process.argv.includes('--proof-fleet-creation') ||
     process.argv.includes('--proof-visibility') ||
     process.argv.includes('--proof-polish') ||
@@ -1144,11 +1178,14 @@ app.whenReady().then(async () => {
                     ? '../test/control-proof.cjs'
                     : process.argv.includes('--proof-registration')
                       ? '../test/registration-proof.cjs'
-                      : '../test/live-proof.cjs',
+                      : process.argv.includes('--proof-docking')
+                        ? '../test/docking-proof.cjs'
+                        : '../test/live-proof.cjs',
     )
       .run({
         avatarWin,
         panelWin,
+        candidateWin,
         advanceDrag,
         updateDockHover,
         rpc,
@@ -1193,7 +1230,9 @@ app.whenReady().then(async () => {
                         ? 'control-proof.json'
                         : process.argv.includes('--proof-registration')
                           ? 'registration-proof.json'
-                          : 'desktop-refinement-proof.json',
+                          : process.argv.includes('--proof-docking')
+                            ? 'docking-proof.json'
+                            : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(

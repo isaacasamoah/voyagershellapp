@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: Draft for review, 24 October 2026. No task has started or passed.
+Status: D01 complete on the candidate branch, 24 October 2026. D02 is next. No merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -8,7 +8,7 @@ Each slice includes implementation, tests, a real candidate demonstration and th
 
 ## D01: refuse an unsupported dock clearly
 
-- [ ] D01 complete.
+- [x] D01 complete.
 
 Make hover and drop agree about whether the target can be docked. Show a short reason when it cannot, and leave the floating controls available. This delivers the complete refusal journey, rather than only a reusable validation helper.
 
@@ -24,9 +24,17 @@ Verification:
 - Show that the new refusal tests detect the old implicit-registration or stale-target behavior, or a deliberately invalid fixture.
 - On the real candidate, hover and drop onto a disposable external terminal, a valid managed terminal and a target changed between hover and drop. Record the cues/reasons, visible controls and before/after registration state. The valid target is a comparison, not proof that D02's placement/sound requirements are already met.
 
-Dependencies: approved revised plan.
+Completion evidence, 24 October 2026:
 
-Likely files: `desktop/src/binding.cjs`, `desktop/src/main.cjs`, `desktop/test/binding.test.cjs`, `desktop/test/control.test.cjs`, `docs/desktop.md`.
+- The main-process regression first detected implicit registration and acceptance of a replacement client. A later live failure produced a failing regression for losing the hovered window before release. All now pass.
+- All 50 desktop tests, desktop formatting, the candidate binary build and all 24 service-boundary tests pass. Rust source did not change.
+- The real candidate app and service ran from this implementation worktree in fresh private state. Native-pointer journeys passed with xterm and Ghostty: external refusal without registration/control/success sound requests, managed acceptance, and visible refusal after the managed target stopped during hover. Both viewers were stopped and their isolated services shut down.
+- The maintained reproduction is `desktop/test/docking-proof.cjs`, invoked with `--proof-docking`; see the desktop guide. Private receipts, screenshots and executable hashes are linked from the owning Obsidian status, outside Git. Screenshots confirm readable refusal and eligible cues. No renderer errors were recorded.
+- The valid-target comparison does not pass D02. An earlier run reproduced hidden placement with accepted control and a sound request. Acoustic timing, voice, other operating systems and packaged behavior remain unproved.
+
+Dependencies: the owner approved the revised plan for this build trial.
+
+Original estimate: `desktop/src/binding.cjs`, `desktop/src/main.cjs`, `desktop/test/binding.test.cjs`, `desktop/test/control.test.cjs`, `docs/desktop.md`. The plan records the actual files needed for visible feedback and native proof.
 
 Estimated scope: medium, up to five files. Keep current service control authorization unchanged. If inspection finds a service defect requiring a Rust change, revise this slice's scope explicitly rather than moving the authorization decision into the UI.
 

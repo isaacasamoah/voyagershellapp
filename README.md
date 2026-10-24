@@ -23,7 +23,8 @@ is our starting point, and we’d love to build toward it with other developers.
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved; the [docking implementation plan](tasks/plan.md) is ready for review. These
+approved. The [docking implementation plan](tasks/plan.md) is in progress. Its
+first slice implements clear refusal of unsupported docking targets. The remaining
 requirements do not describe implemented behavior yet.
 
 ## Current prototype
@@ -38,7 +39,9 @@ requirements do not describe implemented behavior yet.
   See [Vessels and fleets](docs/fleets.md).
 - **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
   capture and instruction routing; historical events remain.
-- Docking selects the human control attachment. Undocking or closing Electron
+- Docking requires a verified running, connected managed agent. Hover and drop
+  check the same eligibility rules; external or changed targets refuse with a
+  visible explanation and no implicit registration. Undocking or closing Electron
   leaves agents and capture running. The terminal marker fades until hovered.
 - Codex sessions launched by Voyager use YOLO. External sessions keep their
   existing permissions. Bash commands share the human's shell state.
