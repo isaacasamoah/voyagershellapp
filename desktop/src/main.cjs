@@ -190,9 +190,17 @@ async function placeAboveTerminal() {
   const target = binding.window.id;
   const generation = dockGeneration;
   const p = avatarPosition();
+  const rectangle = avatarWin.getBounds();
+  const top = screen.dipToScreenPoint({ x: rectangle.x, y: rectangle.y });
+  const bottom = screen.dipToScreenPoint({
+    x: rectangle.x + rectangle.width,
+    y: rectangle.y + rectangle.height,
+  });
+  const bounds = { x: top.x, y: top.y, width: bottom.x - top.x, height: bottom.y - top.y };
   return placeAboveTarget({
     avatar: avatarWin,
     target,
+    bounds,
     point: screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 }),
     excluded: [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE()),
     current: () =>
@@ -619,7 +627,12 @@ async function dock(id, expected = null, droppedAt = performance.now()) {
       Object.assign(attempt, { state: 'failed', reason: placement.reason });
       return refuseDock(placement.reason);
     }
-    Object.assign(attempt, { placedAt: performance.now(), state: 'placed' });
+    Object.assign(attempt, {
+      placedAt: performance.now(),
+      state: 'placed',
+      marker: placement.marker,
+      window: placement.target,
+    });
   } catch (error) {
     if (superseded()) {
       attempt.state = 'superseded';

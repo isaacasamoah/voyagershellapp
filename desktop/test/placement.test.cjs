@@ -24,6 +24,7 @@ function setup() {
         },
       },
       target: 1,
+      bounds: { x: 100, y: 100, width: 80, height: 80 },
       point: { x: 140, y: 140 },
       excluded: [2],
       current: () => current,
@@ -53,4 +54,31 @@ test('a newer attempt invalidates a delayed inventory result', async () => {
   finish([t.target, t.marker]);
   assert.equal((await result).state, 'superseded');
   assert.deepEqual(t.calls, []);
+});
+
+test('an off-target visible marker cannot confirm placement', async () => {
+  const t = setup();
+  t.marker.x = 1400;
+  t.marker.y = 1400;
+  assert.equal((await placeAboveTarget(t.options)).state, 'failed');
+});
+test('malformed native marker or terminal bounds cannot confirm placement', async () => {
+  for (const [which, changes] of [
+    ['marker', { width: 0 }],
+    ['marker', { height: -1 }],
+    ['marker', { x: NaN }],
+    ['target', { height: Infinity }],
+  ]) {
+    const t = setup();
+    Object.assign(t[which], changes);
+    assert.equal((await placeAboveTarget(t.options)).state, 'failed');
+  }
+});
+test('a pending native move must reach the expected position before placement succeeds', async () => {
+  const t = setup();
+  const displaced = { ...t.marker, x: 1400 };
+  let reads = 0;
+  t.options.inventory = async () => [t.target, ++reads < 3 ? displaced : t.marker];
+  assert.equal((await placeAboveTarget(t.options)).state, 'placed');
+  assert.ok(reads >= 3);
 });

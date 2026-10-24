@@ -247,6 +247,20 @@ then the observed sound onset and end. Output-monitor timestamps are measured
 when audio chunks arrive; they are conservative observations rather than room
 microphone measurements. The final timing batch and packaged proof remain pending.
 
+Placement compares fresh native marker bounds with the requested bounds, allowing
+two physical pixels for rounding. Invalid geometry fails. A pending native move
+gets the existing one-second placement deadline before failure restores controls.
+The desktop converts the two rectangle corners with Electron's Linux-supported
+[point conversion](https://github.com/electron/electron/blob/v44.7.0/docs/api/screen.md#screendiptoscreenpointpoint-windows-linux).
+The rectangle conversion API is Windows-only. This remains XWayland evidence,
+not native Wayland support.
+
+The native fixture records launch and finish manifests containing candidate source
+and executable hashes, and rejects a run if those files changed. Its D02 check
+independently compares the native avatar center with the terminal anchor and
+captures a compositor image cropped to the disposable terminal. Test captures
+and manifests stay in the private trial directory.
+
 The main process retains at most 32 docking attempt records in memory. They
 answer which attempt was accepted, whether placement completed, and where time
 was spent before the sound request. The proof reader can collect them without

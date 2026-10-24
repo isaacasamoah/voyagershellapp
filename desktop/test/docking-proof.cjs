@@ -35,7 +35,9 @@ exports.run = async ({
           observations,
           cleanup,
           limits: [
-            'GNOME/XWayland with native pointer events and disposable native windows. The external Codex fixture submits one setup turn. No voice test. Sound counts observe IPC requests, not audible output. This is D01 evidence only.',
+            process.env.VOYAGER_PROOF_D02 === '1'
+              ? 'D02 native placement and output-monitor audio evidence on Fedora GNOME/XWayland. No room microphone measurement. Final timing batch and packaged proof remain pending.'
+              : 'D01 native eligibility evidence on Fedora GNOME/XWayland. Sound counts are IPC requests, not audible output.',
           ],
         },
         null,
@@ -197,6 +199,18 @@ exports.run = async ({
     });
     if (expected === 'ready' && process.env.VOYAGER_PROOF_D02 === '1') {
       assert(avatarWin.isVisible());
+      const native = await inventory();
+      const marker = native.find((w) => w.id === avatarWin.getNativeWindowHandle().readUInt32LE());
+      const target = native.find((w) => w.id === s.binding.window.id);
+      assert(marker?.visible && target?.visible);
+      assert(native.indexOf(marker) > native.indexOf(target));
+      const center = { x: marker.x + marker.width / 2, y: marker.y + marker.height / 2 };
+      const anchor = { x: target.x + target.width / 2, y: target.y + target.height * 0.76 };
+      assert(
+        Math.abs(center.x - anchor.x) <= 4 && Math.abs(center.y - anchor.y) <= 4,
+        'Native marker did not reach the terminal anchor',
+      );
+      observations.push({ label: 'native-placement', marker, target, center, anchor });
       assert.equal(s.dockAttempts.at(-1).state, 'placed');
       assert(s.dockAttempts.at(-1).placedAt >= s.dockAttempts.at(-1).acceptedAt);
     }
@@ -315,6 +329,34 @@ exports.run = async ({
         dropToOutputMs: audio.onsetObservedAt - attempt.droppedAt,
       });
     } else await released('managed-accepted', 'ready');
+    if (process.env.VOYAGER_PROOF_D02 === '1') {
+      const window = (await inventory()).find((w) => w.id === target.id);
+      const top = screen.screenToDipPoint({ x: window.x, y: window.y });
+      const bottom = screen.screenToDipPoint({
+        x: window.x + window.width,
+        y: window.y + window.height,
+      });
+      const marker = (await inventory()).find(
+        (w) => w.id === avatarWin.getNativeWindowHandle().readUInt32LE(),
+      );
+      const center = screen.screenToDipPoint({
+        x: marker.x + marker.width / 2,
+        y: marker.y + marker.height / 2,
+      });
+      const display = screen.getDisplayNearestPoint(center).bounds;
+      const crop = { x: Math.max(top.x, display.x), y: Math.max(top.y, display.y) };
+      crop.width = Math.min(bottom.x, display.x + display.width) - crop.x;
+      crop.height = Math.min(bottom.y, display.y + display.height) - crop.y;
+      await exec(
+        'python3',
+        [
+          path.join(__dirname, 'native-capture.py'),
+          JSON.stringify(crop),
+          path.join(stateDir, 'native-docked-terminal.png'),
+        ],
+        { timeout: 20000 },
+      );
+    }
     assert.equal(getState().binding.session.id, vessel);
     undock();
     await wait(

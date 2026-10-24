@@ -24,6 +24,19 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
     let state = PathBuf::from(std::env::var("VOYAGER_EXTERNAL_DOCK_DIR")?);
     fs::create_dir(&state)?;
     fs::set_permissions(&state, fs::Permissions::from_mode(0o700))?;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest = || -> Result<serde_json::Value> {
+        let output = Command::new("python3")
+            .arg(root.join("desktop/test/candidate-manifest.py"))
+            .output()?;
+        ensure!(output.status.success(), "candidate manifest failed");
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+    let launched = manifest()?;
+    fs::write(
+        state.join("launch-manifest.json"),
+        serde_json::to_vec_pretty(&launched)?,
+    )?;
     let socket = state.join("external.sock");
     let codex = std::env::var("VOYAGER_CODEX_BIN").unwrap_or_else(|_| "codex".into());
     let log = || -> Result<Stdio> { Ok(fs::File::create(state.join("external.log"))?.into()) };
@@ -124,7 +137,6 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
         ensure!(Instant::now() < deadline, "candidate service not ready");
         thread::sleep(Duration::from_millis(50));
     }
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let desktop_log = fs::File::create(state.join("desktop.log"))?;
     let mut desktop = Owned(
         Command::new(root.join("desktop/node_modules/electron/dist/electron"))
@@ -182,6 +194,15 @@ fn external_codex_refuses_while_managed_codex_docks() -> Result<()> {
             &json!({"server_pid":external.0.id(),"terminal_pid":terminal.0.id(),"thread_id":thread_id,"server_alive_after_drops":alive,"thread_read_after_drops":thread_still_loaded,"service_stop":stopped,"terminal":viewer,"provider_version":Command::new(&codex).arg("--version").output().ok().map(|r|String::from_utf8_lossy(&r.stdout).trim().to_string())}),
         )?,
     )?;
+    let finished = manifest()?;
+    fs::write(
+        state.join("finish-manifest.json"),
+        serde_json::to_vec_pretty(&finished)?,
+    )?;
+    ensure!(
+        launched["hashes"] == finished["hashes"],
+        "candidate files changed during the trial"
+    );
     let proof: serde_json::Value =
         serde_json::from_slice(&fs::read(state.join("docking-proof.json"))?)?;
     ensure!(
