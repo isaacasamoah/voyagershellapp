@@ -1,7 +1,7 @@
 # Tracer-bullet usability specification index
 
 Project: VoyagerShellApp. Updated 24 October 2026.
-State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner has now also approved all four module specifications and requested implementation plans. Specification approval does not authorize implementation or runtime changes.
+State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. The four docking slices passed independent review and packaged verification. Final owner acceptance is pending. The later capabilities still require their own plans and implementation approval. Merge, installation and runtime rollout remain separate decisions.
 
 ## Purpose and terminology
 
@@ -46,16 +46,16 @@ Each module specification defines its successful journey, a deliberately differe
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) are drafted for review. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. No product implementation has started.
+Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) record the approved build and its verification. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. The docking build is ready for owner review; the other three capabilities have not started implementation.
 
 ## Review and development workflow
 
-The capability boundaries, build order and four module specifications are approved. The plan is the next review gate. Recording approval does not start implementation or change the running app.
+The capability boundaries, build order and four module specifications are approved. The docking build now has an approved plan and explicit implementation authorization. Final owner review and rollout remain separate gates. Recording specification approval alone does not start another capability or change the running app.
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
 Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The active `tasks/plan.md` and `tasks/todo.md` currently cover only `docking-recovery`. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
 
-The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are future acceptance requirements. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
+The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
 Human-facing research and project navigation can link to these repository documents. Private incident logs, transcripts and account-local evidence remain outside committed source. Do not maintain a second editable specification elsewhere.

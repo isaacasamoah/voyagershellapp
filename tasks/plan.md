@@ -1,6 +1,6 @@
 # Plan: recoverable docking
 
-Status: Approved for the build trial, 24 October 2026. D01-D03 passed independent review. D04 is being built and verified.
+Status: D01-D04 passed independent review and packaged verification, 24 October 2026. Ready for owner review. Owner acceptance remains open; merge and rollout are separate decisions.
 
 ## Scope and outcome
 
@@ -206,3 +206,17 @@ Native pointer scaling, packaged harness loading, audio timing batches and
 candidate hashing are test support for the same user outcome. Their file scope
 exceeds the initial estimate. No installed launcher, active shortcut or main
 service is changed.
+
+## Final candidate handoff
+
+All four slices used one corrective product build and passed independent
+re-review. The task list records technical completion and retains the owner
+acceptance item. No later capability is active. The reviewed package contains
+the same product source as the final documentation-only handoff revision.
+
+The final Ghostty polish test required an unobstructed Bash target and a visible
+panel for its final screenshot. Its original automatic sequence can cover the
+positive-case target with its own recovered panel. That expected refusal and the
+operator-assisted positive comparison are both retained. Improving that optional
+fixture is separate from product review. Voice teardown uncertainty remains
+visible in the evidence and is not represented as confirmed closure.

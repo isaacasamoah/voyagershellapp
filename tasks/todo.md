@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01 passed independent re-review after one corrective build, 24 October 2026. D02 is active. No merge or installed-app update has occurred.
+Status: D01-D04 passed independent review and packaged verification, 24 October 2026. Ready for owner review. Each slice used one corrective product build. No merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -63,7 +63,7 @@ Verification:
 - Demonstrate that the hidden-avatar return path or a deliberately failed placement fails the new acceptance check.
 - On the real candidate, perform a valid dock, a failed placement and a delayed/invalidated attempt. Hear or record the success sound and verify there is none for failures. Extend `desktop/test/polish-proof.cjs` with these observations and run it after extension using the plan's command. Record initial timing trials now; complete the approved batch at the final checkpoint.
 
-Build evidence pending independent review, 24 October 2026:
+Initial build evidence recorded before independent review, 24 October 2026:
 
 - Regression tests first detected false success after failed/superseded placement, malformed native geometry, a wrong target in an accepted response, and an attachment retained after invalidation. The fixes pass all 63 desktop tests.
 - Native Codex journeys passed with xterm and Ghostty. A valid drop visibly places the avatar and produces recorded output audio. Covered placement is accepted by the service but then fails visibly, releases control, keeps the managed runtime/capture running and records no output sound. An invalidated attempt leaves no attachment.
@@ -116,7 +116,7 @@ D03 implementation evidence:
 
 ## D04: recover both controls through Applications
 
-- [ ] D04 complete.
+- [x] D04 complete on the candidate. Independent re-review found no remaining Critical or Required product issues.
 
 Give the owner an independent recovery action that brings the panel and floating avatar onto the current display even when docking or placement has failed.
 
@@ -138,7 +138,7 @@ Likely files: `desktop/src/main.cjs`, `desktop/test/control.test.cjs`, `desktop/
 
 Estimated scope: medium, up to four files. The separately named launcher is a temporary test artifact, not a change to the installed Applications entry.
 
-D04 initial build evidence, pending independent review:
+D04 initial build evidence recorded before independent review:
 
 - All 79 desktop tests, 53 ordinary Rust tests, formatting and Clippy pass.
 - Actual GNOME Applications selections recover while docked and after failed
@@ -152,9 +152,9 @@ D04 initial build evidence, pending independent review:
   The largest observed onset is 267 ms. Output-monitor timing is not room audio.
 - A failing inherited-environment regression tightened launcher identification:
   the candidate desktop entry now passes an explicit Applications flag. This
-  final launcher wiring will be verified on the packaged candidate.
-- Packaged combined proof and fresh-context D04 review remain pending. D04 is
-  deliberately unchecked until those required checks are resolved.
+  final launcher wiring was subsequently verified on the packaged candidate.
+- Packaged combined proof and fresh-context review were the next gates at this
+  point. Their results are recorded below.
 
 D04 independent review requested changes. The single corrective build:
 
@@ -167,12 +167,36 @@ D04 independent review requested changes. The single corrective build:
   as unknown.
 - Makes the hover re-entry test use a verified native panel target rather than an
   unchecked desktop corner, and repeats the contrast in each timing trial.
-- All 82 desktop tests pass. Corrected packaged combined evidence and re-review
-  remain required before marking the slice complete.
+- All 82 desktop tests pass. Corrected packaged evidence and re-review were
+  required next; their results are recorded below.
+
+D04 final verification and independent correction review, 24 October 2026:
+
+- The actual corrected package and bundled service pass with both viewers.
+  Twenty pointer drops per viewer produce recorded output within two seconds.
+  Maximum onset is 266.2 ms for xterm and 257.7 ms for Ghostty. Twenty recovery
+  launches per viewer all show both controls within one second, with maxima of
+  244.5 ms and 250.9 ms. Actual GNOME grid selections precede each launch batch.
+- Cold Applications startup and actual Ctrl+Alt+V pass in a fresh isolated GNOME
+  desktop. Candidate hashes match before and after each run. The archive checksum
+  passes. All 82 desktop tests, 53 ordinary Rust tests, formatting and Clippy pass.
+- Both viewers pass the six native target-loss cases and voice destination checks.
+  The Ghostty positive Bash case requires closing the recovered panel first,
+  because that panel otherwise covers its docking point. An external fixture
+  records this precondition without changing the package. Reopening the same
+  candidate after cleanup completes its hidden-panel screenshot. The unmodified
+  repository Ghostty command is not claimed to pass unattended.
+- Final voice teardown retains outcome_unknown after a participating connection
+  is lost. Earlier destination and microphone checks passed; final voice closure
+  is not claimed confirmed. Output recordings do not replace owner listening.
+- The independent reviewer approved the single correction with no remaining
+  Critical or Required product findings. Source, reviews, failed attempts and
+  fixture provenance are preserved in the owning human-facing evidence report.
+  Later optional fixture cleanup does not authorize another product build.
 
 ## Checkpoint D-B: accept the docking capability
 
-- [ ] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.
-- [ ] The approved Fedora timing batches pass: at least 19 of 20 unobstructed docks are audible within two seconds, and at least 19 of 20 recoveries reveal both controls within one second. Every trial recovers correctly. Record slow and failed trials, the viewer used, and any unsupported combinations.
-- [ ] Applicable full Rust and desktop checks pass. Run `npm --prefix desktop run package:linux`, then repeat the combined docking/recovery cases and timing batches on the actual packaged app and bundled service in fresh private state. Record executable paths/hashes, display/audio setup, outcomes, limits and cleanup evidence.
+- [x] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.
+- [x] The approved Fedora timing batches pass: at least 19 of 20 unobstructed docks are audible within two seconds, and at least 19 of 20 recoveries reveal both controls within one second. Every trial recovers correctly. Record slow and failed trials, the viewer used, and any unsupported combinations.
+- [x] Applicable full Rust and desktop checks pass. Run `npm --prefix desktop run package:linux`, then repeat the combined docking/recovery cases and timing batches on the actual packaged app and bundled service in fresh private state. Record executable paths/hashes, display/audio setup, outcomes, limits and cleanup evidence.
 - [ ] Review the packaged docking result with the owner. The next planning cycle is voice handoff; no voice, resume or panel tasks become active automatically. Merge, installation, restart and release remain separate decisions.

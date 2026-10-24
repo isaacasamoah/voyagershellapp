@@ -23,12 +23,12 @@ is our starting point, and we’d love to build toward it with other developers.
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved. The [docking implementation plan](tasks/plan.md) is in progress. Its
-first two slices implement clear refusal of unsupported targets and require
-visible placement before docking feedback. The third slice restores controls
-after target loss. Those three slices passed independent review. The fourth
-slice restores both controls through Applications and is undergoing native
-verification. Packaged acceptance and final review remain pending.
+approved. The [docking implementation plan](tasks/plan.md) is ready for owner review.
+Its four slices implement clear refusal of unsupported targets, visible placement
+before sound, recovery after target loss, and independent Applications recovery.
+All four passed independent review and packaged Fedora checks. The task list
+records test setup limits and voice teardown uncertainty. Owner acceptance,
+merge and installation remain separate decisions.
 
 ## Current prototype
 

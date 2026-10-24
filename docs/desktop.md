@@ -143,7 +143,7 @@ terminal. Only that attempt requests a docking sound. Covered targets, failed
 placement and superseded attempts cannot report success. Failure releases the
 attachment and reveals the floating controls. Recovery after a previously
 successful dock releases control and restores the floating controls. Applications
-recovery is undergoing native verification in the fourth slice.
+recovery uses the independent presentation operation described below.
 
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
@@ -246,7 +246,8 @@ that covered placement produces no sound. It does not record the microphone.
 A valid run records the drop, acceptance, placement and sound-request times,
 then the observed sound onset and end. Output-monitor timestamps are measured
 when audio chunks arrive; they are conservative observations rather than room
-microphone measurements. The final timing batch and packaged proof remain pending.
+microphone measurements. Packaged batches passed with both viewers. Owner
+listening remains a separate acceptance check.
 
 Placement compares fresh native marker bounds with the requested bounds, allowing
 two physical pixels for rounding. Invalid geometry fails. A pending native move
@@ -409,3 +410,16 @@ batch trial. The earlier test assumed the desktop corner was an empty target;
 one packaged Ghostty run failed that assumption. The exact event sequence in
 that failure remains unknown. It is retained rather than presented as a repaired
 Ghostty defect.
+
+The final Ghostty polish sequence can leave the recovered panel over the later
+Bash docking point. That is a covered target, so refusal is correct. Establish an
+unobstructed target by collapsing the panel before the positive Bash comparison,
+and show the panel before its final screenshot. The recorded packaged trial used
+an external fixture for the first step and a second launch of the same candidate
+for the screenshot. The unchanged automatic sequence is not claimed to pass.
+Retain these setup steps alongside the exact fixture hash when repeating it.
+
+A final participating voice connection can disappear during fixture teardown.
+The resulting outcome_unknown remains separate from successful docking recovery
+and earlier voice destination assertions. Do not describe that status as a
+confirmed voice closure.
