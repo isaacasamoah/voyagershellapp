@@ -19,6 +19,13 @@ follow its evidence and stay aware of changes that affect their work.
 This is the vision we’re exploring through small experiments. The prototype below
 is our starting point, and we’d love to build toward it with other developers.
 
+## Specification review
+
+The [tracer-bullet usability specifications](SPEC.md) cover conversation
+resume, current-work presentation, voice handoffs and docking recovery. The specifications are
+approved; the [docking implementation plan](tasks/plan.md) is ready for review. These
+requirements do not describe implemented behavior yet.
+
 ## Current prototype
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
