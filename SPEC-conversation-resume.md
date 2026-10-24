@@ -92,16 +92,28 @@ Extend `tests/service.rs`, `tests/worker_server.py` and authority fixtures as ne
 | R2 | Repeat after service restart following a confirmed stop. Preserve history, settings, name, valid assignments and Fleet placement. Previously live/uncertain records remain blocked. |
 | R3 | Duplicate the same request and race two distinct requests. Exactly one new owned runtime starts. Changed input under one ID refuses. |
 | R4 | Test both failures separately. Disconnect the requesting client after the service records the request, while startup is in progress; keep the service alive and let startup succeed. Reconnect and retrieve the completed receipt using the same request ID; exactly one runtime started. Separately, terminate the test service after a possible startup effect but before a final outcome is recorded. Restart it and verify that the unresolved operation is uncertain, its recorded evidence survives, and neither receipt lookup nor a new request ID starts another runtime. Neither case affects unrelated processes. |
-| R5 | Missing thread, missing directory, invalid settings and unsupported provider responses produce readable failures without creating a substitute conversation. A legacy record with insufficient settings is inspectable but ineligible. |
-| R6 | Viewer opening fails after resume. The agent stays running and a later Open attaches to that same runtime. Closing/reopening that viewer does not submit work. |
-| R7 | Old credentials and expired grants refuse. A non-owner caller cannot resume; current assignments remain subject to current service policy. |
-| R8 | Delayed events from the former capture generation do not become new events. Historical turns do not duplicate completed tasks. |
-| R9 | Stopped Bash, external registrations, removed registrations and an already running managed agent are known-different refusals. No unrelated process is signalled. |
+| R5 | Test each failure: the saved conversation cannot be found, its working folder is missing, its saved settings are invalid, or Codex returns a response Voyager cannot handle. Voyager explains the problem and does not create a different conversation as a fallback. If an older record lacks the settings needed to resume safely, its saved details remain available to inspect, but Resume is unavailable. |
+| R6 | Resume the agent successfully, then make opening its terminal window fail. The agent must remain running. Choosing Open again must connect a window to that same running agent. Closing and reopening the window must not send a task or continue earlier work. |
+| R7 | Verify that credentials from the previous runtime and expired temporary permissions no longer grant access. Only the local owner can request Resume. Resuming must not bypass the service's current rules for who may manage or instruct the agent. |
+| R8 | Deliver delayed events from the previous run's event connection. Voyager must not present them as activity from the new run. Loading saved conversation history must not report old task completions as newly completed work. |
+| R9 | Verify that Resume refuses each unsupported case: a stopped Bash shell, an agent started outside Voyager's ownership, a registration that has been removed, and a Voyager-managed agent that is already running. These cases must not start a new runtime. Voyager must not send signals, such as stop or kill, to any unrelated process. |
 
-Use process fixtures for failure ordering, settings preservation, receipt persistence and live-child ownership. The real provider test proves saved context and idle behavior. Record candidate app/service executables, provider version, timings through ready and viewer attachment, and all observed identities without credentials. Preserve existing service deadlines and responsiveness; unresolved deadlines are uncertainty, not grounds for replay. Require these journeys rather than a synthetic coverage percentage.
+Use controlled test processes to trigger failures at specific points in startup. Check that saved settings survive, operation receipts remain available after restart, and the service manages only the live child processes it actually started.
+
+Also test with real Codex. That test must demonstrate that the saved conversation is available after resume and that the agent waits for a new instruction instead of continuing work automatically. Simulated responses alone cannot establish this.
+
+For each run, record the exact app and service builds and executable paths, the Codex version, the time until the agent is ready, and the time until its terminal window is connected. Record the observed Vessel, conversation, process, operation and generation identifiers so the results can be traced to the right run. Do not record credentials.
+
+Keep the service responsive and retain its existing time limits. If an operation reaches a time limit and the service cannot determine what happened, record an uncertain outcome instead of repeating the operation. Passing requires evidence for the cases above; a test coverage percentage alone is not enough.
 
 ## Boundaries and review decisions
 
-Always keep task submission separate and preserve original history. Review any broader recovery policy, automatic restoration, external adoption or configurable permission change before adding it. Never recover ownership from a PID, kill a possibly unrelated runtime, silently increase permissions, or use a new request ID to retry uncertain effects.
+Resuming a conversation must preserve its original history and must not submit a task. The agent waits for an explicit instruction before doing more work.
 
-Review the first-increment policy for legacy records: recover verified settings where available; otherwise show why resume is unavailable, leaving history and normal new-agent creation accessible. Supporting removed registrations or a settings-repair editor is deferred. The plan must resolve storage details and verify provider settings semantics before implementation; failure to do so cannot be hidden by permissive defaults.
+Broader recovery behavior needs a separate review before implementation. This includes automatically restoring agents, taking responsibility for agents started outside Voyager, and adding configurable permission changes.
+
+An old process ID is not proof that Voyager owns the process now using that ID. Do not claim ownership from that number alone or kill a process that might be unrelated. Do not silently give a resumed agent more permissions than it had before. If the outcome of an earlier request is uncertain, do not issue a new request ID to bypass that uncertainty and try again.
+
+For this first increment, the proposed treatment of older records is to reuse their settings only when those settings can be verified. Otherwise, explain why Resume is unavailable. Keep the saved history readable and allow the owner to create a new agent through the existing creation flow. Creating a new agent is a separate choice, not a substitute presented as a successful resume.
+
+Restoring removed registrations and providing an editor to repair missing settings are outside this increment. Before implementation, the plan must specify how resume information is stored and verify how Codex applies the saved settings. Missing or unsupported settings must not be concealed by falling back to defaults that grant more access.
