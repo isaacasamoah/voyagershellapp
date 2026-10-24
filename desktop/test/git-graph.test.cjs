@@ -103,7 +103,8 @@ if (process.env.VOYAGER_GRAPH_BROWSER) {
       (await send('Runtime.evaluate', { expression, returnByValue: true })).result.value;
     const key = async (key, code, modifiers = 0) => {
       const windowsVirtualKeyCode =
-        { Tab: 9, Enter: 13, Backspace: 8, ArrowDown: 40 }[key] || key.toUpperCase().charCodeAt(0);
+        { Tab: 9, Enter: 13, Backspace: 8, ArrowUp: 38, ArrowDown: 40 }[key] ||
+        key.toUpperCase().charCodeAt(0);
       await send('Input.dispatchKeyEvent', {
         type: 'keyDown',
         key,
@@ -156,7 +157,18 @@ if (process.env.VOYAGER_GRAPH_BROWSER) {
     await key('a', 'KeyA', 2);
     await key('Backspace', 'Backspace');
     const active = await read('document.querySelectorAll("article").length');
-    assert.ok(active > 0);
+    const visibleNames = () =>
+      read('[...document.querySelectorAll("article h2")].map(node => node.textContent).sort()');
+    assert.deepEqual(
+      await visibleNames(),
+      await read(
+        'data.branches.filter(row => row.worktrees.length > 0).map(row => row.name).sort()',
+      ),
+    );
+    const inactiveNames = await read(
+      'data.branches.filter(row => row.worktrees.length === 0).map(row => row.name)',
+    );
+    for (const name of inactiveNames) assert.ok(!(await visibleNames()).includes(name));
     await key('Tab', 'Tab');
     assert.equal(await read('document.activeElement.id'), 'scope');
     await key('ArrowDown', 'ArrowDown');
@@ -165,6 +177,13 @@ if (process.env.VOYAGER_GRAPH_BROWSER) {
       await read('document.querySelectorAll("article").length'),
       await read('data.branches.length'),
     );
+    await key('ArrowDown', 'ArrowDown');
+    assert.equal(await read('document.querySelector("#scope").value'), 'unmerged');
+    assert.deepEqual(
+      await visibleNames(),
+      await read('data.branches.filter(row => row.ahead > 0).map(row => row.name).sort()'),
+    );
+    await key('ArrowUp', 'ArrowUp');
     await key('Tab', 'Tab');
     await key('ArrowDown', 'ArrowDown');
     assert.equal(await read('document.querySelector("#sort").value'), 'ahead');
