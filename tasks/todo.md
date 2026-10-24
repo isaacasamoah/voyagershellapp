@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01 complete on the candidate branch, 24 October 2026. D02 is next. No merge or installed-app update has occurred.
+Status: D01 has live Codex evidence and is undergoing the requested independent review, 24 October 2026. D02 waits for that review. No merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -8,7 +8,7 @@ Each slice includes implementation, tests, a real candidate demonstration and th
 
 ## D01: refuse an unsupported dock clearly
 
-- [x] D01 complete.
+- [ ] D01 complete. Reopened for the owner-requested live Codex check and independent review.
 
 Make hover and drop agree about whether the target can be docked. Show a short reason when it cannot, and leave the floating controls available. This delivers the complete refusal journey, rather than only a reusable validation helper.
 
@@ -31,6 +31,13 @@ Completion evidence, 24 October 2026:
 - The real candidate app and service ran from this implementation worktree in fresh private state. Native-pointer journeys passed with xterm and Ghostty: external refusal without registration/control/success sound requests, managed acceptance, and visible refusal after the managed target stopped during hover. Both viewers were stopped and their isolated services shut down.
 - The maintained reproduction is `desktop/test/docking-proof.cjs`, invoked with `--proof-docking`; see the desktop guide. Private receipts, screenshots and executable hashes are linked from the owning Obsidian status, outside Git. Screenshots confirm readable refusal and eligible cues. No renderer errors were recorded.
 - The valid-target comparison does not pass D02. An earlier run reproduced hidden placement with accepted control and a sound request. Acoustic timing, voice, other operating systems and packaged behavior remain unproved.
+
+Additional verification, 24 October 2026:
+
+- The real external Codex comparison passed with xterm and Ghostty. Hover and drop refused the independently launched conversation without registration or attachment. The external server remained alive and its conversation remained readable. Managed Codex acceptance and a stop during hover also passed.
+- The new Rust integration test checks the desktop proof verdict. A failed native run demonstrated why a zero Electron exit status alone was insufficient. The test requires one external setup turn before opening the native client.
+- All 50 desktop tests, formatting, the full Rust suite and Clippy passed. An earlier full Rust run during a concurrent desktop trial exceeded the queued-read timing limit. The isolated test and the later full suite passed; the earlier result remains recorded.
+- A fresh-context reviewer is checking D01. Completion remains open until its required findings are resolved within the authorized single corrective build.
 
 Dependencies: the owner approved the revised plan for this build trial.
 
@@ -65,7 +72,7 @@ Estimated scope: medium, up to five files. The useful result is the complete doc
 ## Checkpoint D-A
 
 - [ ] D01-D02 pass their controlled regressions and real candidate journeys. Applicable checks/builds pass, and observed evidence is linked outside Git.
-- [ ] Review refusal, visible placement and actual sound with the owner before continuing.
+- [ ] Preserve refusal, placement and sound evidence for the final owner review. The authorized completion run in the plan permits continuing after independent review.
 
 ## D03: recover when a docked target becomes unusable
 

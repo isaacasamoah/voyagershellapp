@@ -217,6 +217,23 @@ exits Electron. Stop the isolated service separately with `voyager --state DIR s
 It makes no model turn or microphone request. IPC sound counts do not prove
 acoustic output, and managed eligibility is not proof of D02 placement reliability.
 
+The independent Codex comparison starts its own external Codex server and viewer,
+then starts the candidate service and Electron from this checkout. Supply a new,
+nonexistent private directory and the graphical session environment:
+
+```sh
+VOYAGER_EXTERNAL_DOCK_DIR=/tmp/new-codex-docking-trial VOYAGER_PROOF_TERMINAL=xterm \
+  cargo test --locked --test native_external_docking -- --ignored --nocapture
+```
+
+Repeat with `ghostty` and another new directory. This test submits one short
+setup turn to the external Codex conversation before opening its native client.
+It requires the recorded desktop verdict, not merely Electron's exit status.
+It verifies that the external server and conversation survive the refusal,
+then stops only the disposable resources it created. The pointer check verifies
+its actual position before clicking. The recorded D01 trials use the external
+monitor; mixed-scale pointer behavior on the laptop display remains unproved.
+
 The older `--proof-registration` check describes the superseded external-docking
 behavior and is not a current acceptance test. Its historical evidence below
 does not authorize or establish general terminal adoption.

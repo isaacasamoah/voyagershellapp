@@ -33,7 +33,7 @@ exports.run = async ({
           observations,
           cleanup,
           limits: [
-            'GNOME/XWayland with native pointer events and disposable Bash windows. No model turn or voice test. Sound counts observe IPC requests, not audible output. This is D01 evidence only.',
+            'GNOME/XWayland with native pointer events and disposable native windows. The external Codex fixture submits one setup turn. No voice test. Sound counts observe IPC requests, not audible output. This is D01 evidence only.',
           ],
         },
         null,
@@ -46,19 +46,26 @@ exports.run = async ({
   const replies = createInterface({ input: pointer.stdout });
   const viewer = process.env.VOYAGER_PROOF_TERMINAL || 'xterm';
   assert(['xterm', 'ghostty'].includes(viewer));
-  const external = spawn(
-    viewer,
-    viewer === 'xterm'
-      ? ['-title', 'Voyager disposable external', '-e', '/usr/bin/sleep', '180']
-      : [
-          '--gtk-single-instance=false',
-          '--title=Voyager disposable external',
-          '-e',
-          '/usr/bin/sleep',
-          '180',
-        ],
-    { stdio: 'ignore', env: { ...process.env, GDK_BACKEND: 'x11' } },
-  );
+  const suppliedExternalPid = Number(process.env.VOYAGER_PROOF_EXTERNAL_PID || 0);
+  const externalThread = process.env.VOYAGER_PROOF_EXTERNAL_THREAD;
+  const kind = process.env.VOYAGER_PROOF_KIND || 'shell';
+  assert(['shell', 'codex'].includes(kind));
+  const external = suppliedExternalPid
+    ? null
+    : spawn(
+        viewer,
+        viewer === 'xterm'
+          ? ['-title', 'Voyager disposable external', '-e', '/usr/bin/sleep', '180']
+          : [
+              '--gtk-single-instance=false',
+              '--title=Voyager disposable external',
+              '-e',
+              '/usr/bin/sleep',
+              '180',
+            ],
+        { stdio: 'ignore', env: { ...process.env, GDK_BACKEND: 'x11' } },
+      );
+  const externalPid = suppliedExternalPid || external.pid;
   let vessel;
   let stopped = false;
   let failure;
@@ -82,8 +89,17 @@ exports.run = async ({
       pointer.stdin.write(`${JSON.stringify(value)}\n`);
     });
   const move = async (point) => {
-    const physical = screen.dipToScreenPoint(point);
-    await input(['move', physical.x, physical.y, screen.getDisplayNearestPoint(point).scaleFactor]);
+    await input(['move', point.x, point.y, 1]);
+    observations.push({
+      label: 'cursor-move',
+      requested: point,
+      actual: screen.getCursorScreenPoint(),
+    });
+    await wait(
+      () => screen.getCursorScreenPoint(),
+      (cursor) => Math.abs(cursor.x - point.x) < 3 && Math.abs(cursor.y - point.y) < 3,
+      'Native cursor did not reach the requested point',
+    );
   };
   const wait = async (read, accept, label) => {
     const until = Date.now() + 10000;
@@ -102,7 +118,11 @@ exports.run = async ({
   const hover = async (window) => {
     undock();
     await setExpanded(false);
+    await exec('xdotool', ['windowmove', String(window.id), '400', '300'], { timeout: 3000 });
     await exec('xdotool', ['windowactivate', '--sync', String(window.id)], { timeout: 3000 });
+    await refresh();
+    window = (await inventory()).find((w) => w.id === window.id && w.visible);
+    assert(window, 'Target must remain visible after activation');
     const point = screen.screenToDipPoint({
       x: window.x + window.width / 2,
       y: window.y + window.height / 2,
@@ -113,12 +133,20 @@ exports.run = async ({
     await delay(150);
     const a = avatarWin.getBounds();
     await move({ x: a.x + a.width / 2, y: a.y + a.height / 2 });
+    observations.push({
+      label: 'before-press',
+      bounds: a,
+      cursor: screen.getCursorScreenPoint(),
+      avatar: await avatarWin.webContents.executeJavaScript(
+        `(()=>{const r=document.getElementById('avatar').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()`,
+      ),
+    });
     await input(['button', true]);
     await wait(() => getState().dragging, Boolean, 'Native press did not begin drag');
     await move(point);
     const result = await wait(
       () => getState().dragging?.candidate,
-      (c) => c && c.state !== 'checking',
+      (c) => c && c.window.id === window.id && c.state !== 'checking',
       'Hover did not resolve',
     );
     await delay(80);
@@ -172,6 +200,7 @@ exports.run = async ({
     await save('running');
   };
   try {
+    observations.push({ label: 'displays', displays: screen.getAllDisplays() });
     await save('running');
     await avatarWin.webContents.executeJavaScript(
       `window.dockingProofSounds=[];window.voyager.onDockSound(value=>window.dockingProofSounds.push(value));`,
@@ -179,13 +208,25 @@ exports.run = async ({
     const before = await rpc('list', '--include-removed');
     const externalWindow = await wait(
       inventory,
-      (list) => list.some((w) => w.pid === external.pid && w.visible),
+      (list) => list.some((w) => w.pid === externalPid && w.visible),
       'External viewer did not open',
     );
-    assert.equal(
-      (await hover(externalWindow.find((w) => w.pid === external.pid))).state,
-      'refused',
-    );
+    if (externalThread) {
+      const record = await wait(
+        async () => {
+          await refresh();
+          return getState().records.find(
+            (r) => r.pid === externalPid && r.nativeId === externalThread && r.external,
+          );
+        },
+        Boolean,
+        'Independent Codex viewer must be identifiable',
+      );
+      observations.push({ label: 'independent-codex', record });
+    }
+    const refusal = await hover(externalWindow.find((w) => w.pid === externalPid));
+    assert.equal(refusal.state, 'refused');
+    if (externalThread) assert.match(refusal.reason, /external/i);
     await capture('external-hover', candidateWin);
     await released('external-refused', 'refused');
     const afterExternal = await rpc('list', '--include-removed');
@@ -197,7 +238,7 @@ exports.run = async ({
     );
     const created = await rpc(
       'create',
-      'shell',
+      kind,
       'd01-create',
       'D01 disposable managed',
       stateDir,
@@ -244,6 +285,12 @@ exports.run = async ({
     assert.deepEqual(rendererErrors, []);
     observations.push({ label: 'renderer-errors', errors: rendererErrors, viewer });
   } catch (error) {
+    observations.push({
+      label: 'failure-state',
+      records: getState().records,
+      service: await rpc('status').catch(() => null),
+      connection: await rpc('connection-info').catch(() => null),
+    });
     failure = error;
   } finally {
     await input(['button', false]).catch(() => {});
@@ -258,11 +305,12 @@ exports.run = async ({
         failure ||= error;
       }
     }
-    if (external.exitCode === null) external.kill('SIGTERM');
+    if (external?.exitCode === null) external.kill('SIGTERM');
     await delay(200);
     cleanup.push({
-      externalExit: external.exitCode,
-      externalSignal: external.signalCode,
+      externalExit: external?.exitCode,
+      externalSignal: external?.signalCode,
+      externalOwnedByParent: Boolean(suppliedExternalPid),
       managedStopped: stopped,
     });
     await save(failure ? 'rework' : 'pass', failure?.message);

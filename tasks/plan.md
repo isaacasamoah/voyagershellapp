@@ -145,3 +145,14 @@ comparison records that observation without treating it as placement acceptance.
 `npm ci` installs this Electron package without its binary. The explicit installed
 package's `install.js` supplies the pinned runtime. Native checks must verify that
 binary exists before launch. Do not substitute the installed main app.
+
+## Authorized completion run
+
+On 24 October 2026 the owner requested the missing live external Codex test,
+then a fresh-context sub-agent review using the review skill for every slice.
+Continue through D01-D04 in dependency order without the intermediate human
+checkpoint. Keep checkpoint evidence for the final owner review. Each slice may
+have one corrective build after review. Re-review that correction; if required
+issues remain, report them and stop rather than starting another correction or
+building dependent slices. This instruction does not authorize merging,
+installation, main-service restart or release. The final review remains human-owned.
