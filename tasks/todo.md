@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01 has live Codex evidence and is undergoing the requested independent review, 24 October 2026. D02 waits for that review. No merge or installed-app update has occurred.
+Status: D01 passed independent re-review after one corrective build, 24 October 2026. D02 is active. No merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -8,7 +8,7 @@ Each slice includes implementation, tests, a real candidate demonstration and th
 
 ## D01: refuse an unsupported dock clearly
 
-- [ ] D01 complete. Reopened for the owner-requested live Codex check and independent review.
+- [x] D01 complete on the candidate. Independent re-review found no remaining Required issues.
 
 Make hover and drop agree about whether the target can be docked. Show a short reason when it cannot, and leave the floating controls available. This delivers the complete refusal journey, rather than only a reusable validation helper.
 
@@ -37,7 +37,7 @@ Additional verification, 24 October 2026:
 - The real external Codex comparison passed with xterm and Ghostty. Hover and drop refused the independently launched conversation without registration or attachment. The external server remained alive and its conversation remained readable. Managed Codex acceptance and a stop during hover also passed.
 - The new Rust integration test checks the desktop proof verdict. A failed native run demonstrated why a zero Electron exit status alone was insufficient. The test requires one external setup turn before opening the native client.
 - All 50 desktop tests, formatting, the full Rust suite and Clippy passed. An earlier full Rust run during a concurrent desktop trial exceeded the queued-read timing limit. The isolated test and the later full suite passed; the earlier result remains recorded.
-- The fresh-context reviewer found that leaving and returning to the same target left its cue hidden and refused. The one corrective build adds re-entry and stale-reply regressions, restarts checking on re-entry, and verifies the rendered cue in both native Codex trials. All 52 desktop tests pass. Correction review remains pending.
+- The fresh-context reviewer found that leaving and returning to the same target left its cue hidden and refused. The one corrective build adds re-entry and stale-reply regressions, restarts checking on re-entry, and verifies the rendered cue in both native Codex trials. All 52 desktop tests pass. Independent re-review passed. The re-entry DOM and native visibility receipts passed; one screenshot still showed checking, so final painted-cue timing is not claimed from that image.
 
 Dependencies: the owner approved the revised plan for this build trial.
 
