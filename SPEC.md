@@ -1,7 +1,7 @@
 # Tracer-bullet usability specification index
 
 Project: VoyagerShellApp. Updated 24 October 2026.
-State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The four module specifications are drafted and await separate review. Map approval does not authorize implementation or runtime changes.
+State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner has now also approved all four module specifications and requested implementation plans. Specification approval does not authorize implementation or runtime changes.
 
 ## Purpose and terminology
 
@@ -20,13 +20,13 @@ These ids identify specification scope. They do not require new packages, servic
 | `voice-handoff` | Acknowledge a delegated request, report truthful progress where useful, and return its result through the active voice conversation. Preserve visible results when audio is unavailable. | Existing private-conversation runtime and native handoff protocol. No dependency on another new capability. |
 | `docking-recovery` | Make docking eligibility truthful throughout hover and drop. Keep the avatar recoverable after rejection, occlusion or identity loss, and provide an independent Show Voyager recovery path. | Existing service identity/control decisions and native window adapter. No dependency on another new capability. |
 
-Approved build order: `docking-recovery`, then `voice-handoff`, then `conversation-resume`, then `current-work-panel`. Docking comes first because losing the controls obstructs ordinary use. Voice can be reviewed independently. Resume precedes the finished panel journey so that previous conversations have a useful return action. This is the approved sequence for the initiative. It does not authorize a task plan, implementation or parallel agents.
+Approved build order: `docking-recovery`, then `voice-handoff`, then `conversation-resume`, then `current-work-panel`. Docking comes first because losing the controls obstructs ordinary use. Voice can be reviewed independently. Resume precedes the finished panel journey so that previous conversations have a useful return action. This is the approved sequence for the initiative. The owner subsequently authorized planning in this order. Implementation and parallel agents are not authorized by specification approval.
 
 ## Approved limits for the first specifications
 
 - Resume begins with an explicit owner request for a supported saved Codex thread. It never automatically replays a task, treats unknown state as stopped, or restores old credentials. Reopening a viewer is separate. Restoring shell jobs or adopting external processes is outside this capability.
 - Panel filtering preserves records, capture and assignments. Running agents remain current when their viewers close. A worker must remain discoverable when its captain is absent from the filtered view. Fleet membership stays separate from authority.
-- Voice uses the native acknowledgement and return mechanisms first. Acknowledgement is not completion. Timing targets need agreement and audible testing; the report's suggested numbers are not accepted guarantees. Private reasoning stays private.
+- Voice uses the native acknowledgement and return mechanisms first. Acknowledgement is not completion. The local timing targets in the approved specifications require audible testing; approval does not establish that they have been achieved. Private reasoning stays private.
 - Docking initially supports verified running, connected, managed Vessels. Unsupported terminals receive a clear refusal and no success sound or implicit registration. Future explicit adoption remains a separate product capability.
 
 General adoption of externally started terminals is a broader intended outcome. This map establishes the approved interim managed-only docking scope based on the owner's request to stop implying unsupported adoption. It does not claim that broader capability is implemented.
@@ -37,24 +37,24 @@ This specification follows source inspection of [worker startup](https://github.
 
 Each module specification defines its successful journey, a deliberately different refusal or failure case, and what evidence demonstrates the result. Integration verification must run the actual selected app and service revisions. Docking measurement extends from the user's action through placement and audible sound; voice verification includes heard acknowledgement and result delivery. Automated receipts alone do not establish those experiences. No new runtime verification occurred while preparing this map.
 
-## Module specifications for review
+## Approved module specifications
 
-| Module id | Authoritative draft | Main review choice |
+| Module id | Authoritative specification | Approved first scope |
 |---|---|---|
-| `docking-recovery` | [Truthful docking and avatar recovery](SPEC-docking-recovery.md) | Undock when the target becomes obscured; proposed latency budgets. |
-| `voice-handoff` | [Voice acknowledgement and result handoff](SPEC-voice-handoff.md) | Private app conversation scope and proposed audible timing budgets. |
+| `docking-recovery` | [Truthful docking and avatar recovery](SPEC-docking-recovery.md) | Undock when the target becomes obscured; local timing targets. |
+| `voice-handoff` | [Voice acknowledgement and result handoff](SPEC-voice-handoff.md) | Private app conversation scope and local audible timing targets. |
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each draft contains its behavior and contracts, commands, source ownership, conventions, tests and acceptance cases. Detailed timing budgets and interaction choices are proposals within these drafts, not decisions implied by approval of the map. Review the specifications before implementation planning. No plan, task list or product implementation has been created in this pass.
+Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The [implementation plan](tasks/plan.md) and [task list](tasks/todo.md) are now drafted for review. No product implementation has started.
 
 ## Review and development workflow
 
-The capability boundaries and build order are approved. Each linked module specification remains a draft for behavior review. In particular, the timing budgets, recovery interaction and legacy resume limits need review. Moving these documents into version control does not approve their contents or start implementation.
+The capability boundaries, build order and four module specifications are approved. The plan is the next review gate. Recording approval does not start implementation or change the running app.
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-After specification approval, use the canonical planning skill to produce `tasks/plan.md` and its default task list, `tasks/todo.md`, or the project's explicitly designated tracker. The active plan identifies which approved modules it covers. Follow the existing build and Git skills unchanged for the first trial. No plan or task list has been created yet.
+The active plan uses `tasks/plan.md` and its task list uses `tasks/todo.md`, following spec-driven-development and its canonical planning-and-task-breakdown skill. It identifies the governing specification for each task. Follow the existing build and Git skills unchanged for the first trial. Review and approve the plan before implementation.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are future acceptance requirements. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 

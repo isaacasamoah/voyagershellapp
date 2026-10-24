@@ -1,7 +1,7 @@
 # Spec: a panel focused on current work
 
-Module id: `current-work-panel`. Project: VoyagerShellApp. Draft for review, 24 October 2026.
-The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). This specification awaits review before planning and implementation.
+Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
+The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The owner approved this specification and requested planning. The implementation plan still requires review.
 
 ## Objective and scope
 
@@ -113,4 +113,4 @@ Use the service's observations, preserve history and explain why an action is un
 
 Do not delete records to reduce clutter, treat a closed terminal window as a stopped agent, move Fleets while filtering rows, or let the renderer grant permissions.
 
-The proposed first UI uses Current work, Needs attention and Previous agents. Previous agents uses the panel's available space, internal scrolling and small batches rather than a fixed 50-record batch. Check the batch sizing and scrolling interaction in the real panel during implementation. Full transcript search, recovery of native conversations and restoration of removed records remain deferred. The first increment's proposed limits on resuming older records also apply here: if their settings cannot be verified, keep history accessible even though Resume is unavailable.
+The approved first UI uses Current work, Needs attention and Previous agents. Previous agents uses the panel's available space, internal scrolling and small batches rather than a fixed 50-record batch. Check the batch sizing and scrolling interaction in the real panel during implementation. Full transcript search, recovery of native conversations and restoration of removed records remain deferred. The first increment's approved limits on resuming older records also apply here: if their settings cannot be verified, keep history accessible even though Resume is unavailable.

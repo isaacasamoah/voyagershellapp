@@ -1,7 +1,7 @@
 # Spec: explicitly resume a saved conversation
 
-Module id: `conversation-resume`. Project: VoyagerShellApp. Draft for review, 24 October 2026.
-The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). Specification approval precedes planning and implementation.
+Module id: `conversation-resume`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
+The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). The owner approved this specification and requested planning. The implementation plan still requires review.
 
 ## Objective and scope
 
@@ -114,6 +114,6 @@ Broader recovery behavior needs a separate review before implementation. This in
 
 An old process ID is not proof that Voyager owns the process now using that ID. Do not claim ownership from that number alone or kill a process that might be unrelated. Do not silently give a resumed agent more permissions than it had before. If the outcome of an earlier request is uncertain, do not issue a new request ID to bypass that uncertainty and try again.
 
-For this first increment, the proposed treatment of older records is to reuse their settings only when those settings can be verified. Otherwise, explain why Resume is unavailable. Keep the saved history readable and allow the owner to create a new agent through the existing creation flow. Creating a new agent is a separate choice, not a substitute presented as a successful resume.
+For this first increment, the approved treatment of older records is to reuse their settings only when those settings can be verified. Otherwise, explain why Resume is unavailable. Keep the saved history readable and allow the owner to create a new agent through the existing creation flow. Creating a new agent is a separate choice, not a substitute presented as a successful resume.
 
 Restoring removed registrations and providing an editor to repair missing settings are outside this increment. Before implementation, the plan must specify how resume information is stored and verify how Codex applies the saved settings. Missing or unsupported settings must not be concealed by falling back to defaults that grant more access.

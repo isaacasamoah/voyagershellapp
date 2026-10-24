@@ -1,7 +1,7 @@
 # Spec: truthful docking and avatar recovery
 
-Module id: `docking-recovery`. Project: VoyagerShellApp. Draft for review, 24 October 2026.
-The [capability map](SPEC.md) is approved. This specification is proposed behavior, not implemented behavior or permission to change the running app.
+Module id: `docking-recovery`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
+The [capability map](SPEC.md) is approved. This specification defines approved requirements, not implemented behavior or permission to change the running app.
 
 ## Objective and scope
 
@@ -74,7 +74,7 @@ Extend the Node binding/control tests and Rust control tests where behavior chan
 
 For live testing, run the app and service from the same candidate revision. Record exactly which executables and display backend ran, and verify the packaged build before rollout. Test both supported terminal viewers and report any unsupported combination. Use a monotonic clock, which is unaffected by wall-clock adjustments, to time the drop, service acceptance, confirmed placement, the start of audible sound and its completion. Scheduling audio alone does not prove it was heard.
 
-The proposed timing targets need review. In 20 unobstructed docking trials on the development Fedora desktop, at least 19 must produce audible docking feedback within two seconds of the drop. In 20 recovery trials, at least 19 must reveal both the panel and avatar within one second. Every trial must recover correctly. Record all slow and failed trials. These targets have not been measured and do not establish performance on other systems.
+The owner approved these local timing targets. In 20 unobstructed docking trials on the development Fedora desktop, at least 19 must produce audible docking feedback within two seconds of the drop. In 20 recovery trials, at least 19 must reveal both the panel and avatar within one second. Every trial must recover correctly. Record all slow and failed trials. These targets have not been measured and do not establish performance on other systems.
 
 Keep a limited amount of diagnostic information covering the attempt's generation, target identity, eligibility, control attachment, placement and reason for recovery. Do not include terminal contents, credentials or private reasoning. Keep test results outside committed source. Keep executable test probes with their source or in temporary test output.
 
@@ -84,4 +84,4 @@ Undocking must leave the agent running. Recheck identity before attaching contro
 
 Registration alone does not prove process ownership. Do not send input based on which desktop window has focus, or restart the service to conceal a failed dock.
 
-The proposed behavior of undocking when another window covers the target, and the proposed timing targets, still need review. Test the failure cases described here, but do not claim they all occurred in the original incident. The evidence does not establish that sequence.
+The owner approved undocking when another window covers the target and the local timing targets. Test the failure cases described here, but do not claim they all occurred in the original incident. The evidence does not establish that sequence.

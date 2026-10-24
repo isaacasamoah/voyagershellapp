@@ -1,7 +1,7 @@
 # Spec: voice acknowledgement and result handoff
 
-Module id: `voice-handoff`. Project: VoyagerShellApp. Draft for review, 24 October 2026.
-The [capability map](SPEC.md) is approved. This specification awaits review before planning or implementation.
+Module id: `voice-handoff`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
+The [capability map](SPEC.md) is approved. The owner approved this specification and requested planning. The implementation plan still requires review.
 
 ## Objective and scope
 
@@ -78,7 +78,7 @@ Normal tests use simulated responses and make no model calls. The existing conve
 
 Use simulated events to test arrival order, duplicates, outdated events, failures and disconnects. Use a real native conversation to test acknowledgement wording, result delivery and interruption. As a comparison, run the same delegated request with acknowledgement disabled. The test must distinguish a missing acknowledgement from a result that simply takes longer to arrive.
 
-The proposed timing targets need approval and live measurement. Run 20 successful delegated requests on a quiet, active voice connection. For at least 19, the acknowledgement must begin within one second after the system detects that the user stopped speaking, and the final spoken answer must begin within two seconds after the backing model turn finishes. All 20 must deliver the correct result without duplicate speech or an answer belonging to the wrong request.
+The owner approved these local timing targets. Live measurement is still required. Run 20 successful delegated requests on a quiet, active voice connection. For at least 19, the acknowledgement must begin within one second after the system detects that the user stopped speaking, and the final spoken answer must begin within two seconds after the backing model turn finishes. All 20 must deliver the correct result without duplicate speech or an answer belonging to the wrong request.
 
 Measure separately how long the system takes to detect that the user stopped speaking. When measuring the delay before the final answer, exclude time spent waiting because the user is speaking, and report that excluded time explicitly.
 
@@ -90,4 +90,4 @@ Keep the existing rules for who may use each tool. Do not present submitted work
 
 Review any proposal for a custom result-delivery channel or a change to native terminal voice before implementing it. Never expose private reasoning, invent progress, automatically retry an action with an uncertain outcome, or enable two competing ways to announce the same result.
 
-The proposed timing targets still need review. Codex's automatic result delivery must pass the required cases. If it cannot, report the specific limitation and revise the design before declaring this capability complete. Restoring the private conversation after a service restart remains outside this increment.
+The local timing targets are approved and still require live proof. Codex's automatic result delivery must pass the required cases. If it cannot, report the specific limitation and revise the design before declaring this capability complete. Restoring the private conversation after a service restart remains outside this increment.

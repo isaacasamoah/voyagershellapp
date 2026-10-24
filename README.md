@@ -22,8 +22,9 @@ is our starting point, and we’d love to build toward it with other developers.
 ## Specification review
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
-resume, current-work presentation, voice handoffs and docking recovery. They are
-drafts for review, not implemented behavior. Planning follows specification approval.
+resume, current-work presentation, voice handoffs and docking recovery. The specifications are
+approved; the [implementation plan](tasks/plan.md) is ready for review. These
+requirements do not describe implemented behavior yet.
 
 ## Current prototype
 
