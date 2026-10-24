@@ -1,6 +1,6 @@
 # Plan: recoverable docking
 
-Status: Approved for the build trial, 24 October 2026. D01-D02 passed independent review. D03 is being built and verified; D04 remains pending.
+Status: Approved for the build trial, 24 October 2026. D01-D03 passed independent review. D04 is being built and verified.
 
 ## Scope and outcome
 
