@@ -5,36 +5,36 @@ The [capability map](SPEC.md) is approved. This specification awaits review befo
 
 ## Objective and scope
 
-When the owner asks Voyager's private app conversation to inspect or act, it acknowledges the request and reports the actual result. A long-running request does not leave him wondering whether it was heard. The result remains readable if audio fails.
+When the owner asks Voyager's private app conversation to inspect something or take an action, it says that it heard the request, explains what it will do, and reports the actual result. The owner should not be left wondering whether a long-running request was heard. The result must remain readable if audio fails.
 
-This increment covers the floating app conversation and its backing Codex runtime. A docked terminal uses a separate native voice path. Preserve that routing and test it, but do not claim that changing private-conversation instructions fixes native terminal voice. No permission, model, rank or tool-catalog expansion is part of this module.
+This change covers the floating app conversation and the Codex runtime that performs its work. A docked terminal uses its own native voice connection. Preserve and test that routing, but do not claim that changing the private app conversation fixes terminal voice. This module adds no permissions, models, ranks or tools.
 
-The [source inspection](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/src/service/conversation.rs) established that Voyager disables native delegation acknowledgement. It did not establish the cause of every missing spoken final. Protocol inspection used Codex 0.163.0 generated schemas. It found acknowledgement and native automatic handoff controls; their presence is not behavioral proof. Recheck the installed provider schema before implementation.
+The [source inspection](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/src/service/conversation.rs) found that Voyager disables Codex's built-in acknowledgement when voice hands work to the backing runtime. It did not explain every missing spoken answer. The generated protocol definitions for Codex 0.163.0 include controls for acknowledgement and automatic return of results. Their presence does not prove that they work in Voyager. Recheck the installed version's protocol definitions before implementation.
 
 ## Behavior and boundary contract
 
-1. For a request requiring the backing model or tools, speak a short acknowledgement when the user finishes speaking. Say what will happen, for example "I'll check the running agents." Do not claim inspection has started or finished before it has. Ordinary direct conversation does not need an extra handoff acknowledgement.
-2. Keep native automatic return handoffs. Initially enable the supported acknowledgement control and give explicit public-response instructions. Do not introduce a second independent completion announcer. A fast final can follow a brief acknowledgement without a separate progress message.
-3. While work runs, publish concise progress only when grounded in a real stage or finding. A timer may report that no result has arrived; it must not invent progress such as "finishing touches." Progress never starts another copy of the task.
-4. On completion, return the answer or actual action outcome, its material limits and any next action. A tool receipt proves only what it reports. A failed or interrupted turn returns that outcome rather than a success summary. An empty completion leaves a visible "Finished without an answer" status and is a failed acceptance case for an ordinary successful request.
-5. Preserve the final text in the existing private conversation history. If audio is unavailable, show that the result is ready to read. Do not claim it was spoken merely because audio was requested or decoded.
-6. Respect user interruption. Do not talk over the user with a queued update. If a newer request supersedes an earlier one, keep the earlier outcome in history but suppress its unsolicited late announcement. Do not silently cancel or resubmit its underlying action. Concurrent relevant work needs distinct request identities.
-7. Losing the desktop voice lease stops audio and retires that voice generation. The backing runtime continues under its existing rules. Reconnection does not replay old audio, resend a command or claim a previous result was heard.
+1. When a request needs the backing model or tools, give a short spoken acknowledgement after the user finishes speaking. Say what will happen, for example "I'll check the running agents." Do not claim inspection has started or finished before it has. Ordinary conversation answered directly does not need an extra acknowledgement.
+2. Keep Codex's built-in mechanism for returning results to voice. First enable its supported acknowledgement setting and give explicit instructions for responses the user should hear or read. Do not add another independent mechanism that announces completion. If the result arrives quickly, it can follow the acknowledgement without a separate progress update.
+3. While work runs, give short progress updates only when there is a real stage or finding to report. A timer may say that no result has arrived yet, but must not invent progress such as "finishing touches." Sending a progress update must never start another copy of the task.
+4. When work ends, report the answer or what the action actually did, any important limits, and any next action. A tool's operation record proves only what it records. If the model turn failed or was interrupted, report that outcome instead of claiming success. If it finishes without an answer, show "Finished without an answer". That counts as a failed test for an ordinary request expected to succeed.
+5. Save the final text in the existing private conversation history. If audio is unavailable, show that the result is ready to read. Requesting or decoding audio does not prove that it was spoken.
+6. Respect interruptions. Do not play a queued update over the user. If a newer request replaces an earlier one, retain the earlier result in history but do not announce it late without being asked. Do not silently cancel or repeat the underlying action. When multiple requests remain relevant, track each with a separate request identifier.
+7. If the desktop loses its voice lease, meaning its right to use the active voice connection, stop audio and retire that connection's generation. A generation identifies that particular voice connection. Keep the backing runtime operating under its existing rules. Reconnecting must not replay old audio, resend a command or claim the user heard an earlier result.
 
-Use the existing request, native turn, item and voice-client identities. Correlate each acknowledgement/progress/result with the request or native turn and current voice generation. An unknown association cannot announce completion of another request. Deduplicate repeated final events by native item identity; duplicate delivery must not become duplicate speech.
+Use the existing identifiers for requests, native model turns, response items and voice clients. Associate each acknowledgement, progress update and result with its request or native turn and the current voice generation. If that association is unknown, do not announce it as another request's completion. Use the native response item's identifier to recognise repeated final events and prevent duplicate speech.
 
-The [official app-server contract](https://learn.chatgpt.com/docs/app-server) distinguishes turn completion from its completed, failed or interrupted status. The adapter must validate provider events at ingress and inspect that outcome. Raw reasoning is not part of this contract. Public progress messages are sufficient.
+The [official app-server contract](https://learn.chatgpt.com/docs/app-server) distinguishes a turn ending from whether it completed successfully, failed or was interrupted. Validate events as they arrive from Codex and check the reported outcome. Show public progress messages, not the model's private reasoning.
 
-A supported protocol is necessary but insufficient. Begin with `delegationAckFiller: true` and native automatic handoff, leaving client-managed handoffs disabled. If final speech remains missing, locate the failed stage and test supported routing before proposing a bounded fallback. Any fallback must have a single delivery owner and preserve deduplication. This spec does not approve a parallel custom transport, general notification framework or new model call merely to announce completion.
+Begin with `delegationAckFiller: true` and Codex's automatic handoff, leaving client-managed handoffs disabled. Protocol support alone is not enough; test the actual behavior. If the final answer is still not spoken, identify where delivery failed and test the supported routing before proposing a limited fallback. Any fallback must have one component responsible for delivery and must prevent duplicate announcements. This spec does not approve a second custom delivery channel, a general notification framework or an extra model call just to announce completion.
 
 ## Source ownership, stack and style
 
-Use the existing Rust 2024 service, Codex app-server adapter and Electron 44.7.0 / Node 24 client. Pin the actual provider version in test evidence; the earlier schema is a reference, not a claim that all installed versions behave alike.
+Use the existing Rust 2024 service, Codex app-server adapter and Electron 44.7.0 / Node 24 client. Record the exact Codex version used in testing. The earlier protocol definitions are a reference; they do not establish that every installed version behaves the same way.
 
 - `src/service/conversation.rs` owns provider requests, public events and private runtime state. `conversation_tools.rs` continues to dispatch existing tools.
 - `desktop/src/conversation.cjs` owns the service client; `desktop/src/ui/conversation.js` owns the visible conversation, microphone and playback.
 - `src/service/voice.rs` owns routing between private and native destinations. The existing escalation presenter remains separate.
-- Extend `tests/conversation.rs`, its provider fixture and `desktop/test/conversation.test.cjs`. The owning context is [harness-runtime.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/harness-runtime.md), with [voice.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/voice.md) for routing.
+- Extend `tests/conversation.rs`, its simulated provider and `desktop/test/conversation.test.cjs`. The existing behavior is documented in [harness-runtime.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/harness-runtime.md), with voice routing in [voice.md](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/docs/voice.md).
 
 Follow [CONTRIBUTING](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/CONTRIBUTING.md), including small functions, explicit states and comment-free changed source. Existing [conversation UI](https://github.com/isaacasamoah/voyagershellapp/blob/fcffc1a23189414c5640a3792335221ae3b25085/desktop/src/ui/conversation.js) keeps user-visible feedback explicit:
 
@@ -61,29 +61,33 @@ npm --prefix desktop test
 node --test desktop/test/conversation.test.cjs
 ```
 
-Normal tests use fixtures and make no model calls. The existing conversation proof is documented in harness-runtime.md, but its silent playback does not meet audible acceptance. The later plan must specify the real input, output device, app/service revisions and authorized isolated state before running a model or microphone trial.
+Normal tests use simulated responses and make no model calls. The existing conversation test is documented in harness-runtime.md, but its silent playback does not prove that the user can hear a response. Before a real model or microphone trial, the later plan must identify the input, output device, app and service revisions, and authorized isolated test state.
 
 ## Success criteria and verification
 
 | Id | Case and required evidence |
 |---|---|
-| V1 | A delegated inspection produces an audible acknowledgement and an audible answer grounded in the actual result. The visible history retains the answer. |
-| V2 | A delayed tool produces acknowledgement before its result. Any intermediate message describes observed progress or honest waiting. |
-| V3 | Tool refusal, provider failure and user interruption produce the right outcome, without success language or automatic resubmission. |
-| V4 | Duplicate completion events produce one final item and at most one spoken announcement. A late result from a superseded request is not spoken as the current answer. |
-| V5 | Disconnect during work, reconnect and complete the original turn. Its result is readable; old audio and commands are not replayed. |
-| V6 | While the user speaks, defer queued progress/results. Verify interruption with real microphone input and audible playback. |
-| V7 | Stop audio or deny playback. Preserve a visible result and useful status. The service stays responsive and the backing runtime is not stopped. |
-| V8 | Switch between private conversation, docked Codex and Bash. Audio still belongs to the correct destination; a private result is never injected into a Vessel. |
+| V1 | Ask voice to hand an inspection request to the backing runtime. Hear both an acknowledgement and an answer based on the actual inspection result. The answer must also remain in the visible history. |
+| V2 | Make a tool take longer to finish. Hear the acknowledgement before its result. Any update in between must describe observed progress or honestly say that Voyager is waiting. |
+| V3 | Test a refused tool request, a Codex failure and a user interruption. Report each outcome accurately, without claiming success or automatically submitting the request again. |
+| V4 | Deliver duplicate completion events. Show one final response item and speak it at most once. If a newer request replaces an earlier one, do not speak the earlier request's late result as the current answer. |
+| V5 | Disconnect during work, reconnect, and let the original model turn finish. Its result must be readable. Do not replay old audio or commands. |
+| V6 | While the user speaks, defer queued progress updates and results. Test interruption using a real microphone and audible playback. |
+| V7 | Stop audio or prevent playback. Keep the result visible and show a useful status. The service must remain responsive and the backing runtime must keep running. |
+| V8 | Switch between the private app conversation, docked Codex and Bash. Voice must follow the correct destination. A private app result must never be sent into a Vessel's conversation. |
 
-Use fixture events for ordering, duplicate, stale, failure and disconnect cases. Use a real native conversation for acknowledgement wording, actual result delivery and interruption. The known-different control is the same delegated request with acknowledgement disabled; it must distinguish missing acknowledgement from slow completion.
+Use simulated events to test arrival order, duplicates, outdated events, failures and disconnects. Use a real native conversation to test acknowledgement wording, result delivery and interruption. As a comparison, run the same delegated request with acknowledgement disabled. The test must distinguish a missing acknowledgement from a result that simply takes longer to arrive.
 
-Proposed local timing budgets: for 20 successful delegated requests on a quiet active voice connection, at least 19 begin acknowledgement within one second of detected speech end and begin their final spoken answer within two seconds of backing-turn completion. All 20 must deliver the correct result without duplicate or wrong-request speech. Report speech-end detection latency separately from the user's physical end of speech. Exclude user-speaking intervals from the final-delivery delay and report them explicitly. These budgets await approval and live measurement.
+The proposed timing targets need approval and live measurement. Run 20 successful delegated requests on a quiet, active voice connection. For at least 19, the acknowledgement must begin within one second after the system detects that the user stopped speaking, and the final spoken answer must begin within two seconds after the backing model turn finishes. All 20 must deliver the correct result without duplicate speech or an answer belonging to the wrong request.
 
-Capture timestamps for recognized input, delegation, acknowledgement audio onset, backing completion and final audio onset. Correlate them without saving credentials or private reasoning. Decoded audio and event receipts supplement human or loopback confirmation; they do not establish audible playback alone.
+Measure separately how long the system takes to detect that the user stopped speaking. When measuring the delay before the final answer, exclude time spent waiting because the user is speaking, and report that excluded time explicitly.
+
+Record when input is recognised, work is handed to the backing runtime, acknowledgement audio begins, the backing turn finishes, and final-answer audio begins. Associate those times with the correct request without saving credentials or private reasoning. Confirm playback by listening or recording the system's audio output. Decoded audio and event records are supporting evidence, not proof of audible playback by themselves.
 
 ## Boundaries and review decisions
 
-Always preserve existing tool authorization, distinguish submitted work from completed work, and retain readable outcomes when audio fails. Seek review before a custom return transport or a change to native terminal voice. Never expose private reasoning, fabricate progress, automatically retry an uncertain action or enable two competing result-announcement paths.
+Keep the existing rules for who may use each tool. Do not present submitted work as completed work. Keep the result readable when audio fails.
 
-Review the proposed timing budgets. Native automatic delivery must pass the required cases; if it cannot, report the specific limitation and revise the design before calling this capability complete. Persistent private-conversation recovery across service restart remains outside this increment.
+Review any proposal for a custom result-delivery channel or a change to native terminal voice before implementing it. Never expose private reasoning, invent progress, automatically retry an action with an uncertain outcome, or enable two competing ways to announce the same result.
+
+The proposed timing targets still need review. Codex's automatic result delivery must pass the required cases. If it cannot, report the specific limitation and revise the design before declaring this capability complete. Restoring the private conversation after a service restart remains outside this increment.
