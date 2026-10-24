@@ -59,10 +59,10 @@ merge and installation remain separate decisions.
   [development facility](docs/development-tests.md) does not grant control of the
   installed app and still requires a live graphical acceptance trial.
 
-The existing end-to-end platform proof is Fedora with dedicated Ghostty XWayland
-windows. An opt-in xterm viewer now shares the launch and verified identity boundary.
-Its native fixture checks placement, redraw, shortcut input and closure; the full
-app/service, voice and audible docking trial remains pending. Ordinary
+The packaged candidate has Fedora GNOME/XWayland evidence with dedicated Ghostty
+and xterm windows. Native trials cover placement, target-loss recovery, voice
+routing and recorded docking output. The task list preserves fixture setup and
+voice teardown limits; owner acceptance remains open. Ordinary
 `codex` launches, tabs, other terminals, macOS and native Wayland are not supported
 by the current matcher. Registration does not transfer ownership of an external
 process. Persistence covers client disconnection, not daemon crashes or reboots.
@@ -70,7 +70,7 @@ Rebuilding the executable at the same path preserves viewer and instance CLI pat
 Bash open receipts also wait for the viewer connection, not just a mapped terminal window.
 
 Explicit supervisor preemption, knowledge extraction and shared graphs are later
-work. Voyager is an experimental prototype.
+work. Voyager is an experimental tracer-bullet build.
 
 ## Talk to Voyager
 
