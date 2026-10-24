@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01-D04 passed independent review. The owner trial approved D05, restoring pre-dock floating positions, which is now active. No merge or installed-app update has occurred.
+Status: D01-D05 passed independent review and packaged verification. D05 used its one corrective build. Ready for owner review; no merge or installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -203,8 +203,17 @@ D04 final verification and independent correction review, 24 October 2026:
 
 ## D05: restore the floating controls to their pre-dock positions
 
-- [ ] Capture before moving the avatar into a dock; recover both positions after target loss, including minimise and close. A move between targets retains the original floating positions.
-- [ ] Clamp unavailable positions to a visible display, preserve deliberate floating repositioning, and retain explicit Applications recovery on the current display.
-- [ ] Regression, full desktop checks, native trials with both viewers and independent review pass. Preserve the existing agent/capture and the owner's running trial.
+- [x] Capture before moving the avatar into a dock; recover both positions after target loss, including minimise and close. A move between targets retains the original floating positions.
+- [x] Clamp unavailable positions to a visible display, preserve deliberate floating repositioning, and retain explicit Applications recovery on the current display.
+- [x] Regression, full desktop checks, native trials with both viewers and independent review pass. Preserve the existing agent/capture and the owner's running trial.
 
 Files: desktop/src/main.cjs, desktop/test/docking.test.cjs, a focused native proof, and docs/desktop.md.
+
+D05 completion evidence, 24 October 2026: all 90 desktop tests and formatting
+pass. Both supported viewers pass the corrected checkout and packaged real-pointer
+minimise/close journeys. Native panel/avatar positions return exactly, remain
+after refresh, and preserve runtime/capture. The independent reviewer found an
+overlapping-display race; the single correction passed re-review and its
+mutation check. Candidate hashes and cleanup match. Physical monitor removal is
+not claimed; fallback and overlapping events are deterministic tests. The owner's
+open trial still uses the earlier package.

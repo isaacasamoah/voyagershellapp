@@ -1,6 +1,6 @@
 # Plan: recoverable docking
 
-Status: D01-D04 passed independent review and packaged verification. During the 24 October owner trial, Isaac approved D05: return automatic recovery to the pre-dock floating positions. D05 is active; merge and rollout remain separate decisions.
+Status: D01-D05 passed independent review and packaged verification. D05 used one corrective build. Ready for owner review; owner acceptance and rollout remain separate decisions.
 
 ## Scope and outcome
 
