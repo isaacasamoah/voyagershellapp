@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+    />
+    <title>Voyager · Git graph</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f7fa;
+        --surface: #fff;
+        --ink: #172837;
+        --muted: #516477;
+        --line: #ccd6df;
+        --ahead: #12634b;
+        --behind: #93500a;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #121b24;
+          --surface: #1b2733;
+          --ink: #e5edf5;
+          --muted: #b1c1d2;
+          --line: #435568;
+          --ahead: #75dbb5;
+          --behind: #f1bd78;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 2rem;
+      }
+      h1 {
+        margin: 0.25rem 0;
+        font-size: 2rem;
+        font-weight: 650;
+        letter-spacing: -0.04em;
+      }
+      p {
+        margin: 0.5rem 0;
+      }
+      .eyebrow {
+        color: var(--muted);
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      code,
+      .path {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        overflow-wrap: anywhere;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 1rem;
+        margin: 1.5rem 0 1rem;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .search {
+        flex: 1;
+        min-width: 12rem;
+      }
+      input,
+      select {
+        font: inherit;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 0.25rem;
+        background: var(--surface);
+        color: var(--ink);
+        max-width: 100%;
+      }
+      :focus-visible {
+        outline: 3px solid var(--ahead);
+        outline-offset: 3px;
+      }
+      .summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.5rem;
+        margin: 1.25rem 0;
+      }
+      .summary strong {
+        font-size: 1.5rem;
+        margin-right: 0.25rem;
+      }
+      .legend {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin: 1rem 0 0.5rem;
+      }
+      #rows {
+        border: 1px solid var(--line);
+        border-radius: 0.5rem;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      article {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.7fr);
+        gap: 1rem 2rem;
+      }
+      article:last-child {
+        border-bottom: 0;
+      }
+      h2 {
+        font:
+          600 0.95rem/1.4 ui-monospace,
+          monospace;
+        margin: 0 0 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      details {
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+      }
+      summary {
+        cursor: pointer;
+        width: fit-content;
+      }
+      .path {
+        display: block;
+        margin-top: 0.5rem;
+      }
+      .distance {
+        align-self: center;
+      }
+      .counts {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .ahead {
+        color: var(--ahead);
+      }
+      .behind {
+        color: var(--behind);
+      }
+      .track {
+        height: 1.25rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin: 0.5rem 0;
+      }
+      .half {
+        display: flex;
+        align-items: center;
+      }
+      .half:first-child {
+        justify-content: end;
+        border-right: 2px solid var(--ink);
+      }
+      .bar {
+        height: 0.35rem;
+        background: currentColor;
+        min-width: 0;
+      }
+      .relation {
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-align: center;
+      }
+      #empty {
+        padding: 2rem;
+        text-align: center;
+      }
+      footer {
+        margin-top: 1.5rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      footer details {
+        margin-top: 1rem;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 640px) {
+        main {
+          padding: 1rem;
+        }
+        article {
+          grid-template-columns: 1fr;
+          gap: 0.75rem;
+          padding: 1rem;
+        }
+        h1 {
+          font-size: 1.75rem;
+        }
+        .toolbar > label {
+          width: 100%;
+        }
+        .legend {
+          display: block;
+        }
+        .legend span {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">Voyager Shell / small feature trial</div>
+        <h1>Branches and worktrees</h1>
+        <p class="muted">See where checked-out work stands against local main.</p>
+        <p id="root" class="path"></p>
+      </header>
+      <div class="summary" id="summary"></div>
+      <div class="toolbar">
+        <label class="search"
+          >Find a branch or folder<input
+            id="search"
+            type="search"
+            placeholder="Filter by name or worktree"
+        /></label>
+        <label
+          >Show<select id="scope">
+            <option value="active">Checked-out worktrees</option>
+            <option value="all">All local branches and heads</option>
+            <option value="unmerged">Changes outside main</option>
+          </select></label
+        >
+        <label
+          >Order<select id="sort">
+            <option value="recent">Recent commit first</option>
+            <option value="ahead">Most commits ahead</option>
+            <option value="name">Branch name</option>
+          </select></label
+        >
+      </div>
+      <div class="legend">
+        <span id="count" role="status" aria-live="polite"></span
+        ><span>Left: behind main · Centre: main · Right: ahead</span>
+      </div>
+      <section id="rows" aria-label="Branch comparison"></section>
+      <p id="empty" hidden>No matches. Try a different name or show all local branches.</p>
+      <footer>
+        <p id="stamp"></p>
+        <p>
+          Each bar shows commits unique to main or to that branch. Bar lengths use the same scale
+          across all rows. This is a distance view, not a commit ancestry diagram.
+        </p>
+        <details>
+          <summary>Snapshot details and refresh</summary>
+          <p>
+            “Checked out” means a worktree is registered in Git. It does not mean an agent is
+            running. Missing worktrees are labelled. Counts compare captured local references; no
+            remote fetch or Git changes run.
+          </p>
+          <p id="revision" class="path"></p>
+          <p>Refresh this file by running the generator from its checkout:</p>
+          <code
+            >node desktop/scripts/git-graph.cjs /path/to/project
+            /path/to/project/git-graph.html</code
+          >
+          <p>This local file includes branch names and worktree paths. Review it before sharing.</p>
+        </details>
+      </footer>
+    </main>
+    <script type="application/json" id="data">
+      GRAPH_DATA
+    </script>
+    <script>
+      const data = JSON.parse(document.querySelector('#data').textContent);
+      const $ = (selector) => document.querySelector(selector);
+      const element = (tag, text, className) => {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (className) node.className = className;
+        return node;
+      };
+      $('#root').textContent = data.root;
+      $('#stamp').textContent =
+        `Local snapshot · ${new Date(data.generated).toLocaleString()} · Reloading this page does not refresh Git data.`;
+      $('#revision').textContent = `Comparison: local main at ${data.main.slice(0, 12)}`;
+      const totals = [
+        [data.branches.filter((row) => !row.detached).length, 'local branches'],
+        [data.branches.reduce((n, row) => n + row.worktrees.length, 0), 'worktrees'],
+        [data.branches.filter((row) => row.ahead > 0).length, 'heads ahead of main'],
+      ];
+      for (const [number, label] of totals) {
+        const item = element('span');
+        item.append(element('strong', number), document.createTextNode(label));
+        $('#summary').append(item);
+      }
+      const maximum = Math.max(1, ...data.branches.flatMap((row) => [row.behind, row.ahead]));
+      function draw() {
+        const search = $('#search').value.toLowerCase();
+        const scope = $('#scope').value;
+        const rows = data.branches.filter(
+          (row) =>
+            (scope !== 'active' || row.worktrees.length) &&
+            (scope !== 'unmerged' || row.ahead) &&
+            `${row.name} ${row.worktrees.map((tree) => tree.path).join(' ')}`
+              .toLowerCase()
+              .includes(search),
+        );
+        rows.sort(
+          (a, b) =>
+            (a.name === 'main' ? -1 : b.name === 'main' ? 1 : 0) ||
+            ($('#sort').value === 'ahead'
+              ? b.ahead - a.ahead
+              : $('#sort').value === 'recent'
+                ? (b.updated || '').localeCompare(a.updated || '')
+                : 0) ||
+            a.name.localeCompare(b.name),
+        );
+        $('#rows').replaceChildren();
+        $('#empty').hidden = rows.length > 0;
+        $('#rows').hidden = rows.length === 0;
+        $('#count').textContent = `${rows.length} of ${data.branches.length} branch/head records`;
+        for (const row of rows) {
+          const article = element('article');
+          const name = element('div');
+          name.append(element('h2', row.name));
+          if (!row.worktrees.length) name.append(element('div', 'No worktree', 'muted'));
+          for (const tree of row.worktrees)
+            name.append(
+              element(
+                'div',
+                `${tree.path === data.root ? '.' : tree.path.startsWith(`${data.root}/`) ? tree.path.slice(data.root.length + 1) : tree.path}${tree.missing ? ' · missing' : ''}`,
+                'path muted',
+              ),
+            );
+          if (row.detached)
+            name.append(element('div', `Detached at ${row.head.slice(0, 12)}`, 'muted'));
+          if (row.worktrees.length || row.subject) {
+            const details = element('details');
+            details.append(element('summary', 'Folder and last commit'));
+            for (const tree of row.worktrees)
+              details.append(
+                element(
+                  'span',
+                  `${tree.path}${tree.missing ? ' · missing' : ''}${tree.prunable ? ' · prunable' : ''}${tree.locked ? ' · locked' : ''}`,
+                  'path',
+                ),
+              );
+            if (row.subject)
+              details.append(
+                element('p', `${row.subject} · ${new Date(row.updated).toLocaleDateString()}`),
+              );
+            name.append(details);
+          }
+          const distance = element('div', undefined, 'distance');
+          const counts = element('div', undefined, 'counts');
+          counts.append(
+            element('span', `${row.behind} behind`, 'behind'),
+            element('span', `${row.ahead} ahead`, 'ahead'),
+          );
+          const track = element('div', undefined, 'track');
+          track.setAttribute('aria-hidden', 'true');
+          for (const [count, color] of [
+            [row.behind, 'behind'],
+            [row.ahead, 'ahead'],
+          ]) {
+            const half = element('div', undefined, `half ${color}`);
+            const bar = element('div', undefined, 'bar');
+            bar.style.width = `${(count / maximum) * 100}%`;
+            half.append(bar);
+            track.append(half);
+          }
+          distance.append(
+            counts,
+            track,
+            element(
+              'div',
+              row.name === 'main'
+                ? 'Comparison branch'
+                : !row.ahead && !row.behind
+                  ? 'Same commit as main'
+                  : !row.ahead
+                    ? 'All commits included in main'
+                    : !row.behind
+                      ? 'Contains main'
+                      : 'Both have separate commits',
+              'relation',
+            ),
+          );
+          article.append(name, distance);
+          $('#rows').append(article);
+        }
+      }
+      for (const control of ['#search', '#scope', '#sort'])
+        $(control).addEventListener('input', draw);
+      draw();
+    </script>
+  </body>
+</html>
