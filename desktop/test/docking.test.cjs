@@ -58,6 +58,7 @@ function desktop(
     identities = async () => new Map([[10, record], [record.frontend.pid, record.frontend]]);
     rpc = async (action) => { calls.push(action); return rows; };
     sendState = () => {};
+    globalThis.realSetExpanded = setExpanded;
     setExpanded = async () => { calls.push('panel'); };
     placeAboveTerminal = async () => {};
     follow = () => {};
@@ -329,4 +330,41 @@ test('a display change cancels control and places recovery controls on an availa
   assert.ok(app.context.calls.includes('clamp:9000,9000'));
   assert.ok(app.context.calls.includes('visible'));
   assert.ok(app.context.calls.includes('panel'));
+});
+
+test('a native query failure during panel recovery does not stop later refreshes', async () => {
+  const app = await dockedRefresh();
+  app.run(`
+    setExpanded=realSetExpanded;
+    setSeated=value=>{seated=value;};
+    panelWin={showInactive(){calls.push('panel');},getNativeWindowHandle:()=>Buffer.from([99,0,0,0])};
+    inventory=async()=>{throw Error('Native inventory unavailable');};
+  `);
+  await assert.doesNotReject(app.run('refresh()'));
+  assert.equal(app.run('busy'), false);
+  assert.equal(app.run('binding'), null);
+  assert.ok(app.context.calls.includes('visible'));
+  assert.match(app.run('platformError'), /Native inventory unavailable/);
+  app.run(
+    "rpc=async action=>{calls.push('next-poll');return action==='status'?{}:rows;};inventory=async()=>[window];",
+  );
+  await app.run('refresh()');
+  assert.ok(app.context.calls.includes('next-poll'));
+  assert.equal(app.run('platformError'), null);
+});
+
+test('a late refresh error cannot release a newer dock', async () => {
+  const app = await dockedRefresh();
+  app.run(
+    'globalThis.rejectIdentity=null;identities=()=>new Promise((_,reject)=>{rejectIdentity=reject;});',
+  );
+  const pending = app.run('refresh()');
+  while (!app.run('rejectIdentity')) await new Promise((r) => setImmediate(r));
+  app.run(
+    "dockGeneration++;binding={...binding,session:{id:'new'}};controlConnection={attachment:{generation:'new'}};rejectIdentity(Error('Old query failed'));",
+  );
+  await assert.doesNotReject(pending);
+  assert.equal(app.run('binding.session.id'), 'new');
+  assert.equal(app.run('busy'), false);
+  assert.equal(app.context.releases.length, 0);
 });

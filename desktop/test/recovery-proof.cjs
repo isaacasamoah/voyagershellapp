@@ -56,10 +56,7 @@ exports.run = async ({
     try {
       await act(target);
       await wait(
-        async () => {
-          await refresh();
-          return getState();
-        },
+        async () => getState(),
         (s) => !s.binding,
         'Target loss did not release attachment: ' + name,
       );

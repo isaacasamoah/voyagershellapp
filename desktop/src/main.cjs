@@ -671,7 +671,22 @@ let creating = 0;
 async function refresh() {
   if (busy) return;
   busy = true;
-  const refreshGeneration = dockGeneration;
+  const generation = dockGeneration;
+  try {
+    await refreshState(generation);
+  } catch (error) {
+    if (generation === dockGeneration || !binding) {
+      platformError = `Could not update the desktop: ${error.message}`;
+      if (binding) undock(platformError);
+      avatarWin.showInactive();
+      sendState();
+    }
+    console.error(error.message);
+  } finally {
+    busy = false;
+  }
+}
+async function refreshState(refreshGeneration) {
   try {
     const [nextService, nextSessions] = await Promise.all([
       rpc('status'),
@@ -701,14 +716,12 @@ async function refresh() {
     platformError = 'Docking isn’t available on this desktop right now.';
   }
   if (refreshGeneration !== dockGeneration) {
-    busy = false;
     return;
   }
   if (binding) {
     const current = binding;
     const processes = await identities();
     if (binding !== current) {
-      busy = false;
       return;
     }
     const result = resolveWindow(
@@ -741,7 +754,6 @@ async function refresh() {
       }
     }
   }
-  busy = false;
   if (expanded && !dragging) {
     if (seated) placePanel();
     else resizePanel();

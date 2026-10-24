@@ -326,7 +326,8 @@ and [Ghostty shell integration](https://ghostty.org/docs/features/shell-integrat
 Refresh treats a failed placement or an unavailable target as the end of that
 control attachment. It restores the floating avatar and panel, leaving the
 managed runtime and event capture alone. A refresh started before a newer dock
-cannot release that newer attachment. Control release continues through the
+cannot release that newer attachment. A failed panel query is reported and always
+releases the refresh guard, so a later refresh can update again. Control release continues through the
 existing voice coordinator; visible recovery does not wait for voice confirmation
 and does not start the private microphone.
 
