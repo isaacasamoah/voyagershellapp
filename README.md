@@ -87,6 +87,28 @@ The [authority guide](docs/authority.md) explains ranks, assignment and agent to
 The [CLI reference](docs/service.md#commands) exposes the same operations to scripts
 and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that workflow.
 
+## Git graph trial
+
+Generate a local, standalone branch and worktree view with Node 24:
+
+```sh
+node desktop/scripts/git-graph.cjs /path/to/project /path/to/project/git-graph.html
+```
+
+Open the generated file in a browser. It compares captured local branches with
+local `main`, shows their worktrees and commit distances, and supports filtering.
+Run the command again to refresh it. It does not fetch remotes or change Git state.
+This is a separate feature trial, not an integrated Voyager panel. Keep the
+generated file out of commits because it contains local paths and branch names.
+
+The ordinary desktop tests use a disposable Git repository. To also check the
+rendered view in an isolated Google Chrome profile, run:
+
+```sh
+cd desktop
+VOYAGER_GRAPH_BROWSER=/path/to/project VOYAGER_GRAPH_EVIDENCE=/tmp/git-graph-evidence node --test test/git-graph.test.cjs
+```
+
 ## Checks
 
 On Linux, install Rust, a C linker and Python 3.11+. Then:
