@@ -52,7 +52,7 @@ function desktop(
     };
     globalThis.rows = [];
     serviceError = null;
-    avatarWin = { showInactive() { calls.push('visible'); }, webContents: { send(name) { calls.push(name); } } };
+    avatarWin = { isDestroyed:()=>false, showInactive() { calls.push('visible'); }, webContents: { send(name) { calls.push(name); } } };
     inventory = async () => [window];
     discoverTerminals = async () => (records = [record]);
     identities = async () => new Map([[10, record], [record.frontend.pid, record.frontend]]);
@@ -268,4 +268,65 @@ test('an old control acknowledgement cannot select or attach after invalidation'
   assert.equal(app.run('selected'), null);
   assert.deepEqual(Array.from(app.context.releases), ['old']);
   assert.equal(app.context.calls.includes('dock-sound'), false);
+});
+
+async function dockedRefresh() {
+  const app = managedDesktop();
+  app.run(`
+    placeAboveTerminal = async () => ({state:'placed'});
+    fleets.read = async () => ({});
+    rpc = async action => action === 'status' ? {control: controlConnection?.attachment} : rows;
+    presentationReady = true;
+    creating = 1;
+    resizePanel = () => {};
+    placePanel = () => {};
+  `);
+  assert.equal(await app.run('dock(1)'), true);
+  app.context.calls.length = 0;
+  return app;
+}
+
+test('a covered docked target restores controls and releases only its attachment', async () => {
+  const app = await dockedRefresh();
+  app.run("placeAboveTerminal = async () => ({state:'failed',reason:'Target covered'});");
+  await app.run('refresh()');
+  assert.equal(app.run('binding'), null);
+  assert.deepEqual(Array.from(app.context.releases), ['accepted']);
+  assert.ok(app.context.calls.includes('visible'));
+  assert.ok(app.context.calls.includes('panel'));
+  assert.equal(app.context.calls.includes('dock-sound'), false);
+});
+
+test('a hidden docked target recovers without trying to place again', async () => {
+  const app = await dockedRefresh();
+  app.run(
+    "window.visible=false;placeAboveTerminal=async()=>{throw Error('Must not place hidden target');};",
+  );
+  await app.run('refresh()');
+  assert.equal(app.run('binding'), null);
+  assert.match(app.run('dockError'), /unavailable/);
+  assert.ok(app.context.calls.includes('visible'));
+});
+
+test('a late refresh placement failure cannot release a newer attachment', async () => {
+  const app = await dockedRefresh();
+  app.run('globalThis.finish=null;placeAboveTerminal=()=>new Promise(r=>{finish=r;});');
+  const pending = app.run('refresh()');
+  while (!app.run('finish')) await new Promise((r) => setImmediate(r));
+  app.run(
+    "dockGeneration++;binding={...binding,session:{id:'new'}};controlConnection={attachment:{generation:'new'}};finish({state:'failed',reason:'Old target covered'});",
+  );
+  await pending;
+  assert.equal(app.run('binding.session.id'), 'new');
+  assert.equal(app.context.releases.length, 0);
+});
+
+test('a display change cancels control and places recovery controls on an available display', async () => {
+  const app = await dockedRefresh();
+  app.run(`avatarPosition=()=>({x:9000,y:9000});placeAvatar=(x,y)=>calls.push('clamp:'+x+','+y);`);
+  await app.run('recoverDisplay()');
+  assert.equal(app.run('binding'), null);
+  assert.ok(app.context.calls.includes('clamp:9000,9000'));
+  assert.ok(app.context.calls.includes('visible'));
+  assert.ok(app.context.calls.includes('panel'));
 });

@@ -19,6 +19,19 @@ fn main() -> Result<()> {
     let utf8 = atom(b"UTF8_STRING")?;
     let state_atom = atom(b"_NET_WM_STATE")?;
     let hidden_atom = atom(b"_NET_WM_STATE_HIDDEN")?;
+    let workspace_atom = atom(b"_NET_WM_DESKTOP")?;
+    let current_workspace = conn
+        .get_property(
+            false,
+            root,
+            atom(b"_NET_CURRENT_DESKTOP")?,
+            AtomEnum::CARDINAL,
+            0,
+            1,
+        )?
+        .reply()?
+        .value32()
+        .and_then(|mut values| values.next());
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|arg| arg == "layout") {
         ensure!(
@@ -80,6 +93,11 @@ fn main() -> Result<()> {
                 .reply()?
                 .value32()
                 .is_some_and(|mut values| values.any(|a| a == hidden_atom));
+            let workspace = conn
+                .get_property(false, id, workspace_atom, AtomEnum::CARDINAL, 0, 1)?
+                .reply()?
+                .value32()
+                .and_then(|mut values| values.next());
             let geometry = conn.get_geometry(id)?.reply()?;
             let minimum = WmSizeHints::get_normal_hints(&conn, id)?
                 .reply()?
@@ -111,7 +129,9 @@ fn main() -> Result<()> {
             Ok(json!({
                 "id": id,
                 "pid": pid,
-                "visible": attr.map_state == MapState::VIEWABLE && !hidden,
+                "visible": attr.map_state == MapState::VIEWABLE && !hidden && on_current_workspace(workspace, current_workspace),
+                "workspace": workspace,
+                "current_workspace": current_workspace,
                 "minimised": hidden,
                 "x": position.dst_x,
                 "y": position.dst_y,
@@ -135,4 +155,22 @@ fn main() -> Result<()> {
             "pointer":{"x":pointer.root_x,"y":pointer.root_y,"buttons":buttons}})
     );
     Ok(())
+}
+
+fn on_current_workspace(workspace: Option<u32>, current: Option<u32>) -> bool {
+    workspace == Some(u32::MAX) || matches!((workspace, current), (Some(a), Some(b)) if a == b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::on_current_workspace;
+
+    #[test]
+    fn window_must_be_on_current_workspace_or_all_workspaces() {
+        assert!(on_current_workspace(Some(2), Some(2)));
+        assert!(on_current_workspace(Some(u32::MAX), Some(2)));
+        assert!(!on_current_workspace(Some(1), Some(2)));
+        assert!(!on_current_workspace(None, Some(2)));
+        assert!(!on_current_workspace(Some(2), None));
+    }
 }

@@ -182,6 +182,7 @@ function syncLayer() {
   if (terminal !== wasTerminal) {
     avatarWin.setFocusable(!terminal);
     avatarWin.setAlwaysOnTop(!terminal);
+    avatarWin.setVisibleOnAllWorkspaces(!terminal);
   }
   if (!terminal && !avatarWin.isVisible()) avatarWin.showInactive();
 }
@@ -509,6 +510,14 @@ async function refuseDock(reason) {
   await setExpanded(true);
   return false;
 }
+async function recoverDisplay() {
+  if (!avatarWin || avatarWin.isDestroyed()) return;
+  undock('The display changed. Dock again when the terminal is ready.');
+  const p = avatarPosition();
+  placeAvatar(p.x, p.y);
+  avatarWin.showInactive();
+  await setExpanded(true);
+}
 function undock(message = '') {
   dockGeneration++;
   const previous = controlConnection;
@@ -691,6 +700,10 @@ async function refresh() {
     windows = [];
     platformError = 'Docking isn’t available on this desktop right now.';
   }
+  if (refreshGeneration !== dockGeneration) {
+    busy = false;
+    return;
+  }
   if (binding) {
     const current = binding;
     const processes = await identities();
@@ -703,7 +716,6 @@ async function refresh() {
       windows,
       records,
       processes,
-      false,
     );
     const session = result.record && registeredSession(result.record, sessions);
     if (
@@ -714,16 +726,18 @@ async function refresh() {
       (refreshGeneration === dockGeneration &&
         service?.control?.generation !== controlConnection?.attachment.generation)
     )
-      undock(result.error || serviceError || 'This agent is disconnected.');
+      await refuseDock(result.error || serviceError || 'This agent is disconnected.');
     else {
       binding = { ...result, session };
       follow();
       const generation = dockGeneration;
       try {
-        await placeAboveTerminal();
+        const placement = await placeAboveTerminal();
+        if (generation === dockGeneration && placement.state === 'failed')
+          await refuseDock(placement.reason);
       } catch {
         if (generation === dockGeneration)
-          undock('The desktop could not keep the marker with the terminal.');
+          await refuseDock('The desktop could not keep the marker with the terminal.');
       }
     }
   }
@@ -903,6 +917,7 @@ function createWindow(width, height) {
       sandbox: true,
     },
   });
+  client.setVisibleOnAllWorkspaces(true);
   client.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   client.webContents.on('will-navigate', (event) => event.preventDefault());
 
@@ -914,6 +929,8 @@ app.whenReady().then(async () => {
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
   candidateWin = createWindow(100, 100);
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed'])
+    screen.on(event, () => recoverDisplay().catch((error) => console.error(error.message)));
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('focus', raiseSeatedAvatar);

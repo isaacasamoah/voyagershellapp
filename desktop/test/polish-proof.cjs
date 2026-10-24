@@ -356,6 +356,30 @@ exports.run = async ({
       await voice('none');
       await wait(microphones, (n) => n === baseline, 'Final native microphone remains');
       await avatar(`window.voiceProofAudio.source.stop();window.voiceProofAudio.ctx.close()`);
+      if (process.env.VOYAGER_PROOF_D03 === '1') {
+        await require('./recovery-proof.cjs').run({
+          avatarWin,
+          panelWin,
+          rpc,
+          refresh,
+          inventory,
+          dock,
+          undock,
+          setExpanded,
+          getState,
+          stateDir,
+          id: a.id,
+          windowFor,
+          voice,
+          observations,
+        });
+        await timedDock((await windowFor(shell.id)).id);
+        const bash = await rpc('status');
+        assert.equal(bash.voice.target, 'none');
+        assert.equal(bash.conversation.voice, 'off');
+        undock();
+        observations.push({ action: 'bash-voice-remains-off', id: shell.id });
+      }
       observations.push({ action: 'voice-stream-bound', baseline, maximum });
       assert(maximum <= baseline + 1);
     } finally {

@@ -171,3 +171,16 @@ The broader polish proof now resolves native windows by verified process identit
 because Codex can change its title after launch. It activates the intended window
 before the unobstructed docking comparison. This does not change product discovery
 or permit docking onto external agents.
+
+## D03 implementation notes
+
+The real workspace trial required a small change in the existing Rust X11 probe:
+a mapped window is not necessarily on the current workspace. Workspace visibility
+stays in that native boundary. Main-process refresh consumes its result and the
+explicit placement result, releasing control and showing floating controls when
+the target is lost. Electron display-change events also invalidate docking.
+
+The native recovery helper and bounded monitor trial are test code. They extend
+the existing polish journey without a new test service or product framework.
+Their file scope exceeds the initial estimate because actual workspace and
+monitor behavior could not be established by renderer fixtures alone.

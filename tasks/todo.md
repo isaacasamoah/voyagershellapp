@@ -107,6 +107,13 @@ Likely files: `desktop/src/main.cjs`, `desktop/test/control.test.cjs`, `desktop/
 
 Estimated scope: medium, up to five files. Native voice policy and private voice handoff behavior remain unchanged.
 
+D03 implementation evidence:
+
+- Failing covered/hidden refresh tests now pass. A late placement result cannot release a newer attachment. Display changes cancel control and clamp the recovery controls to an available display.
+- The real workspace test initially failed because a mapped off-workspace window counted as visible. The X11 probe now verifies workspace membership, with a failing-then-passing Rust regression. Floating controls remain available across workspaces.
+- All 70 desktop tests, 53 ordinary Rust tests, formatting, candidate binary build and Clippy pass. The xterm native journey passed cover, minimise, workspace, arrangement, scale and close, with the same Codex process and capture. Each individual recovery was under half a second; these are not the final timing batches.
+- Monitor trials use temporary configurations and verify restoration in a finally path. The existing polish journey also checks Codex voice, Bash with voice off and undocking without starting private audio. The same Ghostty journey passed. Independent review is pending.
+
 ## D04: recover both controls through Applications
 
 - [ ] D04 complete.

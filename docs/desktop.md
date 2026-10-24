@@ -320,3 +320,27 @@ never infer identity from a title or the foreground window alone.
 References: [Electron's Wayland limitations](https://www.electronjs.org/docs/latest/api/browser-window#platform-notices),
 [mouse pass-through](https://www.electronjs.org/docs/latest/api/base-window#winsetignoremouseeventsignore-options),
 and [Ghostty shell integration](https://ghostty.org/docs/features/shell-integration).
+
+## Recovery after a target becomes unavailable
+
+Refresh treats a failed placement or an unavailable target as the end of that
+control attachment. It restores the floating avatar and panel, leaving the
+managed runtime and event capture alone. A refresh started before a newer dock
+cannot release that newer attachment. Control release continues through the
+existing voice coordinator; visible recovery does not wait for voice confirmation
+and does not start the private microphone.
+
+The X11 probe includes the window's workspace in visibility. A mapped window
+on another workspace is unavailable. A window marked for all workspaces remains
+eligible; missing workspace observations are not proof of visibility. This follows
+the [window manager workspace contract](https://specifications.freedesktop.org/wm/latest/ar01s05.html).
+Floating Voyager controls appear across workspaces. A docked avatar belongs to
+its current workspace until control ends. Display changes cancel an attachment
+and clamp the recovered controls to an available display.
+
+The recovery proof uses disposable native windows, observes service process and
+capture continuity, and changes actual workspaces. Its monitor trials save the
+current configuration, apply temporary arrangement/scale changes, then restore
+and compare the configuration even after failure. The test uses
+[Mutter's versioned display interface](https://github.com/GNOME/mutter/blob/49.0/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml).
+These checks establish the exercised Fedora XWayland behavior only.
