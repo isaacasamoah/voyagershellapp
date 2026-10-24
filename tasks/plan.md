@@ -241,3 +241,10 @@ The D05 reviewer found an overlapping display-event race. The single corrective
 build retains the pending origin until restoration completes or a new explicit
 intent replaces it. The added regression first failed, then passed; a contrasting
 new-position test confirms that a deliberate move supersedes the older recovery.
+
+## Owner acceptance
+
+On 24 October 2026 the owner confirmed the updated packaged trial works and
+authorized merging docking to main, then building voice handoff. D01-D05 are
+complete. Preserve this completed plan in Git before replacing the active plan
+with the approved next module. Runtime installation and restart are separate.

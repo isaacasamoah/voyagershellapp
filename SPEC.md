@@ -1,7 +1,7 @@
 # Tracer-bullet usability specification index
 
 Project: VoyagerShellApp. Updated 24 October 2026.
-State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. The four docking slices passed independent review and packaged verification. Final owner acceptance is pending. The later capabilities still require their own plans and implementation approval. Merge, installation and runtime rollout remain separate decisions.
+State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. Resume and panel still require implementation approval. Merge, installation and runtime rollout remain separate decisions.
 
 ## Purpose and terminology
 
@@ -46,11 +46,11 @@ Each module specification defines its successful journey, a deliberately differe
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) record the approved build and its verification. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. The docking build is ready for owner review; the other three capabilities have not started implementation.
+Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) record the approved build and its verification. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. The docking build is accepted. Voice handoff is authorized after docking merges; no later capability has started implementation.
 
 ## Review and development workflow
 
-The capability boundaries, build order and four module specifications are approved. The docking build now has an approved plan and explicit implementation authorization. Final owner review and rollout remain separate gates. Recording specification approval alone does not start another capability or change the running app.
+The capability boundaries, build order and four module specifications are approved. The docking build now has an approved plan and explicit implementation authorization. The owner accepted docking and authorized its merge. Runtime rollout remains a separate gate. Recording specification approval alone does not start another capability or change the running app.
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 

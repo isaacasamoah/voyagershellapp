@@ -1,6 +1,6 @@
 # Tasks: recoverable docking
 
-Status: D01-D05 passed independent review and packaged verification. D05 used its one corrective build. Ready for owner review; no merge or installed-app update has occurred.
+Status: D01-D05 passed independent review and packaged verification. D05 used its one corrective build. The owner accepted the updated packaged trial and authorized merging on 24 October 2026. Merge is pending; no installed-app update has occurred.
 
 Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
 
@@ -199,7 +199,7 @@ D04 final verification and independent correction review, 24 October 2026:
 - [x] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.
 - [x] The approved Fedora timing batches pass: at least 19 of 20 unobstructed docks are audible within two seconds, and at least 19 of 20 recoveries reveal both controls within one second. Every trial recovers correctly. Record slow and failed trials, the viewer used, and any unsupported combinations.
 - [x] Applicable full Rust and desktop checks pass. Run `npm --prefix desktop run package:linux`, then repeat the combined docking/recovery cases and timing batches on the actual packaged app and bundled service in fresh private state. Record executable paths/hashes, display/audio setup, outcomes, limits and cleanup evidence.
-- [ ] Review the packaged docking result with the owner. The next planning cycle is voice handoff; no voice, resume or panel tasks become active automatically. Merge, installation, restart and release remain separate decisions.
+- [x] The owner accepted the updated packaged docking trial on 24 October 2026 and explicitly authorized merging, then starting the approved voice-handoff build. Resume and panel implementation remain outside this authorization. Installation, restart and release remain separate decisions.
 
 ## D05: restore the floating controls to their pre-dock positions
 
@@ -215,5 +215,4 @@ minimise/close journeys. Native panel/avatar positions return exactly, remain
 after refresh, and preserve runtime/capture. The independent reviewer found an
 overlapping-display race; the single correction passed re-review and its
 mutation check. Candidate hashes and cleanup match. Physical monitor removal is
-not claimed; fallback and overlapping events are deterministic tests. The owner's
-open trial still uses the earlier package.
+not claimed; fallback and overlapping events are deterministic tests. The owner tested the corrected package after the trial desktop restarted and accepted it. The unchanged trial service and existing test Vessel were retained.
