@@ -21,7 +21,9 @@ impl Service {
         Self::start_at(dir)
     }
     fn start_at(dir: PathBuf) -> Self {
-        let child = Command::new(env!("CARGO_BIN_EXE_voyager"))
+        let binary = std::env::var_os("VOYAGER_SERVICE_TEST_BIN")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_voyager").into());
+        let child = Command::new(binary)
             .env(
                 "VOYAGER_CODEX_BIN",
                 concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),

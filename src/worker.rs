@@ -141,7 +141,7 @@ impl Worker {
                     ThreadStart::New(name) => (connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?,name),
                     ThreadStart::Resume(resume) => {
                         resume.settings.verify_before_load(&mut connection)?;
-                        let goal = connection.rpc("thread/goal/get",json!({"threadId":resume.native}))?;
+                        let goal = connection.rpc("thread/goal/get",json!({"threadId":resume.native})).context("provider_failed: Codex could not inspect the saved conversation before resume")?;
                         ensure!(goal.get("goal").is_some_and(Value::is_null),"settings_unavailable: this conversation has a goal or its goal state cannot be verified; it was not loaded");
                         let params = json!({"threadId":resume.native,"excludeTurns":true});
                         load_requested = true;

@@ -21,6 +21,7 @@ assert Path(policy['VOYAGER_STATE']) == Path(path).parent.parent
 listener = socket.socket(socket.AF_UNIX)
 listener.bind(path)
 listener.listen()
+parent = os.getppid()
 counter = 0
 active = False
 current_turn = None
@@ -107,6 +108,9 @@ def handle(stream):
                                       'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'config-changed').exists() else 'original',
                                       'disabledReason': None}]}
             elif method == 'thread/goal/get':
+                if (Path(policy['VOYAGER_STATE']) / 'missing-thread').exists():
+                    send({'id': r['id'], 'error': {'code': -32602, 'message': 'saved thread is unavailable'}})
+                    continue
                 assert runtime_settings['sandbox_mode'] == 'read-only'
                 assert runtime_settings['approval_policy'] == 'on-request'
                 resume_preflight = True
@@ -131,12 +135,21 @@ def handle(stream):
                     if (Path(policy['VOYAGER_STATE']) / 'missing-sandbox').exists():
                         result.pop('sandbox')
             elif method == 'thread/resume':
+                hold = Path(policy['VOYAGER_STATE']) / 'hold-resume'
+                if resume_preflight and hold.exists():
+                    (hold.parent / 'resume-loaded').write_text('1')
+                    while hold.exists():
+                        if os.getppid() != parent:
+                            os._exit(0)
+                        time.sleep(.01)
                 if resume_preflight:
                     assert set(r['params']) == {'threadId', 'excludeTurns'}
                 result = {'thread': metadata(), 'model': 'fixture-model', 'modelProvider': 'openai',
                           'cwd': str(Path(policy['VOYAGER_STATE'])), 'approvalPolicy': 'never', 'approvalsReviewer': 'user',
                           'sandbox': {'type': 'dangerFullAccess'}, 'activePermissionProfile': None,
                           'runtimeWorkspaceRoots': [], 'instructionSources': [], 'reasoningEffort': None}
+                if (Path(policy['VOYAGER_STATE']) / 'resume-wrong-thread').exists():
+                    result['thread']['id'] = 'unexpected-thread'
                 if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                     result['model'] = 'different-model'
                 if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():

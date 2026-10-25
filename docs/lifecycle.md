@@ -444,3 +444,37 @@ reads. The existing 400 ms queued-read regression remains unchanged. This uses
 nix 0.31.3's [poll primitive](https://docs.rs/nix/0.31.3/nix/poll/fn.poll.html)
 and handles an interrupted wait by returning to observation. Other wait errors
 remain failures. Enabling the existing dependency's `poll` feature adds no package.
+
+## Resume failure verification
+
+The maintained process fixture can use a selected packaged service through
+`VOYAGER_SERVICE_TEST_BIN=/absolute/package/resources/bin/voyager`. It defaults
+to the current Cargo build. Its CLI helper uses that same executable. The authority
+fixture accepts the same selection for credential and temporary-grant checks.
+
+The focused failure cases hold provider startup at a known point. Two simultaneous
+requests admit one runtime. Losing the client reply leaves the service free to
+finish; receipt lookup returns pending immediately and later returns the same
+completed result. Killing the disposable service after the provider receives Resume
+preserves uncertainty on restart and blocks a new request. The held simulated
+provider exits itself when its parent disappears; the test never recovers ownership
+from its PID.
+
+A confirmed stop remains resumable after restart with name, supervisor and Fleet
+unchanged. Missing folders and missing or unexpected native threads fail without
+creating a replacement conversation. Removed, external, stopped Bash and already
+running records produce distinct refusals. Another running agent and the external
+server stay responsive. Old capture generations cannot insert new completion
+events; repeating a current event also cannot duplicate it.
+
+These process cases complement the shared real Codex `resume` application journey.
+They establish controlled failure ordering, not native provider behavior in every
+failure mode or platform. The provider journey proves saved context, idle loading,
+fresh bound capabilities and independent viewer attachment. Permission and legacy
+migration checks remain part of the ordinary service and authority suites.
+
+Before any future installation migrates existing state, explicitly stop owned
+runtimes, stop the service and wait for confirmed exit. Copy the closed
+`events.sqlite` to a private backup directory and retain the prior executable.
+Do not copy a live database file or treat an executable rollback as a schema
+rollback. A restore must preserve any newer history rather than overwrite it.
