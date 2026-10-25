@@ -32,6 +32,18 @@ async function run(context) {
   pointer.on('error', (error) => {
     inputError = error;
   });
+  pointer.stdin.on('error', (error) => {
+    inputError = error;
+  });
+  const closed = new Promise((resolve) => pointer.once('close', resolve));
+  const waitForExit = () =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), 4000);
+      closed.then(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
   const input = (value) =>
     new Promise((resolve, reject) => {
       if (inputError) return reject(inputError);
@@ -65,28 +77,42 @@ async function run(context) {
   };
   const save = (value) =>
     fs.writeFile(path.join(directory, 'native-proof.json'), JSON.stringify(value, null, 2));
+  let result;
+  let failure;
+  let cleanup;
   try {
     await save({ journey, verdict: 'running' });
-    const result = await require(journeys[journey]).run(
+    result = await require(journeys[journey]).run(
       { ...context, directory },
       { wait, input, click, delay, captureOutput },
     );
-    await save({ journey, verdict: 'pass', candidate: context.getState?.().candidate, result });
-    return result;
   } catch (error) {
-    await save({ journey, verdict: 'rework', error: error.stack });
-    throw error;
-  } finally {
-    const exited = new Promise((resolve) => pointer.once('exit', resolve));
+    failure = error;
+  }
+  try {
     pointer.stdin.end();
     replies.close();
-    if (pointer.exitCode === null && pointer.signalCode === null)
-      await Promise.race([
-        exited,
-        delay(4000).then(() => {
-          if (pointer.exitCode === null && pointer.signalCode === null) pointer.kill('SIGTERM');
-        }),
-      ]);
+    if (!(await waitForExit())) {
+      pointer.kill('SIGTERM');
+      if (!(await waitForExit())) throw Error('Pointer helper exit could not be confirmed');
+    }
+    cleanup = { confirmed: true, code: pointer.exitCode, signal: pointer.signalCode };
+    if (inputError) throw inputError;
+    if (pointer.exitCode !== 0 && pointer.signalCode !== 'SIGTERM')
+      throw Error('Pointer helper exited unsuccessfully');
+  } catch (error) {
+    cleanup = { ...cleanup, error: error.stack };
+    failure = failure ? new Error(`${failure.stack}\nPointer cleanup: ${error.stack}`) : error;
   }
+  await save({
+    journey,
+    verdict: failure ? 'rework' : 'pass',
+    candidate: context.getState?.().candidate,
+    result,
+    cleanup,
+    error: failure?.stack,
+  });
+  if (failure) throw failure;
+  return result;
 }
 module.exports = { run };

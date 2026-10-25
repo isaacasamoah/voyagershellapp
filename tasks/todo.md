@@ -1,9 +1,9 @@
 # Tasks: voice acknowledgement and result handoff
 
-Status: stopped at fixture re-review, 25 October 2026. Docking merged and its completed tasks remain in
+Status: additional fixture correction authorized, 25 October 2026. Docking merged and its completed tasks remain in
 Git history. The owner approved this module's plan and the full build/review run.
 The [plan](plan.md) owns the approach and commands; [the spec](../SPEC-voice-handoff.md)
-owns V1-V8. No voice task is complete yet. The allowed correction was used; a Required cleanup issue remains.
+owns V1-V8. No voice task is complete yet. The owner authorized one additional focused correction and independent review of the remaining cleanup issue.
 
 ## Preparation: reuse the native proving fixture
 
@@ -37,9 +37,11 @@ exercised without inflating scope or discarding required failure assertions.
 
 The proposed next correction is to complete and verify helper cleanup before
 publishing a successful result, preserve bounded failure outcomes, and prove the
-stalled-helper case fails. It requires renewed owner authorization because the
-one-correction limit has been reached. Preserve the same candidate and evidence
-until that decision. No voice behavior, installed app or main service changed.
+stalled-helper case fails. The owner has now authorized this additional corrective pass and review. The
+runner now withholds its final verdict until helper exit is confirmed and reports
+unconfirmed exit as failure. The stalled-helper control failed before this change
+and passes afterward. Package parity and fresh independent review remain pending.
+If Required findings survive this extra pass, stop again and report them. No voice behavior, installed app or main service changed.
 
 ## V01: hear acknowledgement and the inspection answer
 
