@@ -20,6 +20,7 @@ exports.run = async (
   let id;
   let paused;
   let hidden = false;
+  let openFeedback;
   const events = async () => (await rpc('events')).events.filter((e) => e.session_id === id);
   const row = async () => (await rpc('list')).find((r) => r.id === id);
   const ask = async (request, message) => {
@@ -184,6 +185,14 @@ exports.run = async (
         () => rpc('operation', request),
         (r) => r.state === 'completed',
       );
+      await wait(
+        () => panelWin.webContents.executeJavaScript('window.openControl.disabled'),
+        (disabled) => !disabled,
+      );
+      openFeedback = await panelWin.webContents.executeJavaScript(
+        "document.getElementById('instance-error').textContent",
+      );
+      assert.ok(!openFeedback || openFeedback.startsWith('Terminal opened, but'), openFeedback);
     } else opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');
     const attachment = await attached(opened, current.server);
     const attachedMs = performance.now() - openStart;
@@ -216,6 +225,7 @@ exports.run = async (
       bound: { actor: bound.actor, rank: bound.rank },
       idleSeconds: 5,
       savedMarkerRecalled: true,
+      openFeedback,
     };
   } finally {
     if (paused) process.kill(paused, 'SIGCONT');

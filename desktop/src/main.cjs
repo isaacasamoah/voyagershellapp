@@ -71,6 +71,7 @@ const dockAttempts = [];
 const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const resumeInstance = require('./instances.cjs').instanceResumer(rpc);
+const openInstance = require('./instances.cjs').instanceOpener(rpc, refresh, surface);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let dockOrigin = null;
@@ -1147,20 +1148,7 @@ app.whenReady().then(async () => {
     if (!['ghostty', 'xterm'].includes(terminal)) throw Error('Choose a terminal viewer.');
     if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
       throw Error('Invalid action request');
-    try {
-      const result = await rpc('open', id, terminal, '--request-id', request);
-      await refresh();
-      await surface([id], true);
-      return result;
-    } catch (error) {
-      const receipt = await rpc('operation', request).catch(() => null);
-      return {
-        error: error.message,
-        retry_with_new_request: ['partial', 'failed', 'cancelled'].includes(receipt?.state),
-      };
-    } finally {
-      await refresh();
-    }
+    return openInstance(id, terminal, request);
   });
   handle('background-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'background'),

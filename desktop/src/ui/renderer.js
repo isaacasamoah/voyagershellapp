@@ -420,7 +420,7 @@ function actionMenu(name, key) {
         }
         pendingActions.delete(id);
         if (close && actions.isConnected) actions.hidePopover();
-        showError('');
+        showError(result?.warning || '');
       } catch (error) {
         showError(error.message);
       } finally {

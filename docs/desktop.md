@@ -524,3 +524,22 @@ label before the runtime becomes current. Its input adapter verifies panel focus
 after a native terminal cycle it can request activation of that exact proof window
 through the existing xdotool tool, then rechecks focus. This does not claim OS-level
 keyboard or pointer delivery for the Chromium events.
+
+Saved Resume and Open results are matched to the request ID, action and Vessel
+before use. A matching generation alone cannot identify a conversation. Polling
+checks that binding on each reply. The focused Resume test file keeps realistic
+receipt fixtures separate from creation and history tests.
+
+The desktop's Open adapter keeps service completion separate from subsequent
+window placement. If Open completed and placement fails, the result stays completed
+with a readable placement warning. The menu clears that completed request. The
+native panel journey waits for UI action completion and checks this distinction.
+The automatic placement warning remains a separate existing limitation; this
+increment changes no window geometry policy.
+
+A refused Resume whose original reply cannot be distinguished from lost admission
+can leave its desktop attempt pinned. Rechecks inspect that same request; they do
+not silently submit a new one. A broader distinction between confirmed admission
+refusal and uncertainty is deferred. This conservative UI limit can require a
+desktop restart after the service again reports eligibility. Restarting the client
+does not restore a runtime or bypass the service's current checks.

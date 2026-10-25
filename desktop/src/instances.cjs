@@ -89,6 +89,48 @@ function historyReader(rpc) {
     return { ...page, events: page.events.filter((event) => event.session_id === id) };
   };
 }
+function matchesReceipt(receipt, action, session, request) {
+  return (
+    receipt?.request_id === request && receipt.action === action && receipt.session_id === session
+  );
+}
+function instanceOpener(rpc, refresh, surface) {
+  return async (id, terminal, request) => {
+    let result;
+    try {
+      try {
+        result = await rpc('open', id, terminal, '--request-id', request);
+      } catch (error) {
+        const receipt = await rpc('operation', request).catch(() => null);
+        const matched = matchesReceipt(receipt, 'open', id, request);
+        if (!matched || receipt.state !== 'completed')
+          return {
+            error: error.message,
+            retry_with_new_request:
+              matched && ['partial', 'failed', 'cancelled'].includes(receipt.state),
+          };
+        result = receipt;
+      }
+      if (!matchesReceipt(result, 'open', id, request) || result.state !== 'completed')
+        return {
+          error:
+            'The terminal result could not be matched to this request. Inspect its saved state.',
+        };
+      await refresh();
+      try {
+        await surface([id], true);
+      } catch (error) {
+        return {
+          ...result,
+          warning: `Terminal opened, but its window could not be arranged. ${error.message}`,
+        };
+      }
+      return result;
+    } finally {
+      await refresh();
+    }
+  };
+}
 function instanceResumer(rpc) {
   const attempts = new Map();
   return (input) => {
@@ -142,7 +184,12 @@ function instanceResumer(rpc) {
         }
       }
       const deadline = Date.now() + 23000;
-      while (receipt.state === 'pending' && Date.now() < deadline) {
+      while (true) {
+        if (!matchesReceipt(receipt, 'resume-instance', id, attempt.request))
+          throw Error(
+            'The saved Resume result does not belong to this request and conversation. No new request was sent.',
+          );
+        if (receipt.state !== 'pending' || Date.now() >= deadline) break;
         await new Promise((resolve) => setTimeout(resolve, 250));
         receipt = await rpc('operation', attempt.request);
       }
@@ -155,6 +202,7 @@ function instanceResumer(rpc) {
       }
       const current = (await rpc('list', '--include-removed')).find((row) => row.id === id);
       if (
+        !Number.isSafeInteger(receipt.runtime_generation) ||
         current?.lifecycle?.runtime !== 'running' ||
         current.lifecycle.runtime_generation !== receipt.runtime_generation
       )
@@ -163,20 +211,28 @@ function instanceResumer(rpc) {
         );
       attempt.openRequest ||= randomUUID();
       try {
-        await rpc('open', id, attempt.terminal, '--request-id', attempt.openRequest);
+        const opened = await rpc('open', id, attempt.terminal, '--request-id', attempt.openRequest);
+        if (
+          !matchesReceipt(opened, 'open', id, attempt.openRequest) ||
+          opened.state !== 'completed'
+        )
+          throw Error('The terminal result could not be verified.');
       } catch (error) {
         const opening = await rpc('operation', attempt.openRequest).catch(() => null);
-        if (opening?.state === 'completed') {
+        const matched = matchesReceipt(opening, 'open', id, attempt.openRequest);
+        if (matched && opening.state === 'completed') {
           attempts.delete(id);
           return { session: id, runtime_generation: receipt.runtime_generation, opened: true };
         }
-        const uncertain = !opening || ['pending', 'uncertain'].includes(opening.state);
+        const uncertain = !matched || ['pending', 'uncertain'].includes(opening.state);
         if (!uncertain) attempts.delete(id);
         return {
           session: id,
           runtime_generation: receipt.runtime_generation,
           open_request_id: uncertain ? attempt.openRequest : null,
-          error: `Conversation resumed, but the terminal could not open. ${error.message} Use Open viewer for this running agent.`,
+          error: uncertain
+            ? `Conversation resumed, but the terminal result is unconfirmed. Keep its original Open request. ${error.message}`
+            : `Conversation resumed, but the terminal could not open. ${error.message} Use Open viewer for this running agent.`,
         };
       }
       attempts.delete(id);
@@ -187,4 +243,10 @@ function instanceResumer(rpc) {
     return attempt.busy;
   };
 }
-module.exports = { instanceCreator, historyReader, instanceResumer };
+module.exports = {
+  instanceCreator,
+  historyReader,
+  instanceResumer,
+  instanceOpener,
+  matchesReceipt,
+};
