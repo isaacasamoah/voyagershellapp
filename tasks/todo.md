@@ -39,12 +39,15 @@ text-selection controls pass in the selected package. The complete count is
 
 ## P03: resume and open the same conversation
 
-- [ ] After accepted conversation-resume integration, use one Resume ID and the
+- [x] After accepted conversation-resume integration, use one Resume ID and the
   observed generation. Keep the same row through pending and completed states.
-- [ ] Refresh runtime observation before a separate Open. Double clicks, lost
+- [x] Refresh runtime observation before a separate Open. Double clicks, lost
   replies and failed Open cannot start a second runtime or replay work. Covers P3/P4.
-- [ ] Use the shared real-provider/panel journey and focused action regression;
+- [x] Use the shared real-provider/panel journey and focused action regression;
   preserve the service's permission decision and complete independent review.
+
+P03 passed independent second review after one correction. All 103 desktop checks
+and the matching real-Codex panel journey pass. Complete budget: 8,744 / 9,042.
 
 ## P04: preserve useful context and keyboard focus
 
