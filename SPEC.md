@@ -10,7 +10,7 @@ requested draft plans for resume and the panel. The resume module passed R00-R03
 This branch owns the approved current-work panel plan in tasks/plan.md and
 tasks/todo.md, built after that dependency. The owner approved implementation
 with independent review and bounded correction passes. P01-P03 passed their
-corrective reviews. P04 is the final candidate under review. Merge and installation
+corrective reviews. P04 passed its first independent review. The combined candidate is ready for owner inspection. Merge and installation
 remain separate decisions. Remaining voice interruption, reconnect, failure and timing
 work stays in the existing voice plan; accepting the acknowledgement increment
 does not complete the full voice specification. The copied docking task list
