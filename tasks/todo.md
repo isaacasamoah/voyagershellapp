@@ -37,16 +37,16 @@ included in this build authorization.
 
 ## R02: resume and open through the CLI
 
-- [ ] Provide the owner command and same-request receipt lookup. Open only after
+- [x] Provide the owner command and same-request receipt lookup. Open only after
   a fresh running observation. Verify the saved marker with a new explicit query.
-- [ ] Demonstrate a failed Open and successful later Open on the same process.
+- [x] Demonstrate a failed Open and successful later Open on the same process.
   Reopening a viewer must not create work or a second runtime. Covers R1/R6.
-- [ ] Extend the maintained native runner, record actual app/service identities and
+- [x] Extend the maintained native runner, record actual app/service identities and
   complete independent review. No separate feature-specific launcher.
 
 ## Checkpoint R-A
 
-- [ ] Gate A and the complete owner resume/open journey pass without permission
+- [x] Gate A and the complete owner resume/open journey pass without permission
   increases, task replay or substitute conversations. Review before R03.
 
 ## R03: preserve outcomes through races and disconnects

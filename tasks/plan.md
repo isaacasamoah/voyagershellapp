@@ -165,7 +165,7 @@ VOYAGER_PROOF_APP=/absolute/candidate/voyagershell \
   python3 desktop/test/run-native-proof.py /tmp/NEW_RESUME_STATE resume
 ```
 
-This command is not available in the current runner yet. Use the normal desktop
+The shared runner now implements this command. Use the normal desktop
 session environment, preserve caller identity, record provider/build identities,
 and retain native receipts and timings without credentials. Do not run parallel
 pointer journeys on the same desktop. Test a selected app with its matching service.
