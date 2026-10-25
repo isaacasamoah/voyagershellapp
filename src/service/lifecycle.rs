@@ -16,6 +16,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod resume;
+
 impl Runtime {
     pub(super) fn rename_instance(&mut self, request: &Value) -> Result<Value> {
         let id = actions::request_id(request)?;
@@ -159,7 +161,7 @@ impl Runtime {
                 &self.executable,
                 id,
                 cwd,
-                name,
+                crate::worker::ThreadStart::New(name.map(str::to_owned)),
                 &context,
             ) {
                 Ok(startup) => {
@@ -270,16 +272,35 @@ impl Runtime {
         let ids: Vec<_> = self.creations.keys().cloned().collect();
         for id in ids {
             let (request, mut startup) = self.creations.remove(&id).context("startup missing")?;
+            if startup.cleaning() {
+                if let Some((error, no_effect)) = startup.poll_cleanup()? {
+                    self.fail_resume(&id, error, no_effect)?;
+                } else {
+                    self.creations.insert(id, (request, startup));
+                }
+                continue;
+            }
             match startup.poll(&mut self.store) {
                 Ok(Some(worker)) => {
                     let session = worker.session.clone();
                     self.workers.insert(session.clone(), worker);
-                    self.finish_creation(&request, &session)?;
+                    if request["op"] == "resume-instance" {
+                        self.finish_resume(&request, &session)?;
+                    } else {
+                        self.finish_creation(&request, &session)?;
+                    }
                 }
                 Ok(None) => {
                     self.creations.insert(id, (request, startup));
                 }
-                Err(error) => self.fail_creation(&id, error.to_string())?,
+                Err(error) => {
+                    if request["op"] == "resume-instance" {
+                        startup.begin_cleanup(error.to_string())?;
+                        self.creations.insert(id, (request, startup));
+                    } else {
+                        self.fail_creation(&id, error.to_string())?;
+                    }
+                }
             }
         }
         Ok(())
@@ -302,6 +323,13 @@ impl Runtime {
             "request_conflict: ID already names a task"
         );
         let record = self.store.session(session)?;
+        ensure!(
+            !self
+                .creations
+                .values()
+                .any(|(r, _)| r["op"] == "resume-instance" && r["session_id"] == session),
+            "busy: conversation resume is pending"
+        );
         ensure!(
             !self
                 .native_calls

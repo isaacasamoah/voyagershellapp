@@ -352,3 +352,51 @@ VOYAGER_NATIVE_RESUME_EVIDENCE=/tmp/NEW_OBSERVATION_EVIDENCE \
 This is real service/API evidence, not a terminal, panel interaction or a working
 Resume journey. The later full-module application check must still use the shared
 desktop runner and the selected package.
+
+
+## Owner-requested Resume
+
+`resume-instance` accepts the immutable request ID, Vessel ID and observed
+`expected_runtime_generation`. Only the local owner may request it. List responses
+add `resume` availability beside the separate `lifecycle` observation. Missing
+legacy settings keep history available but make Resume unavailable. Reading an
+old operation receipt never establishes that its earlier runtime is still live.
+
+The lifecycle owner's `resume.rs` submodule validates admission and progresses the
+operation. The store atomically saves the operation and allocates the next runtime
+generation before spawning. Concurrent starts are excluded. A new owned child
+opens the same saved native thread after the goal and settings preflight. It must
+report idle, retain verified effective settings and start no turn. Capture advances
+to a new generation and discards initialization/history notifications. Original
+worker launch records, current assignments, names and Fleet placement remain intact.
+
+Fresh credentials revoke the previous runtime's credentials. The old temporary
+development grant is removed. Current service policy still decides access; Resume
+neither changes rank nor restores docking authority. Opening a terminal remains a
+separate operation. This slice supplies the service operation, not its later CLI
+or panel controls.
+
+Recovery currently supports OpenAI-provider threads with a user approval reviewer,
+ordinary `never`, `on-request` or `untrusted` approval policies, and an exact saved
+full-access or read-only-without-network sandbox. Named profiles and other sandbox
+forms remain unavailable until they have their own proof. Resume passes the saved
+model, provider, folder, workspace roots and reasoning setting explicitly. It does
+not substitute permissive launcher defaults for missing values.
+
+The snapshot also retains nonsecret config-layer names and versions, excluding
+per-runtime session flags, plus the loaded instruction files' filesystem identity,
+size and change/modified timestamps. Resume compares them before loading and checks
+returned effective settings afterward. Config contents, credentials and instruction
+text are not copied into the snapshot. This is a conservative compatibility check,
+not a cross-platform content-signing system. A changed or unverified workflow
+refuses with a readable reason. The provider gate proves the plain settings case. The service proof also retains
+a simple project instruction file. This does not establish every custom workflow;
+missing or unsupported provenance remains a refusal.
+
+Failure cleanup retains its actual owned child and advances between service passes.
+It sends TERM, observes exit, and escalates only that process group after the
+existing two-second stop interval. A confirmed refusal before any load produces a
+partial receipt with a stopped runtime. If loading may have happened, the result
+is uncertain and cannot be retried through a different request ID. Interrupted
+service operations remain uncertain after restart. No process is recovered from
+a saved PID or restored automatically.

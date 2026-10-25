@@ -187,7 +187,7 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,COALESCE((SELECT state FROM runtime_generations g WHERE g.session_id=s.id ORDER BY generation DESC LIMIT 1),w.state),w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
@@ -314,6 +314,64 @@ impl Store {
             "unknown"
         };
         Ok(json!({"runtime":state,"runtime_generation":saved.map(|s|s.0)}))
+    }
+
+    pub fn resume_record(&self, session: &str) -> Result<Option<Value>> {
+        self.0.query_row("SELECT generation,state,settings,operation_id FROM runtime_generations WHERE session_id=?1 ORDER BY generation DESC LIMIT 1",[session],|r|{
+            let settings: Option<String> = r.get(2)?;
+            Ok(json!({"generation":r.get::<_,i64>(0)?,"state":r.get::<_,String>(1)?,"settings":settings.and_then(|s|serde_json::from_str::<Value>(&s).ok()),"request_id":r.get::<_,String>(3)?}))
+        }).optional().map_err(Into::into)
+    }
+
+    pub fn claim_resume(&self, request: &Value, expected: i64, settings: &Value) -> Result<Value> {
+        let session = request["session_id"]
+            .as_str()
+            .context("invalid_input: missing session")?;
+        let id = request["request_id"]
+            .as_str()
+            .context("invalid_input: missing request")?;
+        let tx = self.0.unchecked_transaction()?;
+        let previous = self
+            .resume_record(session)?
+            .context("outcome_unknown: runtime generation is unverified")?;
+        ensure!(
+            previous["generation"] == expected
+                && ["stopped", "exited"]
+                    .iter()
+                    .any(|s| previous["state"] == *s),
+            "outcome_unknown: runtime changed or its stop is unverified"
+        );
+        let generation = expected
+            .checked_add(1)
+            .context("invalid_input: runtime generation overflow")?;
+        let receipt = json!({"request_id":id,"session_id":session,"action":"resume-instance","state":"pending","runtime":"starting","runtime_generation":generation,"window":"closed","registration":"active","actor":request["actor"],"effects":[{"phase":"start","state":"requested"}],"event_seq":null});
+        self.begin_operation(id, request, &receipt)?;
+        self.0.execute(
+            "INSERT INTO runtime_generations VALUES (?1,?2,?3,'','starting',?4)",
+            params![session, generation, id, settings.to_string()],
+        )?;
+        tx.commit()?;
+        Ok(receipt)
+    }
+
+    pub fn register_resumed(
+        &self,
+        session: &str,
+        generation: i64,
+        operation: &str,
+        server: &str,
+        metadata: &Value,
+    ) -> Result<()> {
+        let tx = self.0.unchecked_transaction()?;
+        ensure!(
+            self.session(session)?["native_thread_id"] == metadata["id"],
+            "thread_unavailable: saved conversation identity changed"
+        );
+        ensure!(self.0.execute("UPDATE runtime_generations SET state='running',server=?4 WHERE session_id=?1 AND generation=?2 AND operation_id=?3 AND state='starting'",params![session,generation,operation,server])? == 1,"outcome_unknown: runtime admission changed");
+        ensure!(self.0.execute("UPDATE sessions SET server=?2,capture_generation=capture_generation+1 WHERE id=?1 AND removed_ms IS NULL",params![session,server])? == 1,"registration_removed: conversation registration changed");
+        self.local(session,"capture.gap",json!({"reason":"conversation_resumed","replay_available":false,"runtime_generation":generation}))?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn native(&self, session: &str, server: &str) -> Result<String> {
