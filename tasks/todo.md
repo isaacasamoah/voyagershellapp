@@ -51,18 +51,18 @@ included in this build authorization.
 
 ## R03: preserve outcomes through races and disconnects
 
-- [ ] Separate focused cases cover same-ID reuse/conflict, competing requests and
+- [x] Separate focused cases cover same-ID reuse/conflict, competing requests and
   client disconnect with a continuing service. Covers R3/R4.
-- [ ] Verify confirmed-stop restart, interrupted-service uncertainty, old-credential
+- [x] Verify confirmed-stop restart, interrupted-service uncertainty, old-credential
   refusal and old-event rejection without affecting unrelated processes. Covers
   R2/R4/R7-R9. Historical completed receipts do not establish current liveness.
-- [ ] Required checks, all R1-R9 package journeys and independent review pass.
+- [x] Required checks, all R1-R9 package journeys and independent review pass.
 
 ## Final checkpoint
 
-- [ ] Preserve schema migration/legacy-read evidence and the pre-migration backup
+- [x] Preserve schema migration/legacy-read evidence and the pre-migration backup
   procedure. Missing legacy settings remain inspectable and cannot resume.
-- [ ] Record complete test/helper inventory, disjoint exercised production ranges
+- [x] Record complete test/helper inventory, disjoint exercised production ranges
   and a relevant deliberately broken case that fails its check.
-- [ ] Present results and remaining limits for owner acceptance. Do not install,
+- [x] Present results and remaining limits for owner acceptance. Do not install,
   restart the main service, or build another capability from this planning request.
