@@ -1,5 +1,7 @@
 # Working on Voyager Shell
 
+Read `CONSTRAINTS.md` before writing code. Do not weaken it to make a change pass.
+
 Voyager is an experimental Rust service around existing native agent interfaces. Electron is its desktop client. Preserve that product boundary: do not add a terminal UI, run tmux or Herdr as a backend, or pretend registration transfers process ownership.
 
 - Work in small increments with one user-visible experiment and a known-different test.
