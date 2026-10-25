@@ -460,7 +460,10 @@ Fleet inheritance still uses all registered supervisors, including a supervisor
 outside the current visible rows.
 
 State labels use words as well as the connection dot. A disconnected service keeps
-cached rows as last-known information and disables their actions. An older service
+cached rows as last-known information and disables their actions. Connection loss
+closes an open Actions popover before rebuilding the rows. A late action result
+cannot enable an offline control. The Previous agents control is excluded from
+panel dragging so its normal click and keyboard behavior remain available. An older service
 without lifecycle observations produces a service-update warning and unknown state,
 never an inferred stop. The desktop forwards the service's lifecycle and Resume
 objects without granting any new permission.

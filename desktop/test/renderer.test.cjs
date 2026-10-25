@@ -86,6 +86,7 @@ function renderer() {
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
+    context,
     api,
     calls,
     update: (extra = {}) =>
@@ -253,7 +254,7 @@ test('creation and explicit reopen use the selected viewer', async () => {
   assert.equal(typeof requests[0][2], 'string');
 });
 
-test('the panel separates stopped and unknown records and keeps offline rows last-known', () => {
+test('the panel separates stopped and unknown records', () => {
   const ui = renderer();
   const row = (id, runtime) => ({
     id,
@@ -281,9 +282,60 @@ test('the panel separates stopped and unknown records and keeps offline rows las
   assert.deepEqual(ids('previous-sessions'), ['old']);
   assert.equal(ui.nodes.get('previous-toggle').textContent, 'Previous agents (1)');
   assert.match(ui.nodes.get('connection').textContent, /update/i);
+});
+
+test('service loss closes an open menu and marks its existing rows last-known', () => {
+  const ui = renderer();
+  const sessions = [
+    {
+      id: 'live',
+      name: 'Live',
+      cwd: '/project',
+      kind: 'shell',
+      ownership: 'managed',
+      lifecycle: { runtime: 'running' },
+      capture: 'connected',
+    },
+  ];
+  ui.update({ sessions });
+  const old = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
+  assert.equal(old.disabled, false);
+  vm.runInContext('openMenus.add({hidePopover(){}})', ui.context);
   ui.update({ sessions, serviceError: 'Disconnected' });
-  assert.deepEqual(ids('sessions'), ['live']);
+  assert.equal(old.disabled, true);
   const live = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
   assert.equal(live.disabled, true);
   assert.match(live.attributes['aria-label'], /Last known/);
+  assert.equal(vm.runInContext('openMenus.size', ui.context), 0);
+  ui.update({ sessions });
+  const restored = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
+  assert.equal(restored.disabled, false);
+  assert.doesNotMatch(restored.attributes['aria-label'], /Last known/);
+});
+
+test('late action completion cannot re-enable its offline control', async () => {
+  const ui = renderer();
+  const sessions = [
+    {
+      id: 'live',
+      name: 'Live',
+      cwd: '/project',
+      kind: 'shell',
+      ownership: 'managed',
+      lifecycle: { runtime: 'running' },
+      capture: 'connected',
+    },
+  ];
+  ui.update({ sessions });
+  let finish;
+  ui.api.surfaceInstance = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const live = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
+  const pending = live.onclick();
+  ui.update({ sessions, serviceError: 'Disconnected' });
+  finish({});
+  await pending;
+  assert.equal(live.disabled, true);
 });

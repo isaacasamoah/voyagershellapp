@@ -87,6 +87,19 @@ function renderState(value) {
     value.fleetData,
     value.fleetError,
   ]);
+  if (value.serviceError) {
+    for (const id of [
+      'sessions',
+      'fleets',
+      'unregistered-sessions',
+      'needs-attention-sessions',
+      'previous-sessions',
+    ])
+      for (const button of $(id).querySelectorAll('button')) button.disabled = true;
+    for (const menu of openMenus)
+      if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
+    openMenus.clear();
+  }
   if (openMenus.size || rows === lastRows) return;
   lastRows = rows;
   const groups = hierarchy.classify(value.sessions);
@@ -130,7 +143,7 @@ function renderState(value) {
         showError(error.message);
       } finally {
         document.body.dataset.arranging = 'false';
-        b.disabled = false;
+        b.disabled = Boolean(lastState?.serviceError);
       }
     };
     const row = element('div', '', 'instance-row');
@@ -294,6 +307,7 @@ function actionMenu(name, key) {
   const menu = element('div', '', 'instance-menu');
   const summary = element('button', '⋯');
   summary.setAttribute('aria-label', `Actions for ${name}`);
+  summary.id = `menu-${key}`;
   summary.setAttribute('aria-expanded', 'false');
   const actions = element('div', '', 'instance-actions');
   actions.popover = 'auto';
@@ -346,7 +360,8 @@ function actionMenu(name, key) {
         showError(error.message);
       } finally {
         button.textContent = label;
-        for (const node of actions.querySelectorAll('button')) node.disabled = false;
+        for (const node of actions.querySelectorAll('button'))
+          node.disabled = Boolean(lastState?.serviceError);
       }
     };
     actions.append(button);
@@ -387,11 +402,11 @@ function nameEditor(actions, current, save) {
       const result = await save(input.value, request);
       if (result?.error) throw Error(result.error);
       showError('');
-      actions.hidePopover();
+      if (actions.isConnected) actions.hidePopover();
     } catch (error) {
       showError(error.message);
     } finally {
-      submit.disabled = false;
+      submit.disabled = Boolean(lastState?.serviceError);
       cancel.disabled = false;
     }
   };
@@ -409,7 +424,7 @@ async function arrange(call, button) {
     showError(error.message);
   } finally {
     document.body.dataset.arranging = 'false';
-    button.disabled = false;
+    button.disabled = Boolean(lastState?.serviceError);
   }
 }
 function dropTarget(node, fleet) {
@@ -468,7 +483,7 @@ $('panel').addEventListener('pointerdown', (event) => {
   if (
     event.button !== 0 ||
     event.target.closest(
-      'button, input, select, textarea, a, form, .instance-menu, .fleet, #conversation',
+      'button, input, select, textarea, a, form, details, .instance-menu, .fleet, #conversation',
     )
   )
     return;
@@ -656,6 +671,7 @@ $('create-form').onsubmit = async (event) => {
   } finally {
     creating = false;
     for (const input of $('create-form').elements) input.disabled = false;
+    $('create').disabled = Boolean(lastState?.serviceError);
     $('create').textContent = 'Create and open';
   }
 };

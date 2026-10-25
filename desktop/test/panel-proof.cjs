@@ -52,6 +52,40 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.wait(snapshot, (s) => s.previousOpen);
+  await proof.pageClick(panelWin, `menu-${live.session_id}`);
+  await proof.wait(
+    () =>
+      panelWin.webContents.executeJavaScript("document.querySelectorAll(':popover-open').length"),
+    (count) => count === 1,
+    'Actions menu did not open before the disconnect check',
+  );
+  const socket = path.join(stateDir, 'service.sock');
+  const hiddenSocket = path.join(stateDir, 'service-hidden.sock');
+  await fs.rename(socket, hiddenSocket);
+  try {
+    await refresh();
+    await proof.wait(
+      () =>
+        panelWin.webContents.executeJavaScript(`({
+      disabled: document.querySelector('[data-key="${live.session_id}"]').disabled,
+      label: document.querySelector('[data-key="${live.session_id}"]').getAttribute('aria-label'),
+      open: document.querySelectorAll(':popover-open').length
+    })`),
+      (s) => s.disabled && s.label.includes('Last known') && s.open === 0,
+      'Open menu kept stale controls available after disconnect',
+    );
+  } finally {
+    await fs.rename(hiddenSocket, socket);
+  }
+  await refresh();
+  await proof.wait(
+    () =>
+      panelWin.webContents.executeJavaScript(
+        `document.querySelector('[data-key="${live.session_id}"]').disabled`,
+      ),
+    (disabled) => !disabled,
+    'Reconnect did not refresh the existing row',
+  );
   const after = await rpc('events');
   assert.equal(after.cursor, before.cursor);
   const png = await panelWin.webContents.capturePage();
@@ -62,5 +96,7 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
     removed: removed.session_id,
     initial,
     expansionChangedEvents: false,
+    disconnectWithMenu: true,
+    reconnectRefreshed: true,
   };
 };
