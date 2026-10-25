@@ -56,7 +56,12 @@ Each module specification defines its successful journey, a deliberately differe
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [docking implementation plan](tasks/plan.md) and [task list](tasks/todo.md) record the approved build and its verification. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. The docking build is accepted. Voice handoff is authorized after docking merges; no later capability has started implementation.
+Each specification owns its behaviour, contracts and acceptance cases. The owner
+approved the four specifications. This branch's [draft plan](tasks/plan.md) and
+[task list](tasks/todo.md) cover `conversation-resume` for review only. Docking is
+accepted and merged. The owner has accepted the current voice acknowledgement
+increment and requested planning for resume and the panel. Remaining voice work
+stays open in its existing task list. No resume or panel implementation has begun.
 
 ## Review and development workflow
 

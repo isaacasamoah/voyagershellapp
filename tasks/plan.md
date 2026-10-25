@@ -85,14 +85,15 @@ and docs/lifecycle.md. Scope: small. Dependency: approved plan. Gate A must pass
 Implement the smallest complete owner request through storage, the provider and
 live process ownership. Validate the observed generation before recording and
 starting the attempt. Load the same saved thread, obtain fresh credentials,
-connect capture and save the final receipt. Leave the terminal closed.
+connect capture and save the final receipt. Leave the terminal closed. Expose
+the specified lifecycle state and Resume availability in list/detail responses.
 
 Acceptance: identity/history/settings survive; one new idle runtime is owned;
 rejected or failed starts neither substitute a thread nor grant broader access.
 Verification: one focused service-boundary test for the successful journey and
 one named refusal test. Use the real provider result from R00 as corroboration.
 Likely source: src/store.rs, src/worker.rs, src/actions.rs and
-src/service/lifecycle.rs. Extend tests/service.rs and tests/worker_server.py only
+src/service/lifecycle.rs, with list/detail wiring in src/service.rs. Extend tests/service.rs and tests/worker_server.py only
 where needed. This is the widest slice; confirm a focused file map after R00.
 If it grows beyond one reviewable behaviour or roughly five files, revise this
 plan into smaller complete behaviours before coding rather than hiding the scope.
