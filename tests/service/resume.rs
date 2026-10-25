@@ -332,3 +332,64 @@ fn unexpected_exit_with_unread_settings_disables_resume() {
     let observed = f.call(json!({"op":"list"}))[0].clone();
     assert_eq!(observed["resume"]["reason_code"], "settings_unavailable");
 }
+
+#[test]
+fn cli_resume_returns_the_saved_runtime_receipt() {
+    let mut f = Fixture::new();
+    fs::write(f.dir.join("verified-settings"), "1").unwrap();
+    f.start();
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"cli-resume-original","name":"CLI resume","cwd":f.dir}));
+    let id = created["session_id"].as_str().unwrap();
+    f.call(json!({"op":"stop-instance","session_id":id}));
+    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
+        .args([
+            "--state",
+            f.dir.to_str().unwrap(),
+            "resume-instance",
+            id,
+            "cli-resume",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "completed");
+    assert_eq!(receipt["session_id"], id);
+    assert_eq!(receipt["runtime_generation"], 2);
+    assert_eq!(receipt["window"], "closed");
+    assert_eq!(
+        f.call(json!({"op":"operation","request_id":"cli-resume"})),
+        receipt
+    );
+}
+
+#[test]
+fn cli_operation_reads_a_failed_receipt_without_retrying() {
+    let mut f = Fixture::new();
+    let id = stopped_saved_agent(&mut f);
+    fs::write(f.dir.join("active-goal"), "1").unwrap();
+    let expected = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"failed-for-inspection","expected_runtime_generation":1}));
+    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
+        .args([
+            "--state",
+            f.dir.to_str().unwrap(),
+            "operation",
+            "failed-for-inspection",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+        expected
+    );
+}

@@ -362,6 +362,21 @@ add `resume` availability beside the separate `lifecycle` observation. Missing
 legacy settings keep history available but make Resume unavailable. Reading an
 old operation receipt never establishes that its earlier runtime is still live.
 
+The owner CLI uses `resume-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION`.
+Read the generation from a fresh list response. Resume leaves the terminal closed;
+use a separate `open SESSION_ID xterm` or `open SESSION_ID ghostty` afterward.
+Close the previous viewer first, or the service refuses with `viewer_still_open`.
+This prevents an old viewer from being reported as attached to a new runtime.
+`operation REQUEST_ID` returns the current saved receipt immediately, even when
+it records pending, partial or uncertain work. Inspecting a failed result is not
+another attempt. Action commands still fail when their own effects fail.
+
+The maintained native runner has a `resume` journey. It checks a retained old
+window, idle reopening, an explicit saved-marker answer, fresh instance-bound
+capabilities, failed Open followed by successful Open, and closing/reopening the
+same runtime's viewer. Its attachment observation matches the terminal child and
+native frontend to the new service endpoint. It does not measure docking or audio.
+
 The lifecycle owner's `resume.rs` submodule validates admission and progresses the
 operation. The store atomically saves the operation and allocates the next runtime
 generation before spawning. Concurrent starts are excluded. A new owned child

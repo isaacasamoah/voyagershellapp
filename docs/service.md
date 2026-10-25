@@ -80,6 +80,7 @@ independently owned native server as before.
 | `start` | Connect to the existing service or start it independently of the calling app |
 | `create codex\|shell REQUEST_ID NAME CWD [--background] [--terminal ghostty\|xterm] [--rank RANK] [--supervisor ID]` | Start/register/capture and open a native window by default |
 | `open SESSION_ID ghostty\|xterm` | Request the chosen native viewer for a managed instance; no new agent or control claim |
+| `resume-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION` | Owner resumes the eligible stopped conversation idle, leaving its viewer closed |
 | `shell-exec SESSION_ID REQUEST_ID COMMAND` | Submit one command to the existing ready Bash shell |
 | `shell-read SESSION_ID [CURSOR]` | Read bounded live output and readiness; output is not persisted |
 | `shell-attach SESSION_ID` | Attach this terminal to the managed Bash byte transport |
@@ -94,7 +95,7 @@ independently owned native server as before.
 | `stop-instance SESSION_ID [--runtime-only]` | Stop owned runtime and close its viewer by default |
 | `remove SESSION_ID [--stop]` | Deregister and retain history; optionally stop and close first |
 | `register-instance SESSION_ID` | Explicitly resume future capture of a removed instance, without importing history |
-| `operation REQUEST_ID` | Read the saved lifecycle result without repeating effects |
+| `operation REQUEST_ID` | Read the current saved lifecycle result, including pending and failed results, without waiting or repeating effects |
 | `stop` | Refuse while any managed instance is alive; otherwise stop Voyager and record a capture gap |
 | `rename SESSION NAME [--request-id ID]` | Change a display name without changing the runtime or launch receipt |
 | `fleets` | Owner or currently docked agent reads visual Fleet definitions/membership |

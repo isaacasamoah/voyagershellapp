@@ -36,6 +36,15 @@ impl Runtime {
                 "outcome_unknown",
                 "The earlier runtime's exit is not confirmed. Inspect its saved details.".into(),
             ))
+        } else if self
+            .terminals
+            .iter()
+            .any(|viewer| viewer.session == session)
+        {
+            Some((
+                "viewer_still_open",
+                "Close the previous terminal before resuming this conversation.".into(),
+            ))
         } else {
             let settings = current
                 .as_ref()

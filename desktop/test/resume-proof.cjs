@@ -1,0 +1,154 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const exec = promisify(execFile);
+
+exports.run = async ({ rpc, stateDir, refresh, getState }, { wait, delay }) => {
+  const cwd = path.join(stateDir, 'resume-project');
+  const moved = cwd + '-hidden';
+  await fs.mkdir(cwd);
+  await fs.writeFile(
+    path.join(cwd, 'AGENTS.md'),
+    'This is a disposable proof. Use tools only when specifically requested. Never read or print credentials. Change only the explicitly requested proof output file. Reply concisely.\n',
+  );
+  let id;
+  let paused;
+  let hidden = false;
+  const events = async () => (await rpc('events')).events.filter((e) => e.session_id === id);
+  const row = async () => (await rpc('list')).find((r) => r.id === id);
+  const ask = async (request, message) => {
+    const sent = await rpc('send', id, request, message);
+    const observed = await wait(
+      events,
+      (items) =>
+        items.some((e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id),
+      'Explicit proof turn did not finish',
+      90000,
+    );
+    const completion = observed.find(
+      (e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id,
+    );
+    assert.equal(completion.payload.status, 'completed');
+    assert.equal(completion.payload.has_error, false);
+    return observed.filter((e) => e.native_turn_id === sent.native_turn_id);
+  };
+  const attached = async (opened, server) =>
+    wait(
+      async () => {
+        await refresh();
+        return getState().records.find((r) => r.pid === opened.pid && r.server === server);
+      },
+      Boolean,
+      'Terminal did not attach to the expected running conversation',
+    );
+  try {
+    const created = await rpc(
+      'create',
+      'codex',
+      'resume-original',
+      'Resume proof',
+      cwd,
+      '--background',
+    );
+    id = created.session_id;
+    const original = await row();
+    await ask('resume-save-marker', 'Remember RESUME_WINDOW_743. Reply SAVED. Do not use tools.');
+    const oldViewer = await rpc('open', id, 'xterm', '--request-id', 'resume-old-viewer');
+    await attached(oldViewer, original.server);
+    assert.equal(await fs.realpath(`/proc/${oldViewer.pid}/exe`), '/usr/bin/xterm');
+    process.kill(oldViewer.pid, 'SIGSTOP');
+    paused = oldViewer.pid;
+    await rpc('stop-instance', id, '--runtime-only', '--request-id', 'resume-stop-original');
+    await assert.rejects(
+      rpc('resume-instance', id, 'resume-old-window-refusal', '1'),
+      /previous terminal|viewer_still_open/i,
+    );
+    assert.equal((await row()).lifecycle.runtime_generation, 1);
+    process.kill(paused, 'SIGCONT');
+    paused = null;
+    await rpc('background', id, '--request-id', 'resume-close-old');
+    await wait(row, (r) => r.window === 'closed');
+    const before = (await events()).filter((e) => e.type === 'turn.started').length;
+    const start = performance.now();
+    const resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    const readyMs = performance.now() - start;
+    assert.equal(resumed.state, 'completed');
+    assert.equal(resumed.runtime_generation, 2);
+    assert.notEqual(resumed.runtime_pid, created.runtime_pid);
+    assert.equal(resumed.native_thread_id, original.native_thread_id);
+    assert.equal(resumed.window, 'closed');
+    assert.deepEqual(await rpc('operation', 'resume-idle'), resumed);
+    await delay(5000);
+    assert.equal((await events()).filter((e) => e.type === 'turn.started').length, before);
+    const recalled = await ask(
+      'resume-recall',
+      'What marker did I ask you to remember? Reply only with the marker. Do not use tools.',
+    );
+    assert(
+      recalled.some(
+        (e) =>
+          e.type === 'message' &&
+          e.payload.role === 'assistant' &&
+          /RESUME_WINDOW_743/.test(e.payload.text),
+      ),
+    );
+    const capabilityFile = path.join(cwd, 'bound-capabilities.json');
+    const capabilities = await ask(
+      'resume-bound-capabilities',
+      `Use exec_command to run exactly this read-only Voyager request: "$VOYAGER_BIN" --state "$VOYAGER_STATE" capabilities > ${JSON.stringify(capabilityFile)} . Then reply CAPABILITIES_DONE. Do not read the context file or print credentials.`,
+    );
+    assert(
+      capabilities.some((e) => e.type === 'tool.completed' && e.payload.status === 'completed'),
+    );
+    const bound = JSON.parse(await fs.readFile(capabilityFile, 'utf8'));
+    assert.equal(bound.actor.kind, 'instance');
+    assert.equal(bound.actor.session_id, id);
+    assert.equal(bound.session_id, id);
+    const current = await row();
+    const turns = (await events()).filter((e) => e.type === 'turn.started').length;
+    await fs.rename(cwd, moved);
+    hidden = true;
+    await assert.rejects(rpc('open', id, 'xterm', '--request-id', 'resume-failed-open'));
+    const failedOpen = await rpc('operation', 'resume-failed-open');
+    assert.equal(failedOpen.state, 'partial');
+    assert.equal(failedOpen.runtime, 'running');
+    assert.equal((await row()).lifecycle.runtime_generation, 2);
+    await fs.rename(moved, cwd);
+    hidden = false;
+    const openStart = performance.now();
+    const opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');
+    const attachment = await attached(opened, current.server);
+    const attachedMs = performance.now() - openStart;
+    await exec('xdotool', ['windowclose', String(opened.window_id)]);
+    await wait(row, (r) => r.window === 'closed');
+    const reopened = await rpc('open', id, 'xterm', '--request-id', 'resume-reopen');
+    await attached(reopened, current.server);
+    await delay(1000);
+    assert.equal((await rpc('attach-info', id)).pid, resumed.runtime_pid);
+    assert.equal((await events()).filter((e) => e.type === 'turn.started').length, turns);
+    return {
+      id,
+      thread: resumed.native_thread_id,
+      resumed,
+      failedOpen,
+      opened,
+      reopened,
+      readyMs,
+      attachedMs,
+      viewer: {
+        pid: attachment.pid,
+        server: attachment.server,
+        frontendPid: attachment.frontend.pid,
+      },
+      bound: { actor: bound.actor, rank: bound.rank },
+      idleSeconds: 5,
+      savedMarkerRecalled: true,
+    };
+  } finally {
+    if (paused) process.kill(paused, 'SIGCONT');
+    if (hidden) await fs.rename(moved, cwd);
+    if (id) await rpc('stop-instance', id, '--request-id', 'resume-proof-cleanup');
+  }
+};
