@@ -139,6 +139,14 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   const grown = await proof.wait(historyState, (s) => s.count > first.count);
   assert.equal(grown.height, first.height);
   assert.equal(grown.scroll, first.scroll);
+  while ((await historyState()).more) await proof.pageClick(panelWin, 'previous-more');
+  const finalFocus = await panelWin.webContents.executeJavaScript(`({
+    id: document.activeElement.id,
+    withinList: document.getElementById('previous-sessions').contains(document.activeElement),
+    list: document.activeElement.id === 'previous-sessions'
+  })`);
+  await fs.writeFile(path.join(stateDir, 'final-batch-focus.json'), JSON.stringify(finalFocus));
+  assert.ok(finalFocus.withinList || finalFocus.list, 'Final Load more lost keyboard focus');
   await proof.pageClick(panelWin, 'show-removed');
   const removedId = removed.session_id;
   await proof.wait(() =>
@@ -157,6 +165,21 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
     (s) => s.includes('saved portion'),
   );
   assert.equal((await rpc('events')).cursor, beforeRead.cursor);
+  await panelWin.webContents.executeJavaScript(`
+    window.reviewTextPointer = null;
+    document.getElementById('panel').addEventListener('pointerdown', event => {
+      window.reviewTextPointer = {target: event.target.id, prevented: event.defaultPrevented};
+    });
+  `);
+  await proof.pageClick(panelWin, 'history-status');
+  const textPointer = await panelWin.webContents.executeJavaScript('window.reviewTextPointer');
+  await fs.writeFile(path.join(stateDir, 'history-text-pointer.json'), JSON.stringify(textPointer));
+  assert.equal(textPointer.prevented, false, 'Reading saved text triggered panel dragging');
+  await proof.pageClick(panelWin, 'panel-brand');
+  assert.equal(
+    await panelWin.webContents.executeJavaScript('window.reviewTextPointer.prevented'),
+    true,
+  );
   await proof.delay(100);
   const png = await panelWin.webContents.capturePage();
   await fs.writeFile(path.join(stateDir, 'panel-current.png'), png.toPNG());

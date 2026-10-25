@@ -496,3 +496,9 @@ The selected panel journey checks actual Chromium keyboard and wheel scrolling,
 local batch growth without window growth, removed-record reveal and bounded saved
 history. Physical wheel and trackpad input remain unproved by these synthetic
 Chromium events.
+
+When the final history batch hides Load more, focus moves to the last row's
+enabled Inspect control. Normal focus scrolling brings that control into view.
+Saved-details text is excluded from panel dragging, allowing the browser to select
+it. The shared journey checks both saved-text default handling and the different
+ordinary panel-background behavior, which still starts panel dragging.

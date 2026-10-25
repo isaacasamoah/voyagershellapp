@@ -485,7 +485,7 @@ $('panel').addEventListener('pointerdown', (event) => {
   if (
     event.button !== 0 ||
     event.target.closest(
-      'button, input, select, textarea, a, form, details, .instance-menu, .fleet, #conversation',
+      'button, input, select, textarea, a, form, details, .instance-menu, .fleet, #conversation, #agent-details',
     )
   )
     return;
