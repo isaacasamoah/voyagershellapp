@@ -21,7 +21,7 @@ for monitor in monitors:
     connector = monitor[5][0][0]
     stream = call(cast, cast_session, cast + '.Session', 'RecordMonitor', GLib.Variant('(sa{sv})', (connector, {}))).unpack()[0]
     params = call(cast, stream, 'org.freedesktop.DBus.Properties', 'Get', GLib.Variant('(ss)', (cast + '.Stream', 'Parameters'))).unpack()[0]
-    streams.append((stream, params['position'], params['size']))
+    streams.append((stream, params['position'], params['size'], monitor[2]))
 call(remote, session, remote + '.Session', 'Start')
 try:
     for line in sys.stdin:
@@ -29,10 +29,12 @@ try:
             args = json.loads(line)
             if args[0] == 'move':
                 x, y = float(args[1]) / float(args[3]), float(args[2]) / float(args[3])
-                matches = [(s, x - p[0], y - p[1]) for s, p, size in streams if p[0] <= x < p[0] + size[0] and p[1] <= y < p[1] + size[1]]
+                matches = [(s, (x - p[0]) * scale, (y - p[1]) * scale) for s, p, size, scale in streams if p[0] <= x < p[0] + size[0] and p[1] <= y < p[1] + size[1]]
                 assert len(matches) == 1, 'Pointer target is outside the monitor layout'
                 call(remote, session, remote + '.Session', 'NotifyPointerMotionAbsolute', GLib.Variant('(sdd)', matches[0]))
                 time.sleep(.08)
+            elif args[0] == 'key':
+                call(remote, session, remote + '.Session', 'NotifyKeyboardKeysym', GLib.Variant('(ub)', (args[1], args[2])))
             elif args[0] == 'button':
                 call(remote, session, remote + '.Session', 'NotifyPointerButton', GLib.Variant('(ib)', (272, args[1])))
             else:

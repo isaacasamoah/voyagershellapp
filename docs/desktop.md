@@ -2,8 +2,9 @@
 
 Voyager's Electron client shows the local Rust service through a floating glass
 astronaut and a small panel. The native terminal remains your conversational
-interface. Docking registers an identified session or rejoins its registration,
-then selects it as [current control](control.md). Undocking records a release.
+interface. Docking selects [current control](control.md) only for a running,
+connected, registered agent managed by this service. It never registers an
+external terminal. Undocking records a release.
 Neither undocking nor quitting Electron
 stops capture or a service-owned worker.
 
@@ -50,7 +51,8 @@ Holding the astronaut leaves the panel visible. Pulling it away lifts it out
 with a short falling tone; returning to the panel or a supported terminal uses
 the inverse rising tone. A stationary hold is silent. Escape during a pull
 restores the previous attachment. The highlight clears on release. Moving a
-standalone astronaut never opens the panel automatically.
+standalone astronaut leaves the panel closed unless docking refuses. A refusal
+opens the panel with a readable reason and keeps the avatar visible.
 
 **Only the terminal-docked marker fades.** It sits centrally in the lower third
 as an overlay above the terminal, so the terminal can have an opaque background.
@@ -86,48 +88,24 @@ registration/capture and opens Ghostty. Docking selects control; it does not
 create a second registration. The bare Bash has command capture and agent access
 through `shell-exec` / `shell-read`, with no conversational interface.
 
-## Register an existing supported client
+## Identify a supported client
 
-This setup proves part of the mechanism. It does **not** fulfil the product
-brief of docking onto a normally opened terminal. The separate ordinary-discovery acceptance test must
-start with a user-opened terminal and an ordinary Codex launch, without a special
-launcher, injected identity or pre-registration. A simpler implementation must
-still perform that requested workflow. Keep window placement, agent identity,
-capture and process ownership as separate, explicitly proved capabilities.
+Docking supports dedicated Ghostty XWayland and xterm windows for managed Codex
+and Bash instances. The desktop verifies the viewer executable, process start
+identity and direct client. Codex must use the service's explicit Unix endpoint
+and fixed thread UUID. Bash must use the service's exact attachment arguments.
+A title, working folder or old registration does not establish eligibility.
 
-The first adapter is **Codex in a dedicated Ghostty XWayland window**, with one
-direct native client launched against an explicit Unix endpoint and fixed thread
-UUID. It supports the native command below, with optional `--no-alt-screen`:
+External clients can still be discovered or explicitly registered through the
+service, but cannot be docked through the desktop. Registration does not transfer
+process ownership. General terminal adoption remains future work.
 
-```sh
-codex --remote "unix://$CODEX_SOCKET" resume "$THREAD_ID" --no-alt-screen
-```
-
-The conversation must already exist and be loaded. A session picker, `--last`,
-tabs, an implicit default daemon, extra shell layers, and switching threads inside
-that client are unsupported. Launch arguments establish the fixed resume target;
-they cannot report later in-app thread switches. This is a bounded integration,
-not detection of every running CLI. No native agent is restarted by docking.
-
-Start the [service](service.md) against that same explicit socket. Set
-`VOYAGER_CODEX_BIN` when starting it to the native executable your terminal uses;
-different CLI/daemon installations may have different executable paths.
-
-For a separate demo window, from a graphical-session terminal:
-
-```sh
-GDK_BACKEND=x11 ghostty --gtk-single-instance=false \
-  -e /absolute/path/to/codex --remote "unix://$CODEX_SOCKET" \
-  resume "$THREAD_ID" --no-alt-screen
-```
-
-The 11 October external-lead run recorded read-only native terminal turns after a full-access
-setup turn. Do not assume the remote terminal preserves the setup permissions.
-The tested Codex 0.162.1 remote resume rejected permission CLI flags. That external-client policy drift remains unresolved. New managed creation has
-separate native YOLO evidence in the [panel journey](panel-journey.md). Voyager requests YOLO when creating a worker;
-docking does not intentionally grant permissions.
-No transparency setting is required or changed. The Ghostty flag gives this
-prototype an unambiguous window-to-process mapping; it is not a visual requirement.
+The service's `attach-info` response establishes that it still holds the managed
+runtime. The desktop also requires one matching registration, running state and
+connected capture. Missing, removed, ambiguous or disconnected records refuse.
+Tabs, multiple windows for one viewer process and extra shell layers cannot
+establish the required one-to-one identity. Later in-app thread switches remain
+unsupported because launch arguments cannot report them.
 
 Build and open Voyager:
 
@@ -136,7 +114,7 @@ cargo build --locked --bins
 cd desktop
 npm ci
 node node_modules/electron/install.js
-VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start -- --expanded
+VOYAGER_STATE="$HOME/.local/share/voyagershell" npm start -- --ozone-platform=x11 --expanded
 ```
 
 Use your actual private state directory. Start from the graphical session so
@@ -145,22 +123,27 @@ run the service independently of the terminal clients for persistence.
 
 ## Try the journey
 
-1. Start the native conversation and open its dedicated terminal before docking.
-   It is discoverable but unregistered; Voyager has not captured its history.
-2. Pull the astronaut from the panel onto that terminal. Electron verifies the
-   candidate window with a passive outline; that preview does not register it.
-   On release it checks the
-   native executable, process/start identity, explicit endpoint and thread. The
-   Rust service checks that the thread is loaded and acknowledges registration.
-3. Converse normally. Supported future user/assistant messages and lifecycle
-   events are recorded. Repeated docking keeps the same registration.
-4. Hover over the astronaut, then pull it away. Capture continues; nothing is
-   unregistered. The keyboard alternative is Ctrl+Alt+V.
-5. Dock again to rejoin. An unrelated same-title terminal must be refused.
-6. Use the [worker commands](workers.md) from the native agent or a script to start
-   one managed worker. Open its native interface in another terminal. Docking to
-   that worker joins its existing registration. Window creation remains a desktop
-   action, independent of the service's worker lifetime.
+1. Create a disposable Codex or Bash instance through the panel and open its
+   supported terminal viewer.
+2. Pull the astronaut onto the terminal. A neutral dashed outline says that
+   Voyager is checking it. Only a verified target gets the solid outline and
+   "Release to dock". Other windows show a refusal reason.
+3. Release the astronaut. The desktop repeats the live checks and retains the
+   process identity established during hover. A stopped or replaced client
+   cannot silently become a new target. Refusal leaves visible controls and a
+   reason in the panel, without registration or a success sound.
+4. Converse normally in an accepted managed terminal. Pull the astronaut away
+   to release control. The runtime and capture continue.
+5. Try an ordinary external terminal using the same supported viewer. It must
+   refuse and leave the service's registration list unchanged.
+
+A drop reports success only after the service accepts its control attachment
+and the native window inventory confirms a visible avatar above the intended
+terminal. Only that attempt requests a docking sound. Covered targets, failed
+placement and superseded attempts cannot report success. Failure releases the
+attachment and reveals the floating controls. Recovery after a previously
+successful dock releases control and restores the floating controls. Applications
+recovery uses the independent presentation operation described below.
 
 An earlier attempt to launch a worker from the registered native lead was blocked
 by that harness's sandbox: it could not connect to Voyager's local socket
@@ -181,16 +164,23 @@ registration does not guarantee they survive their original terminal closing.
 
 Electron main calls the Rust service CLI; the isolated renderer receives only
 presentation state. `connection-info` reveals connection identity without
-subscribing or importing conversation history. `register` is called only on a
-verified drop. Process identities are rechecked after acknowledgement before the
-avatar joins. Registration may succeed even if subsequent visual placement fails;
-the agent still appears in the service registry.
+subscribing or importing conversation history. Hover and drop call the same
+`resolveDockTarget` eligibility check. Each check uses its own window, service
+and process observations so a concurrent refresh cannot replace its inputs.
+Only the current drag can publish its hover result. A target that disappears
+leaves a refusal attached to that drag, so releasing it still explains the failure.
+
+A drop repeats discovery and checks the hovered identity before requesting the
+existing service control attachment. The desktop creates no registration and
+grants no rights. The service still authorizes control. Process identity remains
+separate from window placement, runtime ownership and capture.
 
 `voyager-windows` reads X11 inventory. Its narrow `above` operation may reposition
 only a window belonging to its calling process. Its separate layout operation
 arranges identified managed terminals as described in [Vessels and fleets](fleets.md).
-Neither operation types into a terminal. Electron checks the actual native stack after asking for placement. A covered
-marker hides rather than painting over another X11 app. Linux hover uses a
+Neither operation types into a terminal. `placement.cjs` returns placed, failed
+or superseded after checking the native stack and current attempt. It does not
+hide the avatar to represent successful placement. Linux hover uses a
 bounded pointer/button probe while a dock or panel is visible, because Electron forwards ignored
 mouse movement only on macOS/Windows; it does not inject input. Native Wayland
 windows are absent from this inventory, so occlusion by those windows is unproved.
@@ -212,19 +202,77 @@ mouse events using a 1×1 region at the transparent corner, outside the artwork;
 the interactive avatar has its full input region restored. See the
 [pinned Electron implementation](https://github.com/electron/electron/blob/v44.7.0/shell/browser/ui/electron_desktop_window_tree_host_linux.cc#L226).
 
-The separate **live registration proof makes one real model request**:
+The D01 refusal check uses real native pointer events and disposable external
+and managed Bash windows. Start a candidate with fresh private state, after
+building its Rust binaries and installing its Electron runtime:
 
 ```sh
-VOYAGER_STATE=/absolute/private/state \
-VOYAGER_DEMO_THREAD=exact-native-thread-uuid \
-npm start -- --proof-registration
+VOYAGER_STATE=/absolute/fresh/private/state VOYAGER_PROOF_TERMINAL=xterm \
+  ./desktop/node_modules/electron/dist/electron --ozone-platform=x11 \
+  ./desktop --expanded --proof-docking
 ```
 
-Use only a deliberately selected demo conversation. The check rejects an unrelated
-same-title window, registers the selected existing session, records a harmless
-user/assistant marker exchange while detached and verifies the same registration
-on rejoin. Receipts stay in the private state directory. First registration and
-rejoining an earlier registration are reported separately.
+Run from the checkout root in a GNOME graphical session. Repeat with `ghostty`.
+Leaving and returning to a target starts a fresh hover check and restores its cue.
+The check exercises external refusal, a valid managed target and a target stopped
+between hover and drop. It records screenshots, registration equality, control
+identity and sound-request counts in `docking-proof.json` under the private state
+directory. It stops its disposable managed instance and external viewer, then
+exits Electron. Stop the isolated service separately with `voyager --state DIR stop`.
+It makes no model turn or microphone request. IPC sound counts do not prove
+acoustic output, and managed eligibility is not proof of D02 placement reliability.
+
+The independent Codex comparison starts its own external Codex server and viewer,
+then starts the candidate service and Electron from this checkout. Supply a new,
+nonexistent private directory and the graphical session environment:
+
+```sh
+VOYAGER_EXTERNAL_DOCK_DIR=/tmp/new-codex-docking-trial VOYAGER_PROOF_TERMINAL=xterm \
+  cargo test --locked --test native_external_docking -- --ignored --nocapture
+```
+
+Repeat with `ghostty` and another new directory. This test submits one short
+setup turn to the external Codex conversation before opening its native client.
+It requires the recorded desktop verdict, not merely Electron's exit status.
+It verifies that the external server and conversation survive the refusal,
+then stops only the disposable resources it created. The pointer check verifies
+its actual position before clicking. The recorded D01 trials use the external
+monitor; mixed-scale pointer behavior on the laptop display remains unproved.
+
+Set `VOYAGER_PROOF_D02=1` on the native Codex comparison to require visible
+placement and capture output audio. The fixture records only a bounded interval
+from the unmuted output monitor, requires silence before the action, and checks
+that covered placement produces no sound. It does not record the microphone.
+A valid run records the drop, acceptance, placement and sound-request times,
+then the observed sound onset and end. Output-monitor timestamps are measured
+when audio chunks arrive; they are conservative observations rather than room
+microphone measurements. Packaged batches passed with both viewers. Owner
+listening remains a separate acceptance check.
+
+Placement compares fresh native marker bounds with the requested bounds, allowing
+two physical pixels for rounding. Invalid geometry fails. A pending native move
+gets the existing one-second placement deadline before failure restores controls.
+The desktop converts the two rectangle corners with Electron's Linux-supported
+[point conversion](https://github.com/electron/electron/blob/v44.7.0/docs/api/screen.md#screendiptoscreenpointpoint-windows-linux).
+The rectangle conversion API is Windows-only. This remains XWayland evidence,
+not native Wayland support.
+
+The native fixture records launch and finish manifests containing candidate source
+and executable hashes, and rejects a run if those files changed. Its D02 check
+independently compares the native avatar center with the terminal anchor and
+captures a compositor image cropped to the disposable terminal. Test captures
+and manifests stay in the private trial directory.
+
+The main process retains at most 32 docking attempt records in memory. They
+answer which attempt was accepted, whether placement completed, and where time
+was spent before the sound request. The proof reader can collect them without
+terminal contents or credentials. Service authorization and its deadlines do
+not change. `control.cjs` accepts only a reply matching the requested generation,
+Vessel, window and both process identities.
+
+The older `--proof-registration` check describes the superseded external-docking
+behavior and is not a current acceptance test. Its historical evidence below
+does not authorize or establish general terminal adoption.
 
 Earlier on 11 October, the user physically docked the selected native terminal
 and its subsequent user/assistant exchange was captured. That establishes the
@@ -274,3 +322,128 @@ never infer identity from a title or the foreground window alone.
 References: [Electron's Wayland limitations](https://www.electronjs.org/docs/latest/api/browser-window#platform-notices),
 [mouse pass-through](https://www.electronjs.org/docs/latest/api/base-window#winsetignoremouseeventsignore-options),
 and [Ghostty shell integration](https://ghostty.org/docs/features/shell-integration).
+
+## Recovery after a target becomes unavailable
+
+Refresh treats a failed placement or an unavailable target as the end of that
+control attachment. It restores the floating avatar and panel, leaving the
+managed runtime and event capture alone. A refresh started before a newer dock
+cannot release that newer attachment. A failed panel query is reported and always
+releases the refresh guard, so a later refresh can update again. Control release continues through the
+existing voice coordinator; visible recovery does not wait for voice confirmation
+and does not start the private microphone.
+
+The X11 probe includes the window's workspace in visibility. A mapped window
+on another workspace is unavailable. A window marked for all workspaces remains
+eligible; missing workspace observations are not proof of visibility. This follows
+the [window manager workspace contract](https://specifications.freedesktop.org/wm/latest/ar01s05.html).
+Floating Voyager controls appear across workspaces. A docked avatar belongs to
+its current workspace until control ends. Display changes cancel an attachment
+and clamp the recovered controls to an available display.
+
+The recovery proof uses disposable native windows, observes service process and
+capture continuity, and changes actual workspaces. Its monitor trials save the
+current configuration, apply temporary arrangement/scale changes, then restore
+and compare the configuration even after failure. The test uses
+[Mutter's versioned display interface](https://github.com/GNOME/mutter/blob/49.0/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml).
+These checks establish the exercised Fedora XWayland behavior only.
+
+
+## Applications and keyboard recovery
+
+Opening the candidate through Applications reveals both controls on first launch
+and on later launches. A later launch releases its control attachment and reveals
+the existing panel and avatar. It keeps the managed runtime and capture. Ctrl+Alt+V
+uses the same recovery operation. A later dock supersedes an unfinished recovery.
+The recovery does not submit work or start a replacement agent.
+
+On stock GNOME, Applications appears on the primary monitor. XWayland may retain
+an old pointer position while the GNOME grid owns input. The launching process
+passes an explicit Applications-launch flag through Electron's single-instance data;
+that path chooses the grid's primary display. Keyboard and ordinary command-line
+recovery use the pointer display. The installer adds `--from-applications` to its desktop entry. Inherited terminal
+environment variables do not identify an Applications launch. Custom launchers or GNOME extensions that move
+the grid are not established by this trial. This small selector is in
+`desktop/src/recovery.cjs`; it is not a cross-platform window-management framework.
+
+The platform facts come from [GNOME Shell 49.0's overview monitor constraint](https://github.com/GNOME/gnome-shell/blob/49.0/js/ui/overview.js),
+[Electron 44.7's single-instance data](https://github.com/electron/electron/blob/v44.7.0/docs/api/app.md#apprequestsingleinstancelockadditionaldata).
+The requested panel anchor is passed directly into placement because native
+bounds can still report the old monitor immediately after a move.
+
+`VOYAGER_PROOF_D04=1` extends the visibility proof with a temporary, separately
+named Applications entry. The operator selects that exact candidate in the real
+GNOME grid while docked and after failed placement. Twenty further launches use
+that same desktop entry, measuring request through both native windows being
+visible. Runtime and capture identity must survive every trial. The launcher is
+removed afterward. `VOYAGER_PROOF_KEYBOARD=1` uses actual key events in an isolated
+desktop so the installed app's shortcut is not replaced.
+
+`VOYAGER_PROOF_BATCH=1 VOYAGER_PROOF_D02=1` extends the docking proof with twenty
+actual pointer drops and output-monitor recordings. Every drop must visibly
+place the avatar and request exactly one sound. At least nineteen recordings
+must begin within two seconds. All slow and failed runs remain evidence.
+
+For packaged trials, `VOYAGER_PROOF_APP` selects the built executable in the native
+Codex fixture. The service is its bundled `resources/bin/voyager`, not the checkout
+binary. Explicit proof flags can load the harness from an absolute
+`VOYAGER_PROOF_DIRECTORY`; normal launch does not load this code. Source, harness,
+package and bundled binary hashes are recorded before and after each trial.
+No proof flag installs or restarts the main app.
+
+The pointer fixture uses logical desktop coordinates. Mutter's
+[49.0 monitor-stream transform](https://github.com/GNOME/mutter/blob/49.0/src/backends/meta-screen-cast-monitor-stream.c)
+expects stream pixels, so the fixture applies each monitor's scale. X11 pointer
+readback is only a check over XWayland windows, not over GNOME's own grid.
+
+
+The native panel's all-workspace membership is reasserted after showing it. A
+fresh GNOME session can otherwise report no current workspace and leave the
+initial panel on workspace zero. This does not relax terminal eligibility:
+unknown terminal workspace observations still refuse docking. Initial panel
+confirmation errors are reported without skipping the keyboard shortcut or the
+refresh and pointer timers. The owner can retry recovery without restarting work.
+
+The native re-entry proof now moves onto Voyager's own panel and verifies that
+native target before returning to the same terminal. It repeats this in each
+batch trial. The earlier test assumed the desktop corner was an empty target;
+one packaged Ghostty run failed that assumption. The exact event sequence in
+that failure remains unknown. It is retained rather than presented as a repaired
+Ghostty defect.
+
+The final Ghostty polish sequence can leave the recovered panel over the later
+Bash docking point. That is a covered target, so refusal is correct. Establish an
+unobstructed target by collapsing the panel before the positive Bash comparison,
+and show the panel before its final screenshot. The recorded packaged trial used
+an external fixture for the first step and a second launch of the same candidate
+for the screenshot. The unchanged automatic sequence is not claimed to pass.
+Retain these setup steps alongside the exact fixture hash when repeating it.
+
+A final participating voice connection can disappear during fixture teardown.
+The resulting outcome_unknown remains separate from successful docking recovery
+and earlier voice destination assertions. Do not describe that status as a
+confirmed voice closure.
+
+
+## Return position after automatic recovery
+
+Before a docking drag moves the avatar, the desktop remembers the floating panel
+and avatar positions and whether the avatar was seated in the panel. A direct
+dock captures the same information before placement. Switching between terminal
+targets retains this origin. Automatic target-loss recovery restores it, using
+the existing display clamps if the original location is no longer available.
+Current panel content still determines its height. No position is persisted.
+
+A pending recovery retains its original positions across overlapping display
+events. The latest recovery may finish that restoration; an older one cannot
+move a newer dock. Explicit docking, undocking or dragging clears the pending
+restoration. Applications recovery still chooses its current display rather than
+returning to the old one. These presentation changes do not affect process
+ownership, capture or service permissions.
+
+The focused native probe is desktop/test/recovery-position-proof.cjs. Load it as
+visibility-proof.cjs through the existing explicit VOYAGER_PROOF_DIRECTORY option
+in a private trial. It uses real pointer drags and native window observations for
+minimise and close with each supported viewer. Display-removal fallback and
+overlapping-event order are deterministic regressions; the focused native trial
+does not claim a physical monitor-removal test.

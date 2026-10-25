@@ -115,3 +115,58 @@ test('xterm identification preserves exact native arguments and rejects ambiguou
     null,
   );
 });
+
+const { resolveDockTarget } = require('../src/binding.cjs');
+const managed = { ...record, external: false };
+const session = {
+  id: 'managed',
+  server,
+  native_thread_id: nativeId,
+  ownership: 'managed',
+  worker_state: 'running',
+  capture: 'connected',
+  removed_ms: null,
+};
+function eligible(rows = [session], target = managed, processes = identities, expected = null) {
+  return resolveDockTarget(a, [a], [target], processes, rows, expected);
+}
+test('only one live managed registration can become a ready docking target', () => {
+  assert.equal(eligible().state, 'ready');
+  for (const rows of [
+    [],
+    [session, session],
+    [{ ...session, ownership: 'external' }],
+    [{ ...session, worker_state: 'unknown' }],
+    [{ ...session, worker_state: 'stopped' }],
+    [{ ...session, capture: 'disconnected' }],
+    [{ ...session, removed_ms: 123 }],
+  ]) {
+    assert.equal(eligible(rows).state, 'refused');
+    assert.ok(eligible(rows).reason);
+  }
+  assert.equal(eligible([session], record).state, 'refused');
+});
+test('dropping after the hovered client changes refuses rather than selecting its replacement', () => {
+  const hovered = eligible();
+  const replacement = { ...managed, frontend: { ...managed.frontend, pid: 12, start: '120' } };
+  const live = new Map([
+    [10, managed],
+    [12, replacement.frontend],
+  ]);
+  assert.equal(eligible([session], replacement, live).state, 'ready');
+  assert.equal(eligible([session], replacement, live, hovered).state, 'refused');
+  assert.equal(
+    eligible([{ ...session, worker_state: 'stopped' }], managed, identities, hovered).state,
+    'refused',
+  );
+});
+
+test('malformed native geometry refuses before attachment', () => {
+  for (const changes of [{ width: 0 }, { height: -1 }, { x: NaN }, { y: Infinity }, { id: 0 }]) {
+    const window = { ...a, ...changes };
+    assert.equal(
+      resolveDockTarget(window, [window], [managed], identities, [session]).state,
+      'refused',
+    );
+  }
+});

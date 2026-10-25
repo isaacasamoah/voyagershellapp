@@ -1,3 +1,5 @@
+const { placeAboveTarget } = require('./placement.cjs');
+const { launchContext, recoveryDisplay } = require('./recovery.cjs');
 const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -16,6 +18,7 @@ const {
   terminalSnapshot,
   identifyTerminal,
   resolveWindow,
+  resolveDockTarget,
   registeredSession,
   windowAt,
 } = require('./binding.cjs');
@@ -38,7 +41,7 @@ app.disableHardwareAcceleration();
 app.setName('Voyager Shell');
 app.setDesktopName('voyagershell.desktop');
 app.setPath('userData', path.join(stateDir, 'desktop-profile'));
-const primaryInstance = app.requestSingleInstanceLock();
+const primaryInstance = app.requestSingleInstanceLock(launchContext());
 if (!primaryInstance) app.quit();
 
 let avatarWin,
@@ -64,9 +67,13 @@ let service = null,
   platformError = null,
   dockError = '';
 let busy = false;
+const dockAttempts = [];
+const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
+let dockOrigin = null;
+let restoringOrigin = null;
 let controlConnection = null;
 const conversation = conversationClient(stateDir, (value) => {
   for (const client of [avatarWin, panelWin]) {
@@ -103,16 +110,16 @@ async function desktopSnapshot() {
   const { stdout } = await exec(probe, [], { timeout: 2000, maxBuffer: 1024 * 1024 });
   return JSON.parse(stdout);
 }
-async function identities() {
+async function identities(candidates = records) {
   const result = new Map();
-  for (const pid of new Set(records.flatMap((r) => [r.pid, r.frontend.pid]))) {
+  for (const pid of new Set(candidates.flatMap((r) => [r.pid, r.frontend.pid]))) {
     try {
       result.set(pid, await processIdentity(pid));
     } catch {}
   }
   return result;
 }
-async function discoverTerminals() {
+async function discoverTerminals(currentWindows = windows, currentSessions = sessions) {
   const endpoints = [];
   if (service?.codex_connected) {
     const info = await rpc('connection-info');
@@ -122,7 +129,7 @@ async function discoverTerminals() {
       external: true,
     });
   }
-  const managed = sessions.filter(
+  const managed = currentSessions.filter(
     (s) => s.ownership === 'managed' && s.capture === 'connected' && s.worker_state === 'running',
   );
   endpoints.push(
@@ -142,7 +149,7 @@ async function discoverTerminals() {
   );
   const found = (
     await Promise.all(
-      [...new Set(windows.map((w) => w.pid))].map(async (pid) => {
+      [...new Set(currentWindows.map((w) => w.pid))].map(async (pid) => {
         const snapshot = await terminalSnapshot(pid).catch(() => null);
         if (!snapshot) return [];
         return (
@@ -163,6 +170,7 @@ async function discoverTerminals() {
     )
   ).flat();
   records = found;
+  return found;
 }
 function windowBehindAvatar(stack, point) {
   const overlays = [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE());
@@ -178,40 +186,36 @@ function syncLayer() {
   if (terminal !== wasTerminal) {
     avatarWin.setFocusable(!terminal);
     avatarWin.setAlwaysOnTop(!terminal);
+    avatarWin.setVisibleOnAllWorkspaces(!terminal);
   }
   if (!terminal && !avatarWin.isVisible()) avatarWin.showInactive();
 }
 async function placeAboveTerminal() {
-  if (layer === 'floating' || !binding) return;
+  if (layer === 'floating' || !binding) return { state: 'superseded' };
   const target = binding.window.id;
   const generation = dockGeneration;
-  const avatar = avatarWin.getNativeWindowHandle().readUInt32LE();
-  let stack = await inventory();
-  if (generation !== dockGeneration || layer === 'floating' || binding?.window.id !== target)
-    return;
   const p = avatarPosition();
-  const center = screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 });
-  if (windowBehindAvatar(stack, center)?.id !== target) {
-    avatarWin.hide();
-    setDockHovered(false);
-    return;
-  }
-  if (!avatarWin.isVisible()) avatarWin.showInactive();
-  const a = stack.findIndex((w) => w.id === avatar),
-    t = stack.findIndex((w) => w.id === target);
-  if (t >= 0 && a > t) return;
-  await exec(probe, ['above', String(avatar), String(target)], { timeout: 2000 });
-  const deadline = performance.now() + 1000;
-  while (layer !== 'floating' && binding?.window.id === target) {
-    stack = await inventory();
-    const a = stack.findIndex((w) => w.id === avatar),
-      t = stack.findIndex((w) => w.id === target);
-    if (t >= 0 && a > t) return;
-    if (performance.now() >= deadline)
-      throw Error(`The desktop did not place the docked marker (avatar ${a}, terminal ${t})`);
-    await delay(25);
-  }
+  const rectangle = avatarWin.getBounds();
+  const top = screen.dipToScreenPoint({ x: rectangle.x, y: rectangle.y });
+  const bottom = screen.dipToScreenPoint({
+    x: rectangle.x + rectangle.width,
+    y: rectangle.y + rectangle.height,
+  });
+  const bounds = { x: top.x, y: top.y, width: bottom.x - top.x, height: bottom.y - top.y };
+  return placeAboveTarget({
+    avatar: avatarWin,
+    target,
+    bounds,
+    point: screen.dipToScreenPoint({ x: p.x + avatarSize / 2, y: p.y + avatarSize / 2 }),
+    excluded: [avatarWin, candidateWin].map((w) => w.getNativeWindowHandle().readUInt32LE()),
+    current: () =>
+      generation === dockGeneration && layer !== 'floating' && binding?.window.id === target,
+    inventory,
+    above: (avatar, terminal) =>
+      exec(probe, ['above', String(avatar), String(terminal)], { timeout: 2000 }),
+  });
 }
+
 function sendState() {
   syncLayer();
   const state = {
@@ -269,12 +273,27 @@ function avatarPosition() {
   const b = avatarWin.getBounds();
   return { x: b.x + margin, y: b.y + margin };
 }
+function floatingPosition() {
+  return { panel: panelWin.getBounds(), avatar: avatarPosition(), seated };
+}
+async function restoreFloating(position) {
+  const generation = dockGeneration;
+  restoringOrigin = position;
+  const anchor = position && { x: position.panel.x + 108, y: position.panel.y + 44 };
+  await setExpanded(true, anchor);
+  if (generation !== dockGeneration || restoringOrigin !== position) return;
+  if (position && !position.seated) {
+    setSeated(false);
+    placeAvatar(position.avatar.x, position.avatar.y);
+    sendState();
+  }
+  restoringOrigin = null;
+}
 function setBoundsIfChanged(client, bounds) {
   const previous = client.getBounds();
   if (Object.keys(bounds).some((key) => previous[key] !== bounds[key])) client.setBounds(bounds);
 }
-function placePanel() {
-  const p = avatarPosition();
+function placePanel(p = avatarPosition()) {
   const area = screen.getDisplayNearestPoint(p).workArea;
   const width = 320;
   const height = Math.min(area.height, panelHeight());
@@ -314,21 +333,48 @@ function setSeated(value) {
 function raiseSeatedAvatar() {
   if (expanded && seated && !dragging) avatarWin.moveTop();
 }
-app.on('second-instance', async () => {
+async function recoverControls(context) {
   if (!avatarWin || avatarWin.isDestroyed()) return;
+  undock();
+  const generation = dockGeneration;
+  const attempt = { generation, requestedAt: performance.now(), state: 'requested' };
+  recoveryAttempts.push(attempt);
+  if (recoveryAttempts.length > 32) recoveryAttempts.shift();
+  dragging = null;
+  panelDrag = null;
+  candidateWin.hide();
   if (avatarWin.isMinimized()) avatarWin.restore();
   if (panelWin.isMinimized()) panelWin.restore();
+  avatarWin.showInactive();
+  let cursor = screen.getCursorScreenPoint();
   try {
-    await setExpanded(true);
-    panelWin.show();
-    panelWin.focus();
-    avatarWin.showInactive();
-    raiseSeatedAvatar();
+    cursor = screen.screenToDipPoint((await desktopSnapshot()).pointer);
   } catch (error) {
     console.error(error.message);
   }
-});
-async function setExpanded(value) {
+  if (generation !== dockGeneration) {
+    attempt.state = 'superseded';
+    return;
+  }
+  const area = recoveryDisplay(screen, cursor, context).workArea;
+  attempt.display = area;
+  attempt.cursor = cursor;
+  await setExpanded(true, { x: area.x + area.width - avatarSize - 24, y: area.y + 28 });
+  if (generation !== dockGeneration) {
+    attempt.state = 'superseded';
+    return;
+  }
+  panelWin.show();
+  panelWin.focus();
+  avatarWin.showInactive();
+  raiseSeatedAvatar();
+  Object.assign(attempt, { state: 'presented', presentedAt: performance.now() });
+}
+app.on('second-instance', (_event, _argv, _cwd, context) =>
+  recoverControls(context).catch((error) => console.error(error.message)),
+);
+
+async function setExpanded(value, position) {
   expanded = value;
   if (value) {
     if (binding) {
@@ -337,9 +383,10 @@ async function setExpanded(value) {
       return;
     }
     setSeated(true);
-    placePanel();
+    placePanel(position);
     sendState();
     panelWin.showInactive();
+    panelWin.setVisibleOnAllWorkspaces(true);
     const id = panelWin.getNativeWindowHandle().readUInt32LE();
     const deadline = performance.now() + 2000;
     while (expanded && seated) {
@@ -442,28 +489,85 @@ function advanceDrag(p, now = performance.now()) {
   if (dragging.moved) {
     placeAvatar(p.x - dragging.x, p.y - dragging.y);
     const target = windowBehindAvatar(windows, screen.dipToScreenPoint(p));
-    if (
-      target &&
-      records.filter((r) => r.pid === target.pid).length === 1 &&
-      windows.filter((w) => w.pid === target.pid).length === 1
-    ) {
-      const top = screen.screenToDipPoint({ x: target.x, y: target.y });
-      const bottom = screen.screenToDipPoint({
-        x: target.x + target.width,
-        y: target.y + target.height,
-      });
-      setBoundsIfChanged(candidateWin, {
-        x: top.x,
-        y: top.y,
-        width: bottom.x - top.x,
-        height: bottom.y - top.y,
-      });
-      if (!candidateWin.isVisible()) candidateWin.showInactive();
-    } else candidateWin.hide();
+    previewDock(target);
   }
+}
+function showDockCandidate(target, result) {
+  const top = screen.screenToDipPoint({ x: target.x, y: target.y });
+  const bottom = screen.screenToDipPoint({
+    x: target.x + target.width,
+    y: target.y + target.height,
+  });
+  setBoundsIfChanged(candidateWin, {
+    x: top.x,
+    y: top.y,
+    width: bottom.x - top.x,
+    height: bottom.y - top.y,
+  });
+  candidateWin.webContents
+    .executeJavaScript(
+      `document.body.dataset.state = ${JSON.stringify(result.state)}; document.getElementById('reason').textContent = ${JSON.stringify(result.reason)};`,
+    )
+    .catch((error) => console.error(error.message));
+  if (!candidateWin.isVisible()) candidateWin.showInactive();
+}
+function previewDock(target) {
+  const gesture = dragging;
+  if (!target || target.id === panelWin.getNativeWindowHandle().readUInt32LE()) {
+    if (gesture.candidate)
+      gesture.candidate = {
+        ...gesture.candidate,
+        state: 'refused',
+        outside: true,
+        reason: 'This terminal is unavailable. Try docking again.',
+      };
+    candidateWin.hide();
+    return;
+  }
+  if (gesture.candidate?.window.id === target.id && !gesture.candidate.outside) return;
+  const candidate = { window: target, state: 'checking', reason: 'Checking this terminal…' };
+  gesture.candidate = candidate;
+  showDockCandidate(target, candidate);
+  checkDockTarget(target.id)
+    .catch(() => ({ state: 'refused', reason: 'Could not verify this terminal. Try again.' }))
+    .then((result) => {
+      if (dragging !== gesture || gesture.candidate !== candidate) return;
+      gesture.candidate = { ...candidate, ...result };
+      showDockCandidate(target, result);
+    });
+}
+async function checkDockTarget(id, expected = null) {
+  if (serviceError || platformError)
+    return { state: 'refused', reason: serviceError || platformError };
+  const currentWindows = await inventory();
+  const currentSessions = await rpc('list', '--include-removed');
+  const currentRecords = await discoverTerminals(currentWindows, currentSessions);
+  return resolveDockTarget(
+    currentWindows.find((w) => w.id === id),
+    currentWindows,
+    currentRecords,
+    await identities(currentRecords),
+    currentSessions,
+    expected,
+  );
+}
+async function refuseDock(reason) {
+  const origin = binding ? dockOrigin : null;
+  undock(reason);
+  avatarWin.showInactive();
+  await restoreFloating(origin);
+  return false;
+}
+async function recoverDisplay() {
+  if (!avatarWin || avatarWin.isDestroyed()) return;
+  const origin = binding ? dockOrigin : restoringOrigin || floatingPosition();
+  undock('The display changed. Dock again when the terminal is ready.');
+  avatarWin.showInactive();
+  await restoreFloating(origin);
 }
 function undock(message = '') {
   dockGeneration++;
+  restoringOrigin = null;
   const previous = controlConnection;
   controlConnection = null;
   if (previous && service?.control?.generation === previous.attachment.generation)
@@ -483,62 +587,83 @@ async function releaseControl(connection) {
     connection.close();
   }
 }
-async function dock(id) {
-  if (serviceError || platformError) throw Error(serviceError || platformError);
+async function dock(id, expected = null, droppedAt = performance.now(), origin = null) {
+  origin = binding ? dockOrigin : origin || floatingPosition();
+  restoringOrigin = null;
   if (binding) undock();
   const generation = ++dockGeneration;
-  windows = await inventory();
-  sessions = await rpc('list', '--include-removed');
-  await discoverTerminals();
-  const target = resolveWindow(
-    windows.find((w) => w.id === id),
-    windows,
-    records,
-    await identities(),
-  );
-  if (target.error) {
-    undock(target.error);
-    return false;
+  const attempt = { generation, target: id, droppedAt, state: 'checking' };
+  dockAttempts.push(attempt);
+  if (dockAttempts.length > 32) dockAttempts.shift();
+  const superseded = () => {
+    if (generation === dockGeneration) return false;
+    attempt.state = 'superseded';
+    return true;
+  };
+  let fresh;
+  try {
+    const target = await checkDockTarget(id, expected);
+    if (superseded()) return false;
+    if (target.state !== 'ready') {
+      Object.assign(attempt, { state: 'refused', reason: target.reason });
+      return refuseDock(target.reason);
+    }
+    fresh = await checkDockTarget(id, target);
+    if (superseded()) return false;
+    if (fresh.state !== 'ready') {
+      Object.assign(attempt, { state: 'refused', reason: fresh.reason });
+      return refuseDock(fresh.reason);
+    }
+  } catch {
+    if (superseded()) return false;
+    Object.assign(attempt, {
+      state: 'failed',
+      reason: 'Could not verify this terminal. Try again.',
+    });
+    return refuseDock(attempt.reason);
   }
-  if (target.record.external) await rpc('register', target.record.nativeId);
-  sessions = await rpc('list', '--include-removed');
-  windows = await inventory();
-  const fresh = resolveWindow(
-    windows.find((w) => w.id === id),
-    windows,
-    [target.record],
-    await identities(),
-  );
-  if (generation !== dockGeneration) return false;
-  if (fresh.error) {
-    undock(fresh.error);
-    return false;
-  }
-  const session = registeredSession(fresh.record, sessions);
-  if (!session || session.capture !== 'connected') {
-    undock('This agent is disconnected.');
-    return false;
-  }
+  const session = fresh.session;
   const identity = ({ pid, start }) => ({ pid, start });
-  const connection = await connectControl(
-    stateDir,
-    {
-      generation: randomUUID(),
-      session_id: session.id,
-      window_id: fresh.window.id,
-      terminal: identity(fresh.record),
-      frontend: identity(fresh.record.frontend),
-    },
-    () => {
-      if (controlConnection === connection) undock('Control attachment ended.');
-    },
-  );
-  if (generation !== dockGeneration) {
+  let connection;
+  let closed = false;
+  try {
+    connection = await connectControl(
+      stateDir,
+      {
+        generation: randomUUID(),
+        session_id: session.id,
+        window_id: fresh.window.id,
+        terminal: identity(fresh.record),
+        frontend: identity(fresh.record.frontend),
+      },
+      () => {
+        closed = true;
+        if (connection && controlConnection === connection)
+          refuseDock('Control attachment ended.').catch((error) => console.error(error.message));
+      },
+    );
+  } catch {
+    if (superseded()) return false;
+    Object.assign(attempt, {
+      state: 'failed',
+      reason: 'Could not attach control. Try docking again.',
+    });
+    return refuseDock(attempt.reason);
+  }
+  if (closed || generation !== dockGeneration) {
     await releaseControl(connection);
+    attempt.state = 'superseded';
+    if (closed && generation === dockGeneration) return refuseDock('Control attachment ended.');
     return false;
   }
+  Object.assign(attempt, {
+    acceptedAt: performance.now(),
+    attachment: connection.attachment.generation,
+    state: 'accepted',
+  });
   controlConnection = connection;
   service = { ...service, control: connection.attachment, voice: connection.voice };
+  dockOrigin = origin;
   binding = { ...fresh, session };
   dockHovered = false;
   selected = session.id;
@@ -547,14 +672,39 @@ async function dock(id) {
   follow();
   sendState();
   try {
-    await placeAboveTerminal();
+    const placement = await placeAboveTerminal();
+    if (superseded()) {
+      attempt.state = 'superseded';
+      if (controlConnection === connection) undock();
+      return false;
+    }
+    if (placement.state === 'superseded') {
+      attempt.state = 'superseded';
+      undock();
+      return false;
+    }
+    if (placement.state !== 'placed') {
+      Object.assign(attempt, { state: 'failed', reason: placement.reason });
+      return refuseDock(placement.reason);
+    }
+    Object.assign(attempt, {
+      placedAt: performance.now(),
+      state: 'placed',
+      marker: placement.marker,
+      window: placement.target,
+    });
   } catch (error) {
-    console.error(error.message);
-    undock('Agent registered; the desktop could not place its marker.');
-    return false;
+    if (superseded()) {
+      attempt.state = 'superseded';
+      if (controlConnection === connection) undock();
+      return false;
+    }
+    Object.assign(attempt, { state: 'failed', reason: 'The desktop could not place the avatar.' });
+    return refuseDock(attempt.reason);
   }
-  if (generation !== dockGeneration) return false;
+  if (superseded()) return false;
   avatarWin.webContents.send('dock-sound', 'dock');
+  attempt.soundRequestedAt = performance.now();
   return true;
 }
 function follow() {
@@ -572,7 +722,22 @@ let creating = 0;
 async function refresh() {
   if (busy) return;
   busy = true;
-  const refreshGeneration = dockGeneration;
+  const generation = dockGeneration;
+  try {
+    await refreshState(generation);
+  } catch (error) {
+    if (generation === dockGeneration || !binding) {
+      platformError = `Could not update the desktop: ${error.message}`;
+      if (binding) undock(platformError);
+      avatarWin.showInactive();
+      sendState();
+    }
+    console.error(error.message);
+  } finally {
+    busy = false;
+  }
+}
+async function refreshState(refreshGeneration) {
   try {
     const [nextService, nextSessions] = await Promise.all([
       rpc('status'),
@@ -601,11 +766,13 @@ async function refresh() {
     windows = [];
     platformError = 'Docking isn’t available on this desktop right now.';
   }
+  if (refreshGeneration !== dockGeneration) {
+    return;
+  }
   if (binding) {
     const current = binding;
     const processes = await identities();
     if (binding !== current) {
-      busy = false;
       return;
     }
     const result = resolveWindow(
@@ -613,7 +780,6 @@ async function refresh() {
       windows,
       records,
       processes,
-      false,
     );
     const session = result.record && registeredSession(result.record, sessions);
     if (
@@ -624,20 +790,21 @@ async function refresh() {
       (refreshGeneration === dockGeneration &&
         service?.control?.generation !== controlConnection?.attachment.generation)
     )
-      undock(result.error || serviceError || 'This agent is disconnected.');
+      await refuseDock(result.error || serviceError || 'This agent is disconnected.');
     else {
       binding = { ...result, session };
       follow();
       const generation = dockGeneration;
       try {
-        await placeAboveTerminal();
+        const placement = await placeAboveTerminal();
+        if (generation === dockGeneration && placement.state === 'failed')
+          await refuseDock(placement.reason);
       } catch {
         if (generation === dockGeneration)
-          undock('The desktop could not keep the marker with the terminal.');
+          await refuseDock('The desktop could not keep the marker with the terminal.');
       }
     }
   }
-  busy = false;
   if (expanded && !dragging) {
     if (seated) placePanel();
     else resizePanel();
@@ -813,6 +980,7 @@ function createWindow(width, height) {
       sandbox: true,
     },
   });
+  client.setVisibleOnAllWorkspaces(true);
   client.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   client.webContents.on('will-navigate', (event) => event.preventDefault());
 
@@ -824,6 +992,8 @@ app.whenReady().then(async () => {
   panelWin = createWindow(320, 372);
   avatarWin = createWindow(collapsedSize, collapsedSize);
   candidateWin = createWindow(100, 100);
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed'])
+    screen.on(event, () => recoverDisplay().catch((error) => console.error(error.message)));
   candidateWin.setFocusable(false);
   candidateWin.setIgnoreMouseEvents(true);
   panelWin.on('focus', raiseSeatedAvatar);
@@ -992,6 +1162,7 @@ app.whenReady().then(async () => {
     authorityAction(() => authorityActionsForInstance.supervise(id, supervisor, request)),
   );
   handle('begin-panel-drag', [panelWin], (x, y) => {
+    restoringOrigin = null;
     const bounds = panelWin.getBounds();
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > bounds.width || y > bounds.height)
       throw Error('Invalid panel drag');
@@ -1002,6 +1173,7 @@ app.whenReady().then(async () => {
   });
   handle('begin-drag', [avatarWin], (x, y) => {
     dockGeneration++;
+    restoringOrigin = null;
     if (![x, y].every(Number.isFinite) || x < 0 || y < 0 || x > avatarSize || y > avatarSize)
       throw Error('Invalid drag');
     dragging = {
@@ -1012,6 +1184,7 @@ app.whenReady().then(async () => {
       held: false,
       moved: false,
       original: avatarPosition(),
+      floating: binding ? dockOrigin : floatingPosition(),
       binding,
       seated,
     };
@@ -1024,7 +1197,12 @@ app.whenReady().then(async () => {
     const previous = dragging;
     dragging = null;
     if (previous.moved && previous.binding) {
-      await dock(previous.binding.window.id);
+      await dock(
+        previous.binding.window.id,
+        previous.binding,
+        performance.now(),
+        previous.floating,
+      );
       return;
     }
     setSeated(previous.seated);
@@ -1036,8 +1214,9 @@ app.whenReady().then(async () => {
   });
   handle('end-drag', [avatarWin], async () => {
     if (!dragging) return;
+    const droppedAt = performance.now();
     candidateWin.hide();
-    const { held, moved } = dragging;
+    const { held, moved, candidate, floating } = dragging;
     dragging = null;
     if (!held && !moved) {
       await setExpanded(!expanded);
@@ -1064,9 +1243,14 @@ app.whenReady().then(async () => {
       avatarWin.webContents.send('dock-sound', 'dock');
       return;
     }
-    if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE())
-      await dock(target.id);
-    else {
+    if (target && target.id !== panelWin.getNativeWindowHandle().readUInt32LE()) {
+      if (candidate && candidate.window.id !== target.id)
+        await refuseDock('The target changed. Try docking again.');
+      else
+        await dock(target.id, candidate?.state === 'ready' ? candidate : null, droppedAt, floating);
+    } else if (candidate) {
+      await refuseDock('The target changed. Try docking again.');
+    } else {
       undock();
     }
     sendState();
@@ -1086,12 +1270,19 @@ app.whenReady().then(async () => {
   await refresh();
   await conversation.poll();
   conversationTimer = setInterval(() => conversation.poll(), 250);
-  if (process.argv.includes('--expanded')) await setExpanded(true);
+  try {
+    if (process.argv.includes('--expanded') || process.argv.includes('--from-applications'))
+      await recoverControls(launchContext());
+  } catch (error) {
+    platformError = `Could not confirm the controls: ${error.message}`;
+    avatarWin.showInactive();
+    sendState();
+    console.error(platformError);
+  }
   if (
     !globalShortcut.register('Control+Alt+V', () => {
       if (binding) avatarWin.webContents.send('dock-sound', 'undock');
-      undock();
-      setExpanded(true).catch((error) => console.error(error.message));
+      recoverControls().catch((error) => console.error(error.message));
     })
   )
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
@@ -1117,6 +1308,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-docking') ||
     process.argv.includes('--proof-fleet-creation') ||
     process.argv.includes('--proof-visibility') ||
     process.argv.includes('--proof-polish') ||
@@ -1127,28 +1319,36 @@ app.whenReady().then(async () => {
     process.argv.includes('--proof-registration') ||
     process.argv.includes('--proof-control')
   ) {
+    const proofDirectory = process.env.VOYAGER_PROOF_DIRECTORY || path.join(__dirname, '../test');
+    if (!path.isAbsolute(proofDirectory)) throw Error('Proof directory must be absolute');
     require(
-      process.argv.includes('--proof-fleet-creation')
-        ? '../test/fleet-creation-proof.cjs'
-        : process.argv.includes('--proof-visibility')
-          ? '../test/visibility-proof.cjs'
-          : process.argv.includes('--proof-polish')
-            ? '../test/polish-proof.cjs'
-            : process.argv.includes('--proof-fleets')
-              ? '../test/fleets-proof.cjs'
-              : process.argv.includes('--proof-authority')
-                ? '../test/authority-proof.cjs'
-                : process.argv.includes('--proof-lifecycle')
-                  ? '../test/lifecycle-proof.cjs'
-                  : process.argv.includes('--proof-control')
-                    ? '../test/control-proof.cjs'
-                    : process.argv.includes('--proof-registration')
-                      ? '../test/registration-proof.cjs'
-                      : '../test/live-proof.cjs',
+      path.join(
+        proofDirectory,
+        process.argv.includes('--proof-fleet-creation')
+          ? 'fleet-creation-proof.cjs'
+          : process.argv.includes('--proof-visibility')
+            ? 'visibility-proof.cjs'
+            : process.argv.includes('--proof-polish')
+              ? 'polish-proof.cjs'
+              : process.argv.includes('--proof-fleets')
+                ? 'fleets-proof.cjs'
+                : process.argv.includes('--proof-authority')
+                  ? 'authority-proof.cjs'
+                  : process.argv.includes('--proof-lifecycle')
+                    ? 'lifecycle-proof.cjs'
+                    : process.argv.includes('--proof-control')
+                      ? 'control-proof.cjs'
+                      : process.argv.includes('--proof-registration')
+                        ? 'registration-proof.cjs'
+                        : process.argv.includes('--proof-docking')
+                          ? 'docking-proof.cjs'
+                          : 'live-proof.cjs',
+      ),
     )
       .run({
         avatarWin,
         panelWin,
+        candidateWin,
         advanceDrag,
         updateDockHover,
         rpc,
@@ -1160,6 +1360,9 @@ app.whenReady().then(async () => {
         setExpanded,
         park,
         getState: () => ({
+          candidate: { app: process.execPath, service: binary, packaged: app.isPackaged },
+          dockAttempts,
+          recoveryAttempts,
           sessions,
           windows,
           records,
@@ -1193,7 +1396,9 @@ app.whenReady().then(async () => {
                         ? 'control-proof.json'
                         : process.argv.includes('--proof-registration')
                           ? 'registration-proof.json'
-                          : 'desktop-refinement-proof.json',
+                          : process.argv.includes('--proof-docking')
+                            ? 'docking-proof.json'
+                            : 'desktop-refinement-proof.json',
         );
         const receipt = JSON.parse(await fs.readFile(file, 'utf8'));
         await fs.writeFile(

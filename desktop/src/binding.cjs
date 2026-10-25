@@ -96,6 +96,40 @@ function registeredSession(record, sessions) {
   return sessions.find((s) => s.server === record.server && s.native_thread_id === record.nativeId);
 }
 
+function resolveDockTarget(window, windows, records, identities, sessions, expected = null) {
+  const refuse = (reason) => ({ state: 'refused', reason });
+  if (
+    expected &&
+    (expected.window.id !== window?.id ||
+      resolveWindow(window, windows, [expected.record], identities).error)
+  )
+    return refuse('This terminal has changed. Try docking again.');
+  if (
+    window &&
+    (!Number.isSafeInteger(window.id) ||
+      window.id <= 0 ||
+      ![window.x, window.y, window.width, window.height].every(Number.isFinite) ||
+      window.width <= 0 ||
+      window.height <= 0)
+  )
+    return refuse('The desktop returned invalid terminal bounds.');
+  const target = resolveWindow(window, windows, records, identities);
+  if (target.error) return refuse(target.error);
+  const matches = sessions.filter(
+    (s) => s.server === target.record.server && s.native_thread_id === target.record.nativeId,
+  );
+  if (target.record.external !== false || matches.length !== 1)
+    return refuse('Open an agent from Voyager to dock here. External terminals cannot be docked.');
+  const session = matches[0];
+  if (session.removed_ms != null || session.ownership !== 'managed')
+    return refuse('This agent is not managed by Voyager.');
+  if (session.worker_state !== 'running' || session.capture !== 'connected')
+    return refuse('This agent is not running and connected.');
+  if (expected && expected.session.id !== session.id)
+    return refuse('This terminal has changed. Try docking again.');
+  return { state: 'ready', reason: 'Release to dock', ...target, session };
+}
+
 function windowAt(windows, point, excludedIds = []) {
   return [...windows]
     .reverse()
@@ -116,6 +150,7 @@ module.exports = {
   identifyTerminal,
   resumeThread,
   resolveWindow,
+  resolveDockTarget,
   registeredSession,
   windowAt,
 };
