@@ -1549,3 +1549,57 @@ fn recorded_live_runtime_without_a_child_stays_unknown_after_restart() {
     );
     assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
 }
+
+#[test]
+fn legacy_runtime_baselines_require_confirmed_stops_without_uncertain_work() {
+    let f = Fixture::new();
+    let path = f.dir.join("legacy-runtime.sqlite");
+    let mut store = Store::open(&path).unwrap();
+    let mut original = Vec::new();
+    for (launch, state, pending) in [
+        ("safe-stop", "stopped", None),
+        ("safe-exit", "exited", None),
+        ("pending-stop", "stopped", Some("pending")),
+        ("uncertain-exit", "exited", Some("uncertain")),
+        ("unverified-live", "running", None),
+    ] {
+        store
+            .begin_launch(launch, None, "/synthetic", None, None)
+            .unwrap();
+        let session = store
+            .register_worker(launch, "fixture", &metadata(launch), 1234)
+            .unwrap();
+        store.worker_state(launch, state).unwrap();
+        let receipt = json!({"session_id":session,"state":pending.unwrap_or("completed")});
+        store
+            .begin_operation(launch, &json!({"op":"create","original":true}), &receipt)
+            .unwrap();
+        original.push((
+            launch,
+            store.launch(launch).unwrap(),
+            store.operation(launch).unwrap(),
+        ));
+    }
+    let events = store.events(0).unwrap();
+    store
+        .0
+        .execute_batch("DROP TABLE runtime_generations; PRAGMA user_version=3;")
+        .unwrap();
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    let mut query = store.0.prepare("SELECT operation_id,generation,settings FROM runtime_generations ORDER BY operation_id").unwrap();
+    let rows: Vec<(String, i64, Option<String>)> = query
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![("safe-exit".into(), 0, None), ("safe-stop".into(), 0, None)]
+    );
+    for (launch, worker, operation) in original {
+        assert_eq!(store.launch(launch).unwrap(), worker);
+        assert_eq!(store.operation(launch).unwrap(), operation);
+    }
+    assert_eq!(store.events(0).unwrap(), events);
+}
