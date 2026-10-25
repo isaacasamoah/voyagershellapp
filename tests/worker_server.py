@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import os
 import socket
 import struct
 import sys
@@ -24,6 +25,7 @@ counter = 0
 active = False
 current_turn = None
 lock = threading.Lock()
+subscribers = []
 
 
 def exact(stream, size):
@@ -55,6 +57,8 @@ def handle(stream):
 
     def event(method, params):
         send({'method': method, 'params': {'threadId': 'worker-thread', **params}})
+
+    subscribers.append(send)
 
     def complete(turn):
         global active
@@ -93,6 +97,11 @@ def handle(stream):
             result = {}
             if method == 'initialize' and (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
                 result = {'userAgent': 'codex/0.164.0 fixture'}
+            elif method == 'fixture/exit-with-settings':
+                for push in subscribers:
+                    push({'method': 'fixture/buffered', 'params': {}})
+                    push({'method': 'thread/settings/updated', 'params': {'threadId': 'worker-thread', 'threadSettings': {'model': 'incomplete-update'}}})
+                os._exit(0)
             elif method == 'config/read':
                 result = {'layers': [{'name': {'type': 'user', 'file': '/fixture/config.toml', 'profile': None},
                                       'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'config-changed').exists() else 'original',

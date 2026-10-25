@@ -249,6 +249,9 @@ impl Worker {
         }
         if self.alive {
             if let Some(exit) = self.process.0.try_wait()? {
+                if !self.stopping {
+                    store.save_resume_settings(&self.launch, None)?;
+                }
                 self.alive = false;
                 self.connection = None;
                 store.worker_state(&self.launch, "exited")?;
