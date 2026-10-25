@@ -1075,3 +1075,50 @@ fn ordinary_instance_cannot_resume_a_saved_conversation() {
         "not_found"
     );
 }
+
+#[test]
+fn resuming_a_runtime_drops_its_old_control_and_temporary_grant() {
+    let s = Service::start();
+    fs::write(s.dir.join("verified-settings"), "1").unwrap();
+    let id = s.create("prior-runtime", "codex", Some("crew"));
+    let old = s.context("prior-runtime");
+    s.owner(json!({"op":"test-grant","session_id":id,"request_id":"prior-grant","checkout":env!("CARGO_MANIFEST_DIR")}));
+    let pid = std::process::id();
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let start = stat
+        .rsplit_once(')')
+        .unwrap()
+        .1
+        .split_whitespace()
+        .nth(19)
+        .unwrap();
+    let process = json!({"pid":pid,"start":start});
+    let mut lease = UnixStream::connect(s.dir.join("service.sock")).unwrap();
+    writeln!(lease,"{}",json!({"op":"dock","session_id":id,"generation":uuid::Uuid::new_v4().to_string(),"window_id":1,"terminal":process,"frontend":process})).unwrap();
+    let mut line = String::new();
+    BufReader::new(&lease).read_line(&mut line).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&line).unwrap()["result"]["active"],
+        true
+    );
+    s.finish(s.owner(json!({"op":"stop-instance","session_id":id,"request_id":"stop-prior-runtime","close_window":false})));
+    assert!(s.owner(json!({"op":"status"}))["control"].is_null());
+    s.finish(s.owner(json!({"op":"resume-instance","session_id":id,"request_id":"fresh-runtime","expected_runtime_generation":1})));
+    assert!(s.owner(json!({"op":"status"}))["control"].is_null());
+    assert_eq!(
+        s.raw(Some(&old), json!({"op":"capabilities"}))["code"],
+        "forbidden"
+    );
+    let fresh = s.context("fresh-runtime");
+    assert_eq!(
+        s.agent(&fresh, json!({"op":"capabilities"}))["rank"],
+        "crew"
+    );
+    assert_eq!(
+        s.raw(
+            Some(&fresh),
+            json!({"op":"test-start","request_id":"no-prior-grant","mode":"invalid-mode"})
+        )["code"],
+        "forbidden"
+    );
+}
