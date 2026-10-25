@@ -1622,3 +1622,40 @@ mod resume;
 
 #[path = "service/resume_failures.rs"]
 mod resume_failures;
+
+#[test]
+fn listed_activity_uses_latest_recorded_event_not_registration_time() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","open":false,"kind":"shell","request_id":"activity","name":"History","cwd":f.dir}));
+    let id = created["session_id"].as_str().unwrap();
+    f.call(json!({"op":"stop-instance","session_id":id}));
+    let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
+    store
+        .0
+        .execute("UPDATE sessions SET registered_ms=999999 WHERE id=?1", [id])
+        .unwrap();
+    store
+        .0
+        .execute(
+            "UPDATE events SET recorded_ms=500 WHERE session_id=?1",
+            [id],
+        )
+        .unwrap();
+    store
+        .local(id, "capture.gap", json!({"reason":"test gap"}))
+        .unwrap();
+    store.0.execute("UPDATE events SET recorded_ms=100 WHERE seq=(SELECT MAX(seq) FROM events WHERE session_id=?1)", [id]).unwrap();
+    let row = f.call(json!({"op":"list"}));
+    assert_eq!(row[0]["last_activity_ms"], 100);
+    assert_eq!(row[0]["registered_ms"], 999999);
+    store
+        .0
+        .execute("DELETE FROM events WHERE session_id=?1", [id])
+        .unwrap();
+    assert!(f.call(json!({"op":"list"}))[0]["last_activity_ms"].is_null());
+    let index: String = store.0.query_row("EXPLAIN QUERY PLAN SELECT recorded_ms FROM events WHERE session_id=?1 ORDER BY seq DESC LIMIT 1", [id], |r|r.get(3)).unwrap();
+    assert!(index.contains("events_session_seq"), "{index}");
+    drop(store);
+    Store::open(&f.dir.join("events.sqlite")).unwrap();
+}

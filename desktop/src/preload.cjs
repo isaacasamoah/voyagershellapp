@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld(
     createInstance: (input) => ipcRenderer.invoke('create-instance', input),
     openInstance: (id, terminal, request) =>
       ipcRenderer.invoke('open-instance', id, terminal, request),
+    instanceHistory: (id, cursor) => ipcRenderer.invoke('instance-history', id, cursor),
     surfaceInstance: (id) => ipcRenderer.invoke('surface-instance', id),
     createFleet: (name, request) => ipcRenderer.invoke('create-fleet', name, request),
     moveVessel: (id, fleet) => ipcRenderer.invoke('move-vessel', id, fleet),

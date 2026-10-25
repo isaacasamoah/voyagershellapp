@@ -89,6 +89,19 @@ async function run(context) {
       await delay(30);
     }
   };
+  const pageKey = async (window, keyCode) => {
+    if (!window.isFocused()) throw Error('Proof window lost keyboard focus');
+    for (const type of ['keyDown', 'keyUp']) window.webContents.sendInputEvent({ type, keyCode });
+    await delay(80);
+  };
+  const pageWheel = async (window, id, deltaY) => {
+    const point = await window.webContents.executeJavaScript(
+      `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}; })()`,
+    );
+    window.focus();
+    window.webContents.sendInputEvent({ type: 'mouseWheel', ...point, deltaY, canScroll: true });
+    await delay(100);
+  };
   const save = (value) =>
     fs.writeFile(path.join(directory, 'native-proof.json'), JSON.stringify(value, null, 2));
   let result;
@@ -98,7 +111,7 @@ async function run(context) {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
       { ...context, directory },
-      { wait, input, click, pageClick, delay, captureOutput },
+      { wait, input, click, pageClick, pageKey, pageWheel, delay, captureOutput },
     );
   } catch (error) {
     failure = error;

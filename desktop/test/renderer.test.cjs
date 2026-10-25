@@ -83,6 +83,7 @@ function renderer() {
   });
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/authority.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/hierarchy.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/history.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
@@ -172,7 +173,10 @@ test('rank rows start collapsed and expand without a duplicate group header', as
   ui.update({ sessions: rows });
   let tree = ui.nodes.get('sessions').children[0];
   assert.equal(tree.children[1].hidden, true);
-  tree.children[0].children[2].onclick();
+  tree.children[0]
+    .querySelectorAll('button')
+    .find((button) => button.dataset.expand)
+    .onclick();
   tree = ui.nodes.get('sessions').children[0];
   assert.equal(tree.children[1].hidden, false);
   assert.equal(tree.children[0].children[0].children[0].children[0].textContent, 'Captain');

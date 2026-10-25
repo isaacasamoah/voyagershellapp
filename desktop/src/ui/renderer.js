@@ -12,6 +12,7 @@ const expandedVessels = new Set();
 let fleetRequest;
 let lastState;
 const openMenus = new Set();
+const history = createHistory(api, element, hierarchy);
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -228,6 +229,7 @@ function renderState(value) {
     }
     if (value.serviceError)
       for (const button of row.querySelectorAll('button')) button.disabled = true;
+    history.decorate(row, s);
     return row;
   }
   function ranked(s, visibleRows) {
@@ -295,8 +297,7 @@ function renderState(value) {
   $('unregistered').hidden = unregistered.length === 0;
   $('needs-attention-sessions').replaceChildren(...groups.attention.map(rowFor));
   $('needs-attention').hidden = groups.attention.length === 0;
-  $('previous-toggle').textContent = `Previous agents (${groups.previous.length})`;
-  $('previous-sessions').replaceChildren(...groups.previous.map(rowFor));
+  history.render(groups, rowFor, value);
   if (focused) {
     for (const button of document.querySelectorAll('[data-key]')) {
       if (button.dataset.key === focused) button.focus({ preventScroll: true });

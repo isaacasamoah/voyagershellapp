@@ -81,4 +81,12 @@ function instanceCreator(rpc) {
     }
   };
 }
-module.exports = { instanceCreator };
+function historyReader(rpc) {
+  return async (id, cursor = 0) => {
+    if (typeof id !== 'string' || !id || !Number.isSafeInteger(cursor) || cursor < 0)
+      throw Error('Choose a saved agent and a valid history position.');
+    const page = await rpc('events', String(cursor));
+    return { ...page, events: page.events.filter((event) => event.session_id === id) };
+  };
+}
+module.exports = { instanceCreator, historyReader };

@@ -707,3 +707,33 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   display: grid;
   gap: 5px;
 }
+
+#previous-sessions {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.saved-metadata {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.removed-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+#agent-details {
+  max-height: 30vh;
+  overflow: auto;
+  user-select: text;
+  border-top: 1px solid #444;
+}
+.saved-event {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}

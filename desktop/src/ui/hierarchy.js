@@ -26,6 +26,10 @@ const hierarchy = (() => {
     }
     return groups;
   }
+  function historyOrder(sessions) {
+    const time = (s) => (Number.isFinite(s.last_activity_ms) ? s.last_activity_ms : -Infinity);
+    return [...sessions].sort((a, b) => time(b) - time(a) || a.id.localeCompare(b.id));
+  }
   function members(sessions, root = null) {
     const rows = active(sessions);
     if (root === null) return rows.sort(compare);
@@ -61,6 +65,6 @@ const hierarchy = (() => {
     }
     return null;
   }
-  return { members, roots, children, fleetOf, classify };
+  return { members, roots, children, fleetOf, classify, historyOrder };
 })();
 if (typeof module !== 'undefined') module.exports = hierarchy;

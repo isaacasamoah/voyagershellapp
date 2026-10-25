@@ -140,3 +140,22 @@ test('a viewer choice cannot replace an unacknowledged creation', async () => {
   await assert.rejects(create({ ...input, terminal: 'xterm' }), /outcome|original/i);
   assert.equal(attempts, 1);
 });
+
+test('saved history retains the global cursor while returning only the selected agent', async () => {
+  const { historyReader } = require('../src/instances.cjs');
+  const calls = [];
+  const read = historyReader(async (...args) => {
+    calls.push(args);
+    return {
+      cursor: 100,
+      events: [{ session_id: 'other' }, { session_id: 'chosen', type: 'capture.gap' }],
+    };
+  });
+  assert.deepEqual(await read('chosen', 25), {
+    cursor: 100,
+    events: [{ session_id: 'chosen', type: 'capture.gap' }],
+  });
+  assert.deepEqual(calls, [['events', '25']]);
+  await assert.rejects(read('chosen', -1), /history position/);
+  assert.equal(calls.length, 1);
+});
