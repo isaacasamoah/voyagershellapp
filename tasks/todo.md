@@ -54,6 +54,23 @@ tests/conversation.rs and the shared native conversation journey. Dependencies:
 fixture preparation. Keep client-managed handoffs disabled. Covers V1 and the
 acknowledgement part of V2. Scope: one complete inspection journey.
 
+V01 checkpoint: the existing provider fixture now requires native acknowledgement
+and automatic result handoff. Its voice-lease test failed before the service
+change and passed afterward. All 53 Rust tests, 90 desktop tests, formatting and
+Clippy pass. A fresh empty native conversation called voyager_vessels and returned
+the correct zero count. The muted enabled/disabled comparison distinguishes early
+acknowledgement from the final answer, with the source restored after comparison.
+Both runs remain unsuccessful audio acceptance receipts by design, because muted
+transcripts do not prove output. The unmuted run stopped before input when other
+application audio failed the existing quiet-output check. The owner has been asked
+to pause that audio. V01 is not complete and V02 must not begin yet.
+
+The handoff journey stays in the shared native runner. It uses observed Codex v3
+events, including delegation.created, delegation.context.appended,
+output_transcript.added and turn.done. These differ from the legacy activity
+events currently used by the renderer. Do not treat a transcript timestamp as
+speaker onset or silently broaden this slice into all activity handling.
+
 ## V02: receive truthful progress and one final outcome
 
 - [ ] Slow work reports only observed progress. Refusal, failure, interruption and

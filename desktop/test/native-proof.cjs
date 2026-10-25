@@ -19,6 +19,7 @@ async function run(context) {
   const journey = context.journey || process.env.VOYAGER_PROOF_JOURNEY;
   const journeys = {
     conversation: '../src/conversation-proof.cjs',
+    handoff: './voice-handoff-proof.cjs',
     'return-position': './recovery-position-proof.cjs',
   };
   if (!Object.hasOwn(journeys, journey)) throw Error('Select a supported native proof journey');

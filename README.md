@@ -23,14 +23,13 @@ is our starting point, and we’d love to build toward it with other developers.
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved. The [docking implementation plan](tasks/plan.md) is ready for owner review.
-Its four slices implement clear refusal of unsupported targets, visible placement
-before sound, recovery after target loss, and independent Applications recovery.
-The owner-trial refinement restores the floating controls to their pre-dock
-positions, clamped to an available display when necessary.
-All four passed independent review and packaged Fedora checks. The task list
-records test setup limits and voice teardown uncertainty. Owner acceptance,
-merge and installation remain separate decisions.
+approved. Docking recovery is accepted and merged, including returning the floating
+controls to their pre-dock position. The active [implementation plan](tasks/plan.md)
+now covers voice handoff. This branch enables Codex's native acknowledgement while
+retaining automatic result delivery. The muted native comparison distinguishes
+acknowledgement from the final answer, but audible timing and interruption remain
+unproved. The task list records current evidence and limits. Merge and installation
+remain separate decisions.
 
 ## Current prototype
 
