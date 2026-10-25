@@ -121,3 +121,11 @@ If automatic delivery cannot meet the cases, report the exact failed stage and
 request a design decision before adding any alternative mechanism. If a slice
 cannot meet the test budget with effective proof, report the counts and conflict.
 The final handoff must distinguish implemented, proved and still-open behavior.
+
+## Current checkpoint
+
+Fixture preparation stopped after its single corrective pass. Independent
+re-review still found an unconfirmed pointer-helper exit behind a successful
+result. The test budget also remains unverified. The task list records the
+evidence and exact next correction. Do not start V01 or make another corrective
+build without renewed owner authorization.

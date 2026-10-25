@@ -1,15 +1,15 @@
 # Tasks: voice acknowledgement and result handoff
 
-Status: active, 25 October 2026. Docking merged and its completed tasks remain in
+Status: stopped at fixture re-review, 25 October 2026. Docking merged and its completed tasks remain in
 Git history. The owner approved this module's plan and the full build/review run.
 The [plan](plan.md) owns the approach and commands; [the spec](../SPEC-voice-handoff.md)
-owns V1-V8. No voice task is complete yet.
+owns V1-V8. No voice task is complete yet. The allowed correction was used; a Required cleanup issue remains.
 
 ## Preparation: reuse the native proving fixture
 
-- [x] Consolidate the active conversation and return-position journeys around one
+- [ ] Consolidate the active conversation and return-position journeys around one
   runner and shared input, waiting, evidence and cleanup. Preserve existing checks.
-- [x] Demonstrate native parity and record before/after test-line counts. Commit
+- [ ] Demonstrate native parity and record before/after test-line counts. Commit
   the fixture refactor separately from behavior. Record remaining historical debt.
 
 Likely files: desktop/test/native-proof.cjs, the existing conversation and
@@ -18,11 +18,28 @@ Verification: existing native journeys, desktop tests and formatting. Dependenci
 none. This preparation changes test infrastructure, not product voice behavior.
 
 Preparation evidence: 90 desktop tests and formatting pass. Fresh private
-return-position and conversation journeys pass with matching launch/finish hashes
-and clean app/service exit. The latter retains synthetic input and muted output.
-The shared driver, launcher, two journeys and input/audio/manifest helpers total
-562 physical lines. The review must map those costs to the exercised production
-functions; this inventory alone is not a coverage claim.
+return-position and conversation journeys passed before review with matching
+launch/finish hashes and clean app/service exit. Conversation input remains
+synthetic and output muted. These are parity results, not voice acceptance.
+
+Initial independent review found packaged lookup, native failure reporting and
+cleanup ordering defects. The single correction fixed packaged lookup, native
+failure reporting and Python cleanup independence. The package builds, but has
+not run its native journeys. Re-review reproduced a remaining cleanup defect:
+the JavaScript driver can write pass before confirming its pointer helper exited.
+The author missed that part of the initial cleanup finding. Do not begin V01.
+
+The current maintained native inventory is 577 lines. Current independent review
+helpers add 208 lines, giving 785 against a provisional 753-line exercised-product
+map. Including retained earlier helper versions gives 890. Neither total is a
+verified budget pass. Reconcile duplicate helper accounting and the actual code
+exercised without inflating scope or discarding required failure assertions.
+
+The proposed next correction is to complete and verify helper cleanup before
+publishing a successful result, preserve bounded failure outcomes, and prove the
+stalled-helper case fails. It requires renewed owner authorization because the
+one-correction limit has been reached. Preserve the same candidate and evidence
+until that decision. No voice behavior, installed app or main service changed.
 
 ## V01: hear acknowledgement and the inspection answer
 
