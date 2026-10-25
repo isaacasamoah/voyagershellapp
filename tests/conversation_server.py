@@ -82,6 +82,8 @@ for line in sys.stdin:
         note('turn/completed', turn={'id': 'fixture-turn', 'status': 'completed', 'error': None})
     if method == 'thread/realtime/start':
         assert params['transport']['type'] == 'webrtc'
+        assert params['delegationAckFiller'] is True
+        assert params.get('clientManagedHandoffs', False) is False
         note('thread/realtime/started', version='v3')
         note('thread/realtime/sdp', sdp='fixture-answer')
     if method == 'thread/realtime/stop':

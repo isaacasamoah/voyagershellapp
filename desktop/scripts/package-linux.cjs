@@ -39,6 +39,7 @@ for (const file of [
   'native-pointer.py',
   'output-audio.cjs',
   'recovery-position-proof.cjs',
+  'voice-handoff-proof.cjs',
 ])
   fs.copyFileSync(path.join(desktop, 'test', file), path.join(app, 'test', file));
 const metadata = require('../package.json');

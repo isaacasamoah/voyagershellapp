@@ -128,6 +128,7 @@ Fixture preparation passed the additional owner-authorized correction and fresh
 review. Independent controls reject premature success and unconfirmed helper
 exit. Both active journeys passed on the actual package, with a retained
 unexplained initial drag failure. The complete scoped test budget passes. The
-task list records evidence and advisories. Continue V01 under the existing
-approved sequence and one-correction-per-slice rule. No new feature is merged,
+task list records evidence and advisories. V01 has completed its build, one corrective pass and code re-review. Its full
+budget passes, but audible acceptance waits for quiet output. The task list owns
+that checkpoint. Do not start V02 before V01 acceptance. No new feature is merged,
 installed or accepted by this preparation checkpoint.
