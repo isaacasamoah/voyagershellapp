@@ -36,6 +36,10 @@ The CLI and Electron expose those service decisions; they do not grant rights.
 Read `docs/authority.md` before changing that boundary. Native voice and explicit
 preemptive override remain separate from rank and ordinary steering.
 
+Preserve product terminology and semantic consistency across UI labels, accessible
+names and help text. Registered agents and terminals are Vessels. The panel uses
+Vessels and Previous vessels; lifecycle states do not replace the entity name.
+
 Rank presentation derives from service assignments in `desktop/src/ui/hierarchy.js`.
 Fleet membership is separate, local presentation data owned by `src/service/fleets.rs`;
 `desktop/src/fleets.cjs` only calls its named service actions.

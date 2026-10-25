@@ -11,7 +11,7 @@ and the installed application-proof reference.
 ## What the owner will see
 
 Running work stays in the main panel even when its terminal is closed. Confirmed
-stopped conversations appear under Previous agents. Uncertain records remain
+stopped conversations appear under Previous vessels. Uncertain records remain
 visible under Needs attention. The owner can inspect saved history and, when
 the service permits it, resume a conversation and open its terminal.
 
@@ -28,12 +28,12 @@ P01-P02 can be designed and checked independently; P03 cannot be accepted first.
 ## Design decisions
 
 Apply the specification's classification order exactly. In particular, a removed
-registration whose owned process still runs remains Current work as Unregistered.
+registration whose owned process still runs remains Vessels as Unregistered.
 A disconnected service makes rows last-known information; it does not make agents
 stopped. An older service without lifecycle fields leaves state unknown and Resume
 unavailable. Each Vessel has one actionable row.
 
-Previous agents starts collapsed. Order by last known activity, then stable Vessel
+Previous vessels starts collapsed. Order by last known activity, then stable Vessel
 ID, and say when activity time is unavailable. Use recorded activity supplied
 by the service or bounded history reads; never substitute registration time. Let its history area grow within
 the measured available panel space, then scroll inside it. Use small local batches
@@ -59,7 +59,7 @@ it never starts a second runtime. Uncertain operations stay under Needs attentio
 ### P01: distinguish current, stopped and uncertain work
 
 Introduce a presentation selector for the service observations and show the three
-groups. Keep existing supported actions on current rows. Previous agents initially
+groups. Keep existing supported actions on current rows. Previous vessels initially
 shows only its count. Keep old-service and disconnected-service warnings visible.
 
 Acceptance: every record is in exactly the specified group; a closed viewer does
@@ -75,7 +75,7 @@ Covers P1, P5 and the basic P6/P7 states.
 
 ### P02: inspect older records without growing the window beyond the display
 
-Expand Previous agents, inspect saved details/history and request more records.
+Expand Previous vessels, inspect saved details/history and request more records.
 Show removed records only after an explicit choice. Keep a long list in its own
 scroll area and leave the other panel controls usable.
 

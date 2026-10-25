@@ -9,7 +9,7 @@ in Git history; this does not overwrite or complete the voice task list.
 
 ## P01: show each agent in the right group
 
-- [x] Show Current work, Needs attention and collapsed Previous agents according
+- [x] Show Vessels, Needs attention and collapsed Previous vessels according
   to the service observations. Preserve current actions and old-service warnings.
 - [x] Exact-membership checks cover running with closed viewer, stopped, unknown,
   external and removed-but-running records. No assignment or Fleet write occurs.
@@ -21,7 +21,7 @@ and the matching packaged journey pass. Reviewed budget: 8,222 / 8,258.
 
 ## P02: reveal readable history within the available space
 
-- [x] Expand Previous agents and removed records explicitly; show missing times,
+- [x] Expand Previous vessels and removed records explicitly; show missing times,
   saved details, event gaps and bounded history without starting anything.
 - [x] Short and long lists fit the display. Local batches and Load more preserve
   scroll/focus. Check keyboard, wheel and trackpad separately. Covers P2/P8/P9.
