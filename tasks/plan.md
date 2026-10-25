@@ -1,7 +1,7 @@
 # Plan: return to a stopped conversation
 
-Status: draft for owner review, 25 October 2026. Planning is authorised;
-implementation is not. Governing [specification](../SPEC-conversation-resume.md).
+Status: owner approved build, 25 October 2026. Execute in dependency order with
+one independent review, at most one corrective pass, and another review per increment. Governing [specification](../SPEC-conversation-resume.md).
 The [task list](todo.md) owns completion. Follow [CONSTRAINTS.md](../CONSTRAINTS.md)
 and the installed application-proof reference.
 
@@ -80,24 +80,39 @@ Verification: compare against a deliberately changed setting or unexpected turn.
 Likely files: a focused native-provider journey, the existing provider fixture,
 and docs/lifecycle.md. Scope: small. Dependency: approved plan. Gate A must pass.
 
-### R01: resume one verified stopped conversation through the owner service API
+### R01a: show reliable runtime observations and retain verified settings
 
-Implement the smallest complete owner request through storage, the provider and
-live process ownership. Validate the observed generation before recording and
-starting the attempt. Load the same saved thread, obtain fresh credentials,
-connect capture and save the final receipt. Leave the terminal closed. Expose
-the specified lifecycle state and Resume availability in list/detail responses.
+Save observed effective settings when a new managed Codex starts, together with
+provider executable/version provenance. Add the transactional runtime ledger and
+list/detail lifecycle observations. Existing stopped legacy records remain
+inspectable; settings that cannot be verified leave Resume unavailable.
 
-Acceptance: identity/history/settings survive; one new idle runtime is owned;
-rejected or failed starts neither substitute a thread nor grant broader access.
-Verification: one focused service-boundary test for the successful journey and
-one named refusal test. Use the real provider result from R00 as corroboration.
-Likely source: src/store.rs, src/worker.rs, src/actions.rs and
-src/service/lifecycle.rs, with list/detail wiring in src/service.rs. Extend tests/service.rs and tests/worker_server.py only
-where needed. This is the widest slice; confirm a focused file map after R00.
-If it grows beyond one reviewable behaviour or roughly five files, revise this
-plan into smaller complete behaviours before coding rather than hiding the scope.
-Dependency: R00. Covers the core of R1, R5, R7 and R9.
+Acceptance: running requires a live owned child; confirmed stops remain stopped
+after restart; unknown ownership never becomes stopped or eligible. Original launch
+records and history remain unchanged. Verification: focused service-boundary cases
+for creation, confirmed stop, restart and legacy missing settings. Likely files:
+`src/store.rs`, `src/worker.rs`, `src/service.rs`, `tests/service.rs` and
+`tests/worker_server.py`. Scope: medium, one observable lifecycle/settings behaviour.
+Dependency: R00 and its independent review. No Resume action is exposed yet.
+
+### R01b: resume one verified stopped conversation through the owner service API
+
+Add the owner-only request, atomic request/generation admission and the fresh
+provider startup mode. Inspect the saved goal before loading, reject unsupported
+settings, and verify the saved thread and idle state. Renew credentials/capture,
+preserve name/assignments/Fleet placement and keep the viewer closed.
+
+Acceptance: one new idle owned runtime under the same identity; failed or rejected
+starts neither substitute a conversation nor grant broader access. Verification:
+one focused service journey and named refusal cases, corroborated by R00.
+Source map: runtime-ledger methods in `src/store.rs`, new startup mode in
+`src/worker.rs`, operation admission/completion in `src/service/lifecycle.rs`,
+request routing in `src/service.rs` and owner-only policy in `src/authority.rs`.
+Focused service/provider fixtures supply the boundary cases. This is five production
+files plus the two existing fixtures for one end-to-end service operation; do not
+add unrelated UI/CLI or rank-policy work. If the diff approaches 1,000 changed
+lines, simplify or use a native PR stack with R01a as the preceding reviewable
+behaviour. Dependency: R01a. Covers core R1/R5/R7/R9.
 
 ### R02: resume through the CLI, then open the same running agent
 
@@ -111,7 +126,7 @@ and submits no work. Verification: a named shared-runner `resume` journey using
 real Codex and a deliberately failed viewer opening.
 Likely files: src/bin/voyager.rs, desktop/test/native-proof.cjs, a small resume
 journey, desktop/scripts/package-linux.cjs and docs/lifecycle.md. Scope: medium.
-Dependency: R01. Covers R1 and R6. Private voice-tool exposure is deferred.
+Dependency: R01b. Covers R1 and R6. Private voice-tool exposure is deferred.
 
 ### R03: retain the right result through disconnects, repeats and service restart
 
@@ -157,5 +172,4 @@ Rust changes require cargo fmt --check, cargo test --locked, and
 cargo clippy --locked --all-targets -- -D warnings. Desktop changes require the
 repository's desktop tests and format check. Build binaries before native proof.
 Use a fresh independent review for each completed behaviour; propose the same
-one-correction-and-re-review limit used in the voice trial. Do not start building
-from this draft without owner approval.
+one-correction-and-re-review limit used in the voice trial. The owner approved this build. Preserve the explicit provider gate before product code.

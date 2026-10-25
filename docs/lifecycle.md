@@ -233,3 +233,81 @@ cause of every reported freeze. No graphics workaround or automatic restart is
 enabled. For a managed Vessel, explicit Background followed by Open replaces its
 viewer while preserving its runtime and capture; stopping the Vessel has different
 semantics. A live native check is still required before claiming this freeze fixed.
+
+## Saved-conversation recovery gate
+
+The recovery experiment uses Codex 0.164.0 with a disposable legacy-history thread.
+It proves the provider boundary, not a Voyager Resume operation or panel journey.
+The production operation is not implemented yet. Run the opt-in provider check
+with a fresh private directory:
+
+```sh
+VOYAGER_RESUME_PROOF_STATE=/tmp/NEW_PRIVATE_RESUME_PROOF \
+  cargo test --locked --test native_resume -- --include-ignored --nocapture
+```
+
+This check reuses Voyager's native Codex transport. It is separate from the
+maintained desktop runner because no recovery UI exists at this gate. Later
+resume-and-open journeys extend that runner rather than adding another app launcher.
+
+A new provider process must inspect `thread/goal/get` before loading. Only an
+explicit null goal permits this first increment. A missing field, provider error,
+or any saved goal, including a paused or completed one, refuses before loading.
+This conservative first policy preserves the goal rather than changing it. The
+preflight must leave `thread/loaded/list` empty. Reopening a thread already loaded
+in the same provider can ignore settings overrides, so that case cannot prove
+settings preservation for a replacement runtime.
+
+The supported first settings snapshot is versioned and records observed values:
+
+| Provider result | Recovery use |
+| --- | --- |
+| `model`, `modelProvider` | Nonempty exact strings. Do not enable model fallback. |
+| `cwd` | Canonical existing directory, equal to the saved effective directory. |
+| `approvalPolicy`, `approvalsReviewer` | Required recognized values, retained exactly. |
+| `sandbox` | Required recognized effective restrictions. The real gate currently proves read-only without network access. Convert that policy to its documented request mode, then compare the returned effective policy. |
+| `activePermissionProfile` | Required field. The real gate proves explicit null only. Named/custom profiles remain unsupported until their effective restrictions and provenance can be reproduced and verified. Never combine `permissions` with `sandbox`. |
+| `runtimeWorkspaceRoots`, `instructionSources`, `reasoningEffort` | Record observed nonsecret workflow provenance. The experiment does not prove arbitrary custom workspace, instruction, environment, plugin or tool overrides. Unsupported/missing workflow provenance makes a record ineligible, rather than inventing defaults. |
+| Executable/version and snapshot version | Preserve the provider that produced the values and validate compatibility before use. A changed or unverified provider is not silently accepted. |
+
+The later adapter must validate presence and types before comparing snapshots.
+Two absent values are not matching settings. It must check the returned thread
+identity and explicit idle status, then reject unexpected turn starts or active
+status. Five seconds of quiet in this experiment is bounded evidence for these
+threads, not a universal guarantee about provider automation. Resume submits no
+turn; a later explicit instruction proves context recall separately.
+
+The schema change is additive and transactional after version 3. Add a runtime
+ledger keyed by `(session_id, generation)`, with immutable originating operation,
+endpoint, observed state and provider provenance. Keep the original workers and
+launch operations unchanged. Add a separate versioned verified-settings record.
+Use a partial unique index to exclude two starting/running/uncertain attempts for
+one Vessel. Allocate the next generation and save the immutable operation in one
+immediate transaction before spawning. Roll back the transaction on any admission
+failure. A consumed uncertain generation cannot be retried through another ID.
+
+On service startup, retain confirmed stops but mark interrupted running/start
+records unknown or uncertain. Stored PIDs establish no ownership. A live child
+is the only source of running ownership. New capture generations exclude delayed
+events; fresh credentials revoke earlier credentials. Completed operation receipts
+remain historical evidence and must not overwrite fresh liveness observations.
+A legacy baseline is permitted only with confirmed stop evidence and no conflicting
+operation; missing verified settings still makes Resume unavailable. A later
+installation needs a closed-service database backup before migration. Rollback of
+an executable alone cannot undo a schema change or discard newer history.
+
+Refine R01 into two complete behaviours before implementation. First make lifecycle
+observations truthful and save verified settings when a new managed runtime starts.
+That slice changes `store.rs`, `worker.rs`, service list presentation, and focused
+service/provider fixtures. Second add owner-only Resume through lifecycle admission,
+the new worker-start mode and operation completion. It requires the same store and
+worker boundary plus lifecycle/service routing and the existing authority policy.
+Keep that source map explicit in the plan; do not replace it with a storage-only
+or transport-only slice that cannot demonstrate observable behaviour.
+
+Provider protocol references are the [official app-server guide](https://learn.chatgpt.com/docs/app-server)
+and [persisted-goal guide](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
+Generated schemas identify available fields; only the opt-in run establishes the
+observed settings and idle behaviour above. Missing or incompatible settings,
+unsupported profiles and unverified workflow customizations must remain readable
+refusals in the eventual product.
