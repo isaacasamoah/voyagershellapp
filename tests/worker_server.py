@@ -12,7 +12,8 @@ from pathlib import Path
 
 path = sys.argv[sys.argv.index('--listen') + 1].removeprefix('unix://')
 settings = [sys.argv[n + 1] for n, arg in enumerate(sys.argv[:-1]) if arg == '-c']
-policy = tomllib.loads('\n'.join(settings))['shell_environment_policy']['set']
+runtime_settings = tomllib.loads('\n'.join(settings))
+policy = runtime_settings['shell_environment_policy']['set']
 assert Path(policy['VOYAGER_BIN']).is_file()
 assert Path(policy['VOYAGER_STATE']) == Path(path).parent.parent
 
@@ -44,6 +45,7 @@ def metadata():
 def handle(stream):
     global counter, active, current_turn
     write_lock = threading.Lock()
+    resume_preflight = False
 
     def send(value):
         data = json.dumps(value).encode()
@@ -96,6 +98,9 @@ def handle(stream):
                                       'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'config-changed').exists() else 'original',
                                       'disabledReason': None}]}
             elif method == 'thread/goal/get':
+                assert runtime_settings['sandbox_mode'] == 'read-only'
+                assert runtime_settings['approval_policy'] == 'on-request'
+                resume_preflight = True
                 result = {'goal': {'status': 'active'} if (Path(policy['VOYAGER_STATE']) / 'active-goal').exists() else None}
             elif method == 'thread/start':
                 assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode', 'developerInstructions'}
@@ -108,13 +113,23 @@ def handle(stream):
                     result.update(model='fixture-model', modelProvider='openai', cwd=str(Path(policy['VOYAGER_STATE'])),
                                   approvalPolicy='never', approvalsReviewer='user', sandbox={'type': 'dangerFullAccess'},
                                   activePermissionProfile=None, runtimeWorkspaceRoots=[], instructionSources=[], reasoningEffort=None)
+                    if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():
+                        result.update(approvalPolicy='on-request', sandbox={'type': 'readOnly', 'networkAccess': False})
+                    if (Path(policy['VOYAGER_STATE']) / 'unsupported-sandbox').exists():
+                        result['sandbox'] = {'type': 'externalSandbox', 'networkAccess': 'enabled'}
+                    if (Path(policy['VOYAGER_STATE']) / 'missing-sandbox').exists():
+                        result.pop('sandbox')
             elif method == 'thread/resume':
+                if resume_preflight:
+                    assert set(r['params']) == {'threadId', 'excludeTurns'}
                 result = {'thread': metadata(), 'model': 'fixture-model', 'modelProvider': 'openai',
                           'cwd': str(Path(policy['VOYAGER_STATE'])), 'approvalPolicy': 'never', 'approvalsReviewer': 'user',
                           'sandbox': {'type': 'dangerFullAccess'}, 'activePermissionProfile': None,
                           'runtimeWorkspaceRoots': [], 'instructionSources': [], 'reasoningEffort': None}
                 if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                     result['model'] = 'different-model'
+                if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():
+                    result.update(approvalPolicy='on-request', sandbox={'type': 'readOnly', 'networkAccess': False})
             elif method == 'thread/read':
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
@@ -130,6 +145,8 @@ def handle(stream):
                     active = True
                     turn = f'worker-turn-{counter}'
                     current_turn = turn
+                if (Path(policy['VOYAGER_STATE']) / 'incomplete-settings-update').exists():
+                    event('thread/settings/updated', {'threadSettings': {'model': 'fixture-model'}})
                 event('turn/started', {'turn': {'id': turn, 'status': 'inProgress'}})
                 event('item/completed', {'turnId': turn, 'item': {'id': 'user', 'type': 'userMessage', 'content': r['params']['input']}})
                 result = {'turn': {'id': turn, 'status': 'inProgress'}}

@@ -5,10 +5,6 @@ use std::{fs, os::unix::fs::MetadataExt, path::Path};
 
 pub struct Settings {
     pub snapshot: Value,
-    pub params: Value,
-    pub cwd: String,
-    pub sandbox: &'static str,
-    pub approval: String,
 }
 fn files(sources: &Value) -> Result<Vec<Value>> {
     sources.as_array().context("settings_unavailable: instruction sources are missing")?.iter().map(|source| {
@@ -88,7 +84,7 @@ impl Settings {
             Path::new(&cwd).is_absolute() && Path::new(&cwd).is_dir(),
             "directory_unavailable: saved working folder is unavailable"
         );
-        let model = string("model")?;
+        string("model")?;
         ensure!(
             string("modelProvider")? == "openai",
             "settings_unavailable: this provider is not supported for recovery yet"
@@ -105,15 +101,11 @@ impl Settings {
                 .is_some_and(Value::is_null),
             "settings_unavailable: named permission profiles are not supported for recovery yet"
         );
-        let sandbox = if effective["sandbox"] == json!({"type":"dangerFullAccess"}) {
-            "danger-full-access"
-        } else if effective["sandbox"] == json!({"type":"readOnly","networkAccess":false}) {
-            "read-only"
-        } else {
-            anyhow::bail!(
-                "settings_unavailable: this sandbox policy cannot be reproduced safely yet"
-            )
-        };
+        ensure!(
+            effective["sandbox"] == json!({"type":"dangerFullAccess"})
+                || effective["sandbox"] == json!({"type":"readOnly","networkAccess":false}),
+            "settings_unavailable: this sandbox policy cannot be reproduced safely yet"
+        );
         ensure!(
             effective["runtimeWorkspaceRoots"]
                 .as_array()
@@ -139,18 +131,35 @@ impl Settings {
                 .contains(&s)),
             "settings_unavailable: unsupported reasoning settings"
         );
-        let mut params = json!({"model":model,"modelProvider":effective["modelProvider"],"cwd":cwd,"approvalPolicy":approval,"approvalsReviewer":"user","sandbox":sandbox,"runtimeWorkspaceRoots":effective["runtimeWorkspaceRoots"],"developerInstructions":include_str!("../orchestration.md")});
-        if !effort.is_null() {
-            params["config"] = json!({"model_reasoning_effort":effort});
-        }
         Ok(Self {
             snapshot: snapshot.clone(),
-            params,
-            cwd,
-            sandbox,
-            approval,
         })
     }
+    pub fn refresh(snapshot: &Value, current: &Value, executable: &str) -> Result<Value> {
+        ensure!(
+            snapshot["effective"]["cwd"] == current["cwd"],
+            "settings_unavailable: working folder changed without a verified workflow snapshot"
+        );
+        let mut updated = snapshot.clone();
+        for (target, source) in [
+            ("model", "model"),
+            ("modelProvider", "modelProvider"),
+            ("cwd", "cwd"),
+            ("approvalPolicy", "approvalPolicy"),
+            ("approvalsReviewer", "approvalsReviewer"),
+            ("sandbox", "sandboxPolicy"),
+            ("activePermissionProfile", "activePermissionProfile"),
+            ("reasoningEffort", "effort"),
+        ] {
+            updated["effective"][target] = current
+                .get(source)
+                .context("settings_unavailable: incomplete settings update")?
+                .clone();
+        }
+        Self::parse(&updated, executable)?;
+        Ok(updated)
+    }
+
     pub fn verify_before_load(&self, connection: &mut Codex) -> Result<()> {
         ensure!(
             json!(connection.user_agent) == self.snapshot["provider_version"],

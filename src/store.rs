@@ -316,6 +316,14 @@ impl Store {
         Ok(json!({"runtime":state,"runtime_generation":saved.map(|s|s.0)}))
     }
 
+    pub fn save_resume_settings(&self, operation: &str, settings: Option<&Value>) -> Result<()> {
+        self.0.execute(
+            "UPDATE runtime_generations SET settings=?2 WHERE operation_id=?1",
+            params![operation, settings.map(Value::to_string)],
+        )?;
+        Ok(())
+    }
+
     pub fn resume_record(&self, session: &str) -> Result<Option<Value>> {
         self.0.query_row("SELECT generation,state,settings,operation_id FROM runtime_generations WHERE session_id=?1 ORDER BY generation DESC LIMIT 1",[session],|r|{
             let settings: Option<String> = r.get(2)?;
@@ -447,6 +455,10 @@ impl Store {
         self.0.execute(
             "UPDATE sessions SET removed_ms=COALESCE(removed_ms,?2) WHERE id=?1",
             params![session, now()],
+        )?;
+        self.0.execute(
+            "UPDATE runtime_generations SET settings=NULL WHERE session_id=?1",
+            [session],
         )?;
         let edges: Vec<Value> = self
             .sessions()?

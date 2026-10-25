@@ -62,6 +62,7 @@ pub struct Worker {
     pub executable: String,
     pub alive: bool,
     pub generation: i64,
+    stopping: bool,
 }
 
 impl Worker {
@@ -83,7 +84,7 @@ impl Worker {
         );
         let (sandbox, approval) = match &mode {
             ThreadStart::New(_) => ("danger-full-access", "never"),
-            ThreadStart::Resume(r) => (r.settings.sandbox, r.settings.approval.as_str()),
+            ThreadStart::Resume(_) => ("read-only", "on-request"),
         };
         let resume_identity = match &mode {
             ThreadStart::Resume(r) => Some((r.session.clone(), r.generation)),
@@ -142,8 +143,7 @@ impl Worker {
                         resume.settings.verify_before_load(&mut connection)?;
                         let goal = connection.rpc("thread/goal/get",json!({"threadId":resume.native}))?;
                         ensure!(goal.get("goal").is_some_and(Value::is_null),"settings_unavailable: this conversation has a goal or its goal state cannot be verified; it was not loaded");
-                        let mut params = resume.settings.params.clone();
-                        params["threadId"] = json!(resume.native);
+                        let params = json!({"threadId":resume.native,"excludeTurns":true});
                         load_requested = true;
                         let reply = connection.rpc("thread/resume",params).context("provider_failed: Codex could not reopen this conversation with its saved settings")?;
                         ensure!(reply["thread"]["id"] == resume.native,"thread_unavailable: provider returned another conversation");
@@ -200,6 +200,19 @@ impl Worker {
     }
 
     fn persist(&self, store: &Store, message: Value) -> Result<()> {
+        if message["method"] == "thread/settings/updated"
+            && message["params"]["threadId"] == self.native
+            && store.generation(&self.session)? == Some(self.generation)
+        {
+            if let Some(saved) = store.resume_record(&self.session)? {
+                let updated = Settings::refresh(
+                    &saved["settings"],
+                    &message["params"]["threadSettings"],
+                    &self.executable,
+                );
+                store.save_resume_settings(&self.launch, updated.as_ref().ok())?;
+            }
+        }
         if let Some(event) = events::normalize(&message) {
             if event.thread == self.native {
                 store.record(&self.session, self.generation, event)?;
@@ -222,6 +235,9 @@ impl Worker {
                 Ok(Some(event)) => self.persist(store, event)?,
                 Ok(None) => (),
                 Err(_) => {
+                    if !self.stopping {
+                        store.save_resume_settings(&self.launch, None)?;
+                    }
                     store.local(
                         &self.session,
                         "capture.gap",
@@ -247,6 +263,7 @@ impl Worker {
     }
 
     pub fn request_stop(&mut self, force: bool) -> Result<()> {
+        self.stopping = true;
         if self.process.0.try_wait()?.is_none() {
             killpg(
                 Pid::from_raw(self.process.0.id() as i32),
@@ -365,6 +382,7 @@ impl StartingWorker {
             executable: self.executable.clone(),
             alive: true,
             generation: capture_generation,
+            stopping: false,
         }))
     }
 }

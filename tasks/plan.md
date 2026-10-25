@@ -129,6 +129,12 @@ real Codex and a deliberately failed viewer opening.
 Likely files: src/bin/voyager.rs, desktop/test/native-proof.cjs, a small resume
 journey, desktop/scripts/package-linux.cjs and docs/lifecycle.md. Scope: medium.
 Dependency: R01b. Covers R1 and R6. Private voice-tool exposure is deferred.
+Also test a runtime-only stop whose earlier terminal has not closed. Resume/Open
+must not report that old window as attached to the new run. Resolve this through
+a clear closed-viewer precondition or verified runtime-generation binding before
+accepting the viewer journey. After the idle check, a new explicit marker query
+and a read-only capabilities call must prove context recall and fresh bound
+credentials, without printing credentials.
 
 ### R03: retain the right result through disconnects, repeats and service restart
 
