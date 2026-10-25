@@ -682,3 +682,28 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   width: 100%;
   min-width: 0;
 }
+
+.session-state,
+.agent-reason {
+  font-size: 11px;
+  color: #42566a;
+  overflow-wrap: anywhere;
+}
+.agent-reason {
+  grid-column: 1 / -1;
+  margin: 2px 9px 8px;
+}
+.history-group,
+#needs-attention {
+  margin-top: 14px;
+}
+.history-group summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 12px;
+}
+#previous-sessions,
+#needs-attention-sessions {
+  display: grid;
+  gap: 5px;
+}

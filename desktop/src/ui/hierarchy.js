@@ -7,6 +7,25 @@ const hierarchy = (() => {
   function active(sessions) {
     return sessions.filter((s) => s.removed_ms == null);
   }
+  function classify(sessions) {
+    const groups = { current: [], attention: [], previous: [], removed: [] };
+    for (const session of sessions) {
+      const runtime = session.lifecycle?.runtime;
+      let group = 'attention';
+      if (runtime === 'running' || runtime === 'starting' || session.resume?.state === 'pending')
+        group = 'current';
+      else if (
+        runtime &&
+        session.removed_ms != null &&
+        (runtime === 'stopped' || session.ownership === 'external')
+      )
+        group = 'removed';
+      else if (runtime === 'external' && session.capture === 'connected') group = 'current';
+      else if (runtime === 'stopped') group = 'previous';
+      groups[group].push(session);
+    }
+    return groups;
+  }
   function members(sessions, root = null) {
     const rows = active(sessions);
     if (root === null) return rows.sort(compare);
@@ -42,6 +61,6 @@ const hierarchy = (() => {
     }
     return null;
   }
-  return { members, roots, children, fleetOf };
+  return { members, roots, children, fleetOf, classify };
 })();
 if (typeof module !== 'undefined') module.exports = hierarchy;

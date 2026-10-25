@@ -75,3 +75,38 @@ test('three vessels match a full-height left half and two flush right quarters',
     ],
   );
 });
+
+test('work groups use runtime observations and include each record exactly once', () => {
+  const record = (id, runtime, extra = {}) => ({
+    id,
+    ownership: 'managed',
+    lifecycle: { runtime },
+    ...extra,
+  });
+  const rows = [
+    record('running', 'running', { window: 'closed' }),
+    record('starting', 'starting'),
+    record('unregistered', 'running', { removed_ms: 1 }),
+    record('external', 'external', { ownership: 'external', capture: 'connected' }),
+    record('unknown', 'unknown'),
+    record('disconnected', 'external', { ownership: 'external', capture: 'disconnected' }),
+    record('stopped', 'stopped'),
+    record('removed', 'stopped', { removed_ms: 1 }),
+    record('removed-external', 'external', { ownership: 'external', removed_ms: 1 }),
+    { id: 'legacy', worker_state: 'stopped', ownership: 'managed' },
+  ];
+  const original = JSON.stringify(rows);
+  const groups = hierarchy.classify(rows);
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(groups).map(([group, members]) => [group, members.map((r) => r.id)]),
+    ),
+    {
+      current: ['running', 'starting', 'unregistered', 'external'],
+      attention: ['unknown', 'disconnected', 'legacy'],
+      previous: ['stopped'],
+      removed: ['removed', 'removed-external'],
+    },
+  );
+  assert.equal(JSON.stringify(rows), original);
+});

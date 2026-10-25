@@ -133,10 +133,11 @@ test('a rejected rank change keeps the same request on an explicit retry', async
         rank: 'crew',
         ownership: 'managed',
         worker_state: 'stopped',
+        lifecycle: { runtime: 'stopped' },
       },
     ],
   });
-  const row = ui.nodes.get('sessions').children[0].children[0];
+  const row = ui.nodes.get('previous-sessions').children[0];
   const change = row
     .querySelectorAll('button')
     .find((button) => button.textContent === 'Change rank');
@@ -156,7 +157,13 @@ test('rank rows start collapsed and expand without a duplicate group header', as
   const ui = renderer();
   const requests = [];
   ui.api.surfaceInstance = async (id) => requests.push(id);
-  const base = { kind: 'codex', cwd: '/project', ownership: 'managed', worker_state: 'running' };
+  const base = {
+    kind: 'codex',
+    cwd: '/project',
+    ownership: 'managed',
+    worker_state: 'running',
+    lifecycle: { runtime: 'running' },
+  };
   const rows = [
     { ...base, id: 'captain', name: 'Captain', rank: 'captain' },
     { ...base, id: 'crew', name: 'Crew', rank: 'crew', supervisor_id: 'captain' },
@@ -230,6 +237,7 @@ test('creation and explicit reopen use the selected viewer', async () => {
         rank: 'crew',
         ownership: 'managed',
         worker_state: 'running',
+        lifecycle: { runtime: 'running' },
         window: 'closed',
         terminal: 'xterm',
       },
@@ -243,4 +251,39 @@ test('creation and explicit reopen use the selected viewer', async () => {
   assert.equal(requests[0][0], 'one');
   assert.equal(requests[0][1], 'xterm');
   assert.equal(typeof requests[0][2], 'string');
+});
+
+test('the panel separates stopped and unknown records and keeps offline rows last-known', () => {
+  const ui = renderer();
+  const row = (id, runtime) => ({
+    id,
+    name: id,
+    kind: 'shell',
+    cwd: '/project',
+    ownership: 'managed',
+    worker_state: 'running',
+    lifecycle: { runtime },
+    capture: 'connected',
+  });
+  const sessions = [
+    row('live', 'running'),
+    row('old', 'stopped'),
+    { ...row('legacy', 'unknown'), lifecycle: undefined },
+  ];
+  ui.update({ sessions });
+  const ids = (container) =>
+    ui.nodes
+      .get(container)
+      .querySelectorAll('[data-key]')
+      .map((n) => n.dataset.key);
+  assert.deepEqual(ids('sessions'), ['live']);
+  assert.deepEqual(ids('needs-attention-sessions'), ['legacy']);
+  assert.deepEqual(ids('previous-sessions'), ['old']);
+  assert.equal(ui.nodes.get('previous-toggle').textContent, 'Previous agents (1)');
+  assert.match(ui.nodes.get('connection').textContent, /update/i);
+  ui.update({ sessions, serviceError: 'Disconnected' });
+  assert.deepEqual(ids('sessions'), ['live']);
+  const live = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
+  assert.equal(live.disabled, true);
+  assert.match(live.attributes['aria-label'], /Last known/);
 });

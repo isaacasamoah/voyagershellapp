@@ -21,6 +21,7 @@ async function run(context) {
     conversation: '../src/conversation-proof.cjs',
     handoff: './voice-handoff-proof.cjs',
     resume: './resume-proof.cjs',
+    'panel-current': './panel-proof.cjs',
     'return-position': './recovery-position-proof.cjs',
   };
   if (!Object.hasOwn(journeys, journey)) throw Error('Select a supported native proof journey');
@@ -77,6 +78,17 @@ async function run(context) {
     await input(['button', true]);
     await input(['button', false]);
   };
+  const pageClick = async (window, id) => {
+    window.focus();
+    await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
+    const point = await window.webContents.executeJavaScript(
+      `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) throw Error('Control is outside the visible page'); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`,
+    );
+    for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
+      window.webContents.sendInputEvent({ type, ...point, button: 'left', clickCount: 1 });
+      await delay(30);
+    }
+  };
   const save = (value) =>
     fs.writeFile(path.join(directory, 'native-proof.json'), JSON.stringify(value, null, 2));
   let result;
@@ -86,7 +98,7 @@ async function run(context) {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
       { ...context, directory },
-      { wait, input, click, delay, captureOutput },
+      { wait, input, click, pageClick, delay, captureOutput },
     );
   } catch (error) {
     failure = error;
