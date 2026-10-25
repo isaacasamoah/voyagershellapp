@@ -1384,6 +1384,28 @@ app.whenReady().then(async () => {
       })
       .catch(async (error) => {
         console.error(error);
+        if (process.argv.includes('--proof-native')) {
+          try {
+            await fs.writeFile(
+              path.join(stateDir, 'native-proof.json'),
+              JSON.stringify(
+                {
+                  journey: process.env.VOYAGER_PROOF_JOURNEY,
+                  verdict: 'rework',
+                  error: error.stack,
+                  candidate: { app: process.execPath, service: binary, packaged: app.isPackaged },
+                },
+                null,
+                2,
+              ),
+            );
+          } finally {
+            process.exitCode = 1;
+            app.quit();
+          }
+          return;
+        }
+
         const file = path.join(
           stateDir,
           process.argv.includes('--proof-fleet-creation')

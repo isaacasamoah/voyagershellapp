@@ -208,3 +208,9 @@ records. Feature journeys retain their assertions and reuse these operations.
 The conversation journey still uses injected input and muted playback; its pass
 is a parity check, not audible voice acceptance. Historical unrelated proof
 entry points have not all been consolidated.
+
+Set `VOYAGER_PROOF_APP` to the candidate packaged executable to use the same
+runner with its bundled service. The package includes the selected shared native
+journeys and helpers; unrelated proof scripts remain outside the bundle. Cleanup
+attempts each owned resource even when a prior cleanup step fails, records every
+error, and returns failure if service shutdown remains unconfirmed.
