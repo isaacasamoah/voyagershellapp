@@ -21,6 +21,9 @@ Read the small Rust conventions in `CONTRIBUTING.md`. Keep source readable for
 people learning with us, and preserve the same checks and docs in every increment.
 Use a working branch and PR; never use the admin bypass without Isaac explicitly
 authorizing that particular merge or protected-branch update.
+Use the GitHub CLI for PR operations. Keep the PR description current using
+[the PR template](.github/PULL_REQUEST_TEMPLATE.md); change summaries belong in
+the description, with comments reserved for discussion and review follow-up.
 
 Lifecycle operations are owned by `src/service/lifecycle.rs`; native requests by
 `src/service/native.rs`; both use the one service-owned store and process maps.
