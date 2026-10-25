@@ -32,6 +32,12 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   assert.equal(initial.count, 'Previous agents (1)');
   assert.match(initial.text, /Running/);
   assert.match(initial.text, /Unregistered/);
+  assert.ok(
+    await panelWin.webContents.executeJavaScript(
+      "document.querySelector('.session-name').getBoundingClientRect().height < 40",
+    ),
+    'Agent name was squeezed into an unreadable column',
+  );
   const before = await rpc('events');
   await fs.writeFile(
     path.join(stateDir, 'panel-before.png'),
@@ -151,6 +157,7 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
     (s) => s.includes('saved portion'),
   );
   assert.equal((await rpc('events')).cursor, beforeRead.cursor);
+  await proof.delay(100);
   const png = await panelWin.webContents.capturePage();
   await fs.writeFile(path.join(stateDir, 'panel-current.png'), png.toPNG());
   return {

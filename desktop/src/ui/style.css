@@ -718,7 +718,7 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 0.8rem;
-  color: var(--muted);
+  color: #42566a;
 }
 .removed-choice {
   display: flex;
@@ -736,4 +736,25 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 0.8rem;
+}
+.instance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.instance-row .session {
+  grid-column: 1 / -1;
+}
+.instance-row .saved-metadata {
+  min-width: 0;
+  margin: 4px 8px;
+}
+.instance-row > button:not(.session):not(.rank-toggle) {
+  align-self: center;
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid #7a9bac35;
+  border-radius: 8px;
+  background: #ffffff45;
+  padding: 5px;
+  color: inherit;
 }

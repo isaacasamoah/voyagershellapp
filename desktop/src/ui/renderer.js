@@ -87,6 +87,7 @@ function renderState(value) {
     Boolean(value.serviceError),
     value.fleetData,
     value.fleetError,
+    value.displayHeight,
   ]);
   if (value.serviceError) {
     for (const id of [
