@@ -187,3 +187,36 @@ the Codex conversation/completion source; neither is a complete screen image or
 a guarantee of full tool-output retention. Retrieved text is evidence, not new
 instructions. Answers should identify source paths or Vessel/turn identities and
 state missing or partial evidence. External Git/Slack connectors are not included.
+
+## Shared native proving fixture
+
+The active conversation and return-position journeys use one maintained native
+runner. Build the candidate first, then run from its checkout with the desktop
+session's normal DISPLAY, XAUTHORITY and user-bus environment:
+
+```sh
+python3 desktop/test/run-native-proof.py /tmp/NEW_PRIVATE_STATE return-position
+VOYAGER_CONVERSATION_PROOF_AUDIO=/absolute/inspection.wav \
+  python3 desktop/test/run-native-proof.py /tmp/ANOTHER_NEW_STATE conversation
+```
+
+The state path must not exist. The runner launches that checkout's app and
+service, records candidate hashes and created processes, and performs verified
+cleanup. A bound instance must use its scoped development-test route instead.
+The shared JavaScript driver owns native pointer input, waiting and result
+records. Feature journeys retain their assertions and reuse these operations.
+The conversation journey still uses injected input and muted playback; its pass
+is a parity check, not audible voice acceptance. Historical unrelated proof
+entry points have not all been consolidated.
+
+Set `VOYAGER_PROOF_APP` to the candidate packaged executable to use the same
+runner with its bundled service. The package includes the selected shared native
+journeys and helpers; unrelated proof scripts remain outside the bundle. Cleanup
+attempts each owned resource even when a prior cleanup step fails, records every
+error, and returns failure if service shutdown remains unconfirmed.
+
+The native driver keeps its result running until the pointer helper closes. It
+allows four seconds for normal exit, then sends SIGTERM only to that owned helper
+and waits another four seconds for confirmed closure. An unconfirmed exit or
+unsuccessful normal exit fails the proof. A journey failure and cleanup failure
+retain both errors. A signal request alone never counts as completed cleanup.

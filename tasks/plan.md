@@ -121,3 +121,13 @@ If automatic delivery cannot meet the cases, report the exact failed stage and
 request a design decision before adding any alternative mechanism. If a slice
 cannot meet the test budget with effective proof, report the counts and conflict.
 The final handoff must distinguish implemented, proved and still-open behavior.
+
+## Current checkpoint
+
+Fixture preparation passed the additional owner-authorized correction and fresh
+review. Independent controls reject premature success and unconfirmed helper
+exit. Both active journeys passed on the actual package, with a retained
+unexplained initial drag failure. The complete scoped test budget passes. The
+task list records evidence and advisories. Continue V01 under the existing
+approved sequence and one-correction-per-slice rule. No new feature is merged,
+installed or accepted by this preparation checkpoint.

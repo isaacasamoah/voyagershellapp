@@ -1,52 +1,23 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { execFile, spawn } = require('node:child_process');
-const { createInterface } = require('node:readline');
+const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { screen } = require('electron');
 const exec = promisify(execFile);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-exports.run = async ({
-  avatarWin,
-  panelWin,
-  setExpanded,
-  inventory,
-  stateDir,
-  rpc,
-  refresh,
-  getState,
-}) => {
+exports.run = async (
+  { avatarWin, panelWin, setExpanded, inventory, stateDir, rpc, refresh, getState },
+  proof,
+) => {
+  const { input, wait } = proof;
   const observations = [];
   const owned = [];
-  const pointer = spawn('python3', [path.join(__dirname, 'native-pointer.py')], {
-    stdio: ['pipe', 'pipe', 'inherit'],
-  });
-  const replies = createInterface({ input: pointer.stdout });
   const save = (verdict, error) =>
     fs.writeFile(
       path.join(stateDir, 'visibility-proof.json'),
       JSON.stringify({ verdict, error, candidate: getState().candidate, observations }, null, 2),
     );
-  const input = (value) =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(Error('Pointer acknowledgement timed out')), 4000);
-      replies.once('line', (line) => {
-        clearTimeout(timer);
-        const reply = JSON.parse(line);
-        reply.error ? reject(Error(reply.error)) : resolve();
-      });
-      pointer.stdin.write(JSON.stringify(value) + '\n');
-    });
-  const wait = async (read, accept, message) => {
-    const deadline = performance.now() + 10000;
-    while (performance.now() < deadline) {
-      const value = await read();
-      if (accept(value)) return value;
-      await delay(50);
-    }
-    throw Error(message);
-  };
   const positions = async () => {
     const windows = await inventory();
     return Object.fromEntries(
@@ -167,12 +138,11 @@ exports.run = async ({
       owned.splice(owned.indexOf(id), 1);
     }
     await save('pass');
+    return observations;
   } catch (error) {
     await save('rework', error.stack);
     throw error;
   } finally {
-    pointer.stdin.end();
-    replies.close();
     for (const id of owned) await rpc('remove', id, '--stop');
   }
 };
