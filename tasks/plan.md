@@ -31,7 +31,8 @@ stopped. An older service without lifecycle fields leaves state unknown and Resu
 unavailable. Each Vessel has one actionable row.
 
 Previous agents starts collapsed. Order by last known activity, then stable Vessel
-ID, and say when activity time is unavailable. Let its history area grow within
+ID, and say when activity time is unavailable. Use recorded activity supplied
+by the service or bounded history reads; never substitute registration time. Let its history area grow within
 the measured available panel space, then scroll inside it. Use small local batches
 appropriate to that space and preserve focus/scroll when loading more. Do not use
 50 as a fixed visible-row target or estimate height from total record count.
