@@ -417,3 +417,11 @@ durable. The complete service proof verifies both ordinary saved permissions and
 a read-only change observed by Voyager. Unsupported or mismatched restoration
 fails before the agent accepts new work. It never claims a universal native
 persistence guarantee.
+
+When no external discovery connection exists, the service waits on its two request
+listeners for up to the existing 50 ms quiet interval. Socket readiness wakes it
+immediately. It no longer adds a full fixed sleep between consecutive desktop
+reads. The existing 400 ms queued-read regression remains unchanged. This uses
+nix 0.31.3's [poll primitive](https://docs.rs/nix/0.31.3/nix/poll/fn.poll.html)
+and handles an interrupted wait by returning to observation. Other wait errors
+remain failures. Enabling the existing dependency's `poll` feature adds no package.
