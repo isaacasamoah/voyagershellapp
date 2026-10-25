@@ -33,6 +33,15 @@ const app = path.join(bundle, 'resources/app');
 fs.mkdirSync(app);
 for (const directory of ['src', 'assets'])
   fs.cpSync(path.join(desktop, directory), path.join(app, directory), { recursive: true });
+fs.mkdirSync(path.join(app, 'test'));
+for (const file of [
+  'native-proof.cjs',
+  'native-pointer.py',
+  'output-audio.cjs',
+  'recovery-position-proof.cjs',
+  'voice-handoff-proof.cjs',
+])
+  fs.copyFileSync(path.join(desktop, 'test', file), path.join(app, 'test', file));
 const metadata = require('../package.json');
 fs.writeFileSync(
   path.join(app, 'package.json'),

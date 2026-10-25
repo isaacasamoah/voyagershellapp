@@ -3,16 +3,9 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 
-async function waitFor(check, timeout = 90000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const value = await check();
-    if (value) return value;
-    await delay(100);
-  }
-  throw Error('Conversation proof timed out.');
-}
-async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }) {
+async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }, proof) {
+  const waitFor = (read, timeout = 90000) =>
+    proof.wait(read, Boolean, 'Conversation proof timed out', timeout);
   await fs.mkdir(directory, { recursive: true });
   const ready = await waitFor(async () => {
     await conversation.poll();
@@ -37,7 +30,7 @@ async function run({ panelWin, avatarWin, conversation, rpc, directory, screen }
   panelWin.show();
   panelWin.focus();
   await delay(200);
-  await panelWin.webContents.executeJavaScript(`document.getElementById('chat-text').focus()`);
+  await proof.click(panelWin, 'chat-text');
   await panelWin.webContents.insertText('Reply exactly: Voyager is ready to chat.');
   panelWin.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
   panelWin.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
