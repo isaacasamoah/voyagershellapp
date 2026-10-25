@@ -19,6 +19,7 @@ button {
   -webkit-app-region: no-drag;
 }
 button:focus-visible,
+[tabindex]:focus-visible,
 .avatar:active {
   outline: 2px solid #bbd7ff;
   outline-offset: 2px;

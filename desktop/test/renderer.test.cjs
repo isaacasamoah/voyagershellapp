@@ -84,6 +84,7 @@ function renderer() {
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/authority.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/hierarchy.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/history.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/ui/focus.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('../src/ui/renderer.js'), 'utf8'), context);
   return {
     nodes,
@@ -309,6 +310,8 @@ test('service loss closes an open menu and marks its existing rows last-known', 
   assert.equal(old.disabled, true);
   const live = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
   assert.equal(live.disabled, true);
+  assert.equal(ui.nodes.get('create').disabled, true);
+  assert.equal(ui.nodes.get('create-fleet').disabled, true);
   assert.match(live.attributes['aria-label'], /Last known/);
   assert.equal(vm.runInContext('openMenus.size', ui.context), 0);
   ui.update({ sessions });
@@ -342,4 +345,45 @@ test('late action completion cannot re-enable its offline control', async () => 
   finish({});
   await pending;
   assert.equal(live.disabled, true);
+});
+
+test('a visible worker keeps its hidden captain context without another captain row', () => {
+  const ui = renderer();
+  const parent = {
+    id: 'captain',
+    name: 'Captain',
+    kind: 'codex',
+    rank: 'captain',
+    cwd: '/project',
+    ownership: 'managed',
+    lifecycle: { runtime: 'stopped' },
+  };
+  const worker = {
+    id: 'worker',
+    name: 'Worker',
+    kind: 'shell',
+    supervisor_id: parent.id,
+    cwd: '/project',
+    ownership: 'managed',
+    lifecycle: { runtime: 'running' },
+  };
+  const fleetData = { fleets: [{ id: 'work', name: 'Work' }], assignments: { captain: 'work' } };
+  const original = JSON.stringify([parent, worker, fleetData]);
+  ui.update({ sessions: [parent, worker], fleetData });
+  const fleet = ui.nodes.get('fleets').children[0];
+  assert.deepEqual(
+    fleet.querySelectorAll('[data-key]').map((n) => n.dataset.key),
+    ['worker'],
+  );
+  assert.ok(
+    fleet.querySelectorAll('p').some((n) => n.textContent === 'Reports to Captain, Stopped'),
+  );
+  assert.equal(JSON.stringify([parent, worker, fleetData]), original);
+  ui.update({ sessions: [worker] });
+  assert.ok(
+    ui.nodes
+      .get('sessions')
+      .querySelectorAll('p')
+      .some((n) => n.textContent === 'Supervisor unavailable'),
+  );
 });

@@ -30,7 +30,7 @@ uncertain and stopped records, reveals bounded saved history and offers an expli
 Resume-and-open journey. Owner acceptance, merge and installation remain separate.
 The task list records each independent review and the input limits of native proof.
 
-## Current prototype
+## Current build
 
 Owner `list` responses distinguish a live owned runtime, a confirmed stop and
 unknown process ownership. Managed starts retain a runtime generation and observed
@@ -41,7 +41,9 @@ work. The owner CLI exposes `resume-instance` with the observed generation and a
 request ID. It keeps the same identity and leaves its terminal closed for a separate
 Open. The previous viewer must be closed first. The panel uses those same service decisions. Current work keeps running agents
 visible with closed viewers; Previous agents reveals stopped conversations and
-saved events. Panel Resume checks current runtime identity before a separate Open.
+saved events. Panel Resume checks current runtime identity before a separate Open. A worker names
+its hidden supervisor, and keyboard focus follows meaningful controls through
+state changes.
 Older records with unverified settings remain inspectable and cannot resume.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.

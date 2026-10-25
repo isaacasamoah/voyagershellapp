@@ -1,7 +1,7 @@
 # Spec: a panel focused on current work
 
-Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
-The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The owner approved this specification and requested planning. The implementation plan still requires review.
+Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner approved its implementation plan and build on 25 October 2026.
+The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The approved plan is in tasks/plan.md. The candidate is in final independent review on 26 October. Merge and installation remain separate decisions.
 
 ## Objective and scope
 

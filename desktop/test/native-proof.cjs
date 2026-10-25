@@ -102,7 +102,9 @@ async function run(context) {
   };
   const pageKey = async (window, keyCode) => {
     if (!window.isFocused()) throw Error('Proof window lost keyboard focus');
-    for (const type of ['keyDown', 'keyUp']) window.webContents.sendInputEvent({ type, keyCode });
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+    if (keyCode === 'Return') window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode });
     await delay(80);
   };
   const pageWheel = async (window, id, deltaY) => {

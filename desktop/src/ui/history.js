@@ -64,6 +64,7 @@ function createHistory(api, element, hierarchy) {
   get('previous-agents').ontoggle = redraw;
   async function read() {
     if (!selected || loading || current.state.serviceError) return;
+    const hadFocus = document.activeElement === get('history-read');
     loading = true;
     const requestToken = token;
     get('history-read').disabled = true;
@@ -92,7 +93,10 @@ function createHistory(api, element, hierarchy) {
     } finally {
       if (requestToken === token) {
         loading = false;
-        get('history-read').disabled = Boolean(current.state.serviceError);
+        const next = get('history-read');
+        next.disabled = Boolean(current.state.serviceError);
+        if (hadFocus && !next.disabled && document.activeElement === document.body)
+          next.focus({ preventScroll: true });
       }
     }
   }
@@ -120,10 +124,13 @@ function createHistory(api, element, hierarchy) {
     next.disabled = Boolean(current.state.serviceError);
     next.onclick = read;
     const close = element('button', 'Close details');
+    close.id = 'history-close';
     close.onclick = () => {
       token++;
       details.hidden = true;
-      get(`inspect-${session.id}`)?.focus();
+      const row = get(`inspect-${session.id}`);
+      const target = row?.closest('details:not([open])') ? get('previous-toggle') : row;
+      (target || get('previous-toggle')).focus();
       selected = null;
     };
     details.replaceChildren(title, metadata, warning, status, events, next, close);

@@ -2,7 +2,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory }, proof) => {
+exports.run = async (
+  { rpc, stateDir, refresh, panelWin, setExpanded, inventory, screen },
+  proof,
+) => {
   const make = (id) => rpc('create', 'shell', id, id, stateDir, '--background');
   const live = await make('Panel live');
   const stopped = await make('Panel previous');
@@ -154,9 +157,11 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
       `Boolean(document.getElementById('inspect-${removedId}'))`,
     ),
   );
-  await proof.pageClick(panelWin, `inspect-${removedId}`);
+  for (let step = 0; step < 3; step++) await proof.pageKey(panelWin, 'Tab');
+  assert.equal((await historyState()).focus, `inspect-${removedId}`);
+  await proof.pageKey(panelWin, 'Return');
   const beforeRead = await rpc('events');
-  await proof.pageClick(panelWin, 'history-read');
+  await proof.pageKey(panelWin, 'Return');
   await proof.wait(
     () =>
       panelWin.webContents.executeJavaScript(
@@ -165,6 +170,9 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
     (s) => s.includes('saved portion'),
   );
   assert.equal((await rpc('events')).cursor, beforeRead.cursor);
+  await proof.wait(historyState, (s) => s.focus === 'history-read');
+  await proof.pageKey(panelWin, 'Tab');
+  assert.equal((await historyState()).focus, 'history-close');
   await panelWin.webContents.executeJavaScript(`
     window.reviewTextPointer = null;
     document.getElementById('panel').addEventListener('pointerdown', event => {
@@ -175,19 +183,48 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   const textPointer = await panelWin.webContents.executeJavaScript('window.reviewTextPointer');
   await fs.writeFile(path.join(stateDir, 'history-text-pointer.json'), JSON.stringify(textPointer));
   assert.equal(textPointer.prevented, false, 'Reading saved text triggered panel dragging');
+  await proof.delay(100);
+  const viewport = await panelWin.webContents.executeJavaScript(`({
+    width:innerWidth, height:innerHeight,
+    content:document.getElementById('panel-flow').scrollWidth,
+    available:document.getElementById('panel-viewport').clientWidth
+  })`);
+  assert.ok(viewport.content <= viewport.available, 'Panel content overflowed its narrow viewport');
+  await fs.writeFile(
+    path.join(stateDir, 'panel-display.json'),
+    JSON.stringify({
+      bounds: panelWin.getBounds(),
+      display: screen.getDisplayMatching(panelWin.getBounds()),
+      viewport,
+      native: (await inventory()).find(
+        (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
+      ),
+    }),
+  );
+  const bounds = panelWin.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  assert.ok(
+    bounds.height <= area.height &&
+      bounds.y >= area.y &&
+      bounds.y + bounds.height <= area.y + area.height,
+  );
+  const png = await panelWin.webContents.capturePage();
+  await fs.writeFile(path.join(stateDir, 'panel-current.png'), png.toPNG());
+  await proof.pageClick(panelWin, 'previous-toggle');
+  await proof.pageClick(panelWin, 'history-close');
+  assert.equal((await historyState()).focus, 'previous-toggle');
   await proof.pageClick(panelWin, 'panel-brand');
   assert.equal(
     await panelWin.webContents.executeJavaScript('window.reviewTextPointer.prevented'),
     true,
   );
-  await proof.delay(100);
-  const png = await panelWin.webContents.capturePage();
-  await fs.writeFile(path.join(stateDir, 'panel-current.png'), png.toPNG());
+
   return {
     live: live.session_id,
     stopped: stopped.session_id,
     removed: removed.session_id,
     initial,
+    viewport,
     expansionChangedEvents: false,
     history: {
       first,

@@ -13,6 +13,7 @@ let fleetRequest;
 let lastState;
 const openMenus = new Set();
 const history = createHistory(api, element, hierarchy);
+const panelFocus = createPanelFocus($('panel'));
 api.onDockSound((action) => {
   if (!audio || audio.state !== 'running') return;
   const tone = audio.createOscillator();
@@ -52,7 +53,7 @@ function runtimeLabel(session) {
 }
 function renderState(value) {
   lastState = value;
-  const focused = document.activeElement?.dataset.key;
+  const focused = panelFocus.capture();
   $('panel').hidden = view !== 'panel';
   document.body.dataset.expanded = String(value.expanded);
   document.body.dataset.seated = String(value.seated);
@@ -78,6 +79,10 @@ function renderState(value) {
   document.body.dataset.dockError = String(Boolean(value.platformError || value.dockError));
   if (view !== 'panel') return;
   currentSessions = value.sessions;
+  $('create').disabled = Boolean(value.serviceError) || creating;
+  $('create-fleet').disabled = Boolean(value.serviceError);
+  for (const button of $('app-menu').querySelectorAll('button'))
+    button.disabled = Boolean(value.serviceError);
   updateCreationAuthority();
   updateCreationFleets();
   if (!$('instance-cwd').value) $('instance-cwd').value = value.defaultDirectory;
@@ -149,6 +154,7 @@ function renderState(value) {
       }
     };
     const row = element('div', '', 'instance-row');
+    row.dataset.vessel = s.id;
     row.append(b);
     const { menu, actions, addAction } = actionMenu(name, s.id);
     const rename = nameEditor(actions, name, (next, request) =>
@@ -295,6 +301,17 @@ function renderState(value) {
   function ranked(s, visibleRows) {
     const tree = element('section', '', 'rank-tree');
     const row = rowFor(s);
+    if (s.supervisor_id && !visibleRows.some((parent) => parent.id === s.supervisor_id)) {
+      const parent = value.sessions.find((parent) => parent.id === s.supervisor_id);
+      let description = 'Supervisor unavailable';
+      if (parent) {
+        const status = value.serviceError
+          ? `last known ${runtimeLabel(parent)}`
+          : runtimeLabel(parent);
+        description = `Reports to ${instanceName(parent)}, ${status}`;
+      }
+      row.append(element('p', description, 'agent-reason'));
+    }
     tree.append(row);
     const reports = hierarchy.children(visibleRows, s.id);
     if (!reports.length) return tree;
@@ -302,6 +319,7 @@ function renderState(value) {
     toggle.setAttribute('aria-label', `Expand or collapse ${instanceName(s)}`);
     toggle.setAttribute('aria-expanded', String(expandedVessels.has(s.id)));
     toggle.dataset.expand = s.id;
+    toggle.id = `expand-${s.id}`;
     toggle.onclick = () => {
       if (expandedVessels.has(s.id)) expandedVessels.delete(s.id);
       else expandedVessels.add(s.id);
@@ -332,6 +350,7 @@ function renderState(value) {
     const heading = element('div', '', 'fleet-heading');
     const name = element('button', fleet.name, 'fleet-name');
     name.title = 'Surface this fleet';
+    name.id = `fleet-${fleet.id}`;
     name.onclick = () => arrange(() => api.surfaceFleet(fleet.id), name);
     const { menu, actions, addAction } = actionMenu(fleet.name, fleet.id);
     const rename = nameEditor(actions, fleet.name, (next) => api.renameFleet(fleet.id, next));
@@ -349,6 +368,8 @@ function renderState(value) {
     const canvas = element('div', '', 'fleet-canvas');
     renderTree(canvas, fleet.id);
     section.append(heading, canvas);
+    if (value.serviceError)
+      for (const button of section.querySelectorAll('button')) button.disabled = true;
     dropTarget(section, fleet.id);
     return section;
   });
@@ -358,11 +379,7 @@ function renderState(value) {
   $('needs-attention-sessions').replaceChildren(...groups.attention.map(rowFor));
   $('needs-attention').hidden = groups.attention.length === 0;
   history.render(groups, rowFor, value);
-  if (focused) {
-    for (const button of document.querySelectorAll('[data-key]')) {
-      if (button.dataset.key === focused) button.focus({ preventScroll: true });
-    }
-  }
+  panelFocus.restore(focused, groups);
 }
 function actionMenu(name, key) {
   const menu = element('div', '', 'instance-menu');
