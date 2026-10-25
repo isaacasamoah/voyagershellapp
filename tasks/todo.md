@@ -21,17 +21,21 @@ and the matching packaged journey pass. Reviewed budget: 8,222 / 8,258.
 
 ## P02: reveal readable history within the available space
 
-- [ ] Expand Previous agents and removed records explicitly; show missing times,
+- [x] Expand Previous agents and removed records explicitly; show missing times,
   saved details, event gaps and bounded history without starting anything.
-- [ ] Short and long lists fit the display. Local batches and Load more preserve
+- [x] Short and long lists fit the display. Local batches and Load more preserve
   scroll/focus. Check keyboard, wheel and trackpad separately. Covers P2/P8/P9.
-- [ ] Reuse the maintained runner and existing event cursor. Keep safe text
+- [x] Reuse the maintained runner and existing event cursor. Keep safe text
   rendering and a narrow desktop/preload call. Complete independent review.
 
 ## Checkpoint P-A
 
-- [ ] Classification and history behaviour pass the real-panel checks. Review
+- [x] Classification and history behaviour pass the real-panel checks. Review
   before connecting Resume; do not infer real process state from fake data.
+
+P02 passed independent second review after one corrective pass. Both focus and
+text-selection controls pass in the selected package. The complete count is
+8,444 / 8,451. Physical wheel and trackpad remain unproved; Chromium input is recorded.
 
 ## P03: resume and open the same conversation
 
