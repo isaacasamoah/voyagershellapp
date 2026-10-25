@@ -15,11 +15,11 @@ remain in Git history. The still-open voice tasks remain in the voice branch.
 
 ## R01a: reliable lifecycle observations and verified settings
 
-- [ ] Save verified effective settings and provider provenance when a managed
+- [x] Save verified effective settings and provider provenance when a managed
   runtime starts, preserving original launch and event history.
-- [ ] Show live-owned, confirmed stopped and unknown states through list/detail,
+- [x] Show live-owned, confirmed stopped and unknown states through list/detail,
   including restart and legacy missing-settings cases. No Resume action yet.
-- [ ] Pass boundary checks and independent review within the five-file source map.
+- [x] Pass boundary checks and independent review within the five-file source map.
 
 ## R01b: resume through the owner service API
 
