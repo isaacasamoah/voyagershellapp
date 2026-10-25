@@ -6,11 +6,11 @@ remain in Git history. The still-open voice tasks remain in the voice branch.
 
 ## R00: prove safe idle loading
 
-- [ ] Show saved history and restrictive effective settings survive reopening the
+- [x] Show saved history and restrictive effective settings survive reopening the
   same real Codex thread, with no new turn until an explicit instruction.
-- [ ] Check saved-goal and missing-settings cases without changing their meaning.
+- [x] Check saved-goal and missing-settings cases without changing their meaning.
   Record the provider/version, setting map and known-different result.
-- [ ] Complete Gate A, the transactional schema design and focused file map, then
+- [x] Complete Gate A, the transactional schema design and focused file map, then
   complete independent review before product implementation. Stop if idle loading is unproved.
 
 ## R01a: reliable lifecycle observations and verified settings
