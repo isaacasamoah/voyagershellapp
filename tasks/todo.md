@@ -1,218 +1,56 @@
-# Tasks: recoverable docking
-
-Status: D01-D05 passed independent review and packaged verification. D05 used its one corrective build. The owner accepted the updated packaged trial and authorized merging on 24 October 2026. Merge is pending; no installed-app update has occurred.
-
-Governing specification: [docking-recovery](../SPEC-docking-recovery.md). The [plan](plan.md) owns the approach, candidate setup and test commands. This is the only active task list. Voice, resume and panel work remain outside it.
-
-Each slice includes implementation, tests, a real candidate demonstration and the relevant behavior documentation. The likely files are estimates, not a reason to divide a behavior into separate technical layers. If a slice grows beyond one focused session or roughly five files, divide it into smaller complete behaviors before proceeding. Follow the existing build/Git skills and Definition of Done; the process is unchanged.
-
-## D01: refuse an unsupported dock clearly
-
-- [x] D01 complete on the candidate. Independent re-review found no remaining Required issues.
-
-Make hover and drop agree about whether the target can be docked. Show a short reason when it cannot, and leave the floating controls available. This delivers the complete refusal journey, rather than only a reusable validation helper.
-
-Acceptance:
-
-- An ordinary external terminal refuses even when it uses a supported viewer. It receives no implicit registration, authority change or success sound. A verified running, connected, registered managed target remains eligible. Covers D2 and the eligibility part of D1.
-- Stop the target or replace its terminal client after hover. Drop rechecks live identities, refuses the changed target and leaves Voyager visible with a reason. Covers D3.
-- Hover shows checking until identity is established. Both paths use the same eligibility rules and retain the existing service permission boundary.
-
-Verification:
-
-- Run `node --test desktop/test/binding.test.cjs desktop/test/control.test.cjs` and the plan's desktop checks. Run `cargo test --locked --test service` for the existing control-boundary regressions; use full Rust checks if Rust code changes.
-- Show that the new refusal tests detect the old implicit-registration or stale-target behavior, or a deliberately invalid fixture.
-- On the real candidate, hover and drop onto a disposable external terminal, a valid managed terminal and a target changed between hover and drop. Record the cues/reasons, visible controls and before/after registration state. The valid target is a comparison, not proof that D02's placement/sound requirements are already met.
-
-Completion evidence, 24 October 2026:
-
-- The main-process regression first detected implicit registration and acceptance of a replacement client. A later live failure produced a failing regression for losing the hovered window before release. All now pass.
-- All 50 desktop tests, desktop formatting, the candidate binary build and all 24 service-boundary tests pass. Rust source did not change.
-- The real candidate app and service ran from this implementation worktree in fresh private state. Native-pointer journeys passed with xterm and Ghostty: external refusal without registration/control/success sound requests, managed acceptance, and visible refusal after the managed target stopped during hover. Both viewers were stopped and their isolated services shut down.
-- The maintained reproduction is `desktop/test/docking-proof.cjs`, invoked with `--proof-docking`; see the desktop guide. Private receipts, screenshots and executable hashes are linked from the owning Obsidian status, outside Git. Screenshots confirm readable refusal and eligible cues. No renderer errors were recorded.
-- The valid-target comparison does not pass D02. An earlier run reproduced hidden placement with accepted control and a sound request. Acoustic timing, voice, other operating systems and packaged behavior remain unproved.
-
-Additional verification, 24 October 2026:
-
-- The real external Codex comparison passed with xterm and Ghostty. Hover and drop refused the independently launched conversation without registration or attachment. The external server remained alive and its conversation remained readable. Managed Codex acceptance and a stop during hover also passed.
-- The new Rust integration test checks the desktop proof verdict. A failed native run demonstrated why a zero Electron exit status alone was insufficient. The test requires one external setup turn before opening the native client.
-- All 50 desktop tests, formatting, the full Rust suite and Clippy passed. An earlier full Rust run during a concurrent desktop trial exceeded the queued-read timing limit. The isolated test and the later full suite passed; the earlier result remains recorded.
-- The fresh-context reviewer found that leaving and returning to the same target left its cue hidden and refused. The one corrective build adds re-entry and stale-reply regressions, restarts checking on re-entry, and verifies the rendered cue in both native Codex trials. All 52 desktop tests pass. Independent re-review passed. The re-entry DOM and native visibility receipts passed; one screenshot still showed checking, so final painted-cue timing is not claimed from that image.
-
-Dependencies: the owner approved the revised plan for this build trial.
-
-Original estimate: `desktop/src/binding.cjs`, `desktop/src/main.cjs`, `desktop/test/binding.test.cjs`, `desktop/test/control.test.cjs`, `docs/desktop.md`. The plan records the actual files needed for visible feedback and native proof.
-
-Estimated scope: medium, up to five files. Keep current service control authorization unchanged. If inspection finds a service defect requiring a Rust change, revise this slice's scope explicitly rather than moving the authorization decision into the UI.
-
-## D02: complete a valid dock visibly and audibly
-
-- [x] D02 complete.
-
-Take the eligible target through accepted control attachment, confirmed visible placement and one success sound. Handle failed placement and late replies within the same journey.
-
-Acceptance:
-
-- A valid dock has one accepted current attachment, a correctly placed visible avatar and one heard sound. Record the stages separately. Covers D1.
-- Placement failure, a control disconnect or a late reply from an older attempt cannot move/select the wrong target, play a late sound or leave an obsolete attachment. Restore visible floating controls and release failed attachments. Covers D4.
-- Add bounded timing evidence while building this behavior, through audible onset/completion. Do not call scheduled audio a measured audible result.
-
-Verification:
-
-- Run `node --test desktop/test/binding.test.cjs desktop/test/control.test.cjs` and the plan's desktop checks. Add deterministic placement/late-reply cases to the control tests, extracting a small testable function from the owning file only if needed; do not create a framework.
-- Demonstrate that the hidden-avatar return path or a deliberately failed placement fails the new acceptance check.
-- On the real candidate, perform a valid dock, a failed placement and a delayed/invalidated attempt. Hear or record the success sound and verify there is none for failures. Extend `desktop/test/polish-proof.cjs` with these observations and run it after extension using the plan's command. Record initial timing trials now; complete the approved batch at the final checkpoint.
-
-Initial build evidence recorded before independent review, 24 October 2026:
-
-- Regression tests first detected false success after failed/superseded placement, malformed native geometry, a wrong target in an accepted response, and an attachment retained after invalidation. The fixes pass all 63 desktop tests.
-- Native Codex journeys passed with xterm and Ghostty. A valid drop visibly places the avatar and produces recorded output audio. Covered placement is accepted by the service but then fails visibly, releases control, keeps the managed runtime/capture running and records no output sound. An invalidated attempt leaves no attachment.
-- Output recording requires an unmuted sink and quiet baseline. Its onset/end observations use the main-process monotonic clock at audio chunk receipt. This is output-monitor evidence, not a room microphone measurement or the final timing batch.
-- The extended polish/voice journey passed with both viewers. One earlier xterm cleanup failed with changed terminal window identity, then the follow-up passed. The earlier failure and verified cleanup remain recorded; its cause is unresolved and is not claimed fixed by D02.
-- Initial review found that a visible but misplaced avatar could pass placement. The single corrective build adds off-target, malformed-bounds and delayed-move regressions. Native bounds must now reach the requested position within two physical pixels. Corrected xterm and Ghostty trials record matching source/executable manifests, independently checked native bounds and compositor images of the avatar over the terminal. All 66 desktop tests pass. Correction review passed with no Required or Critical findings.
-- D03 target-loss recovery, D04 Applications recovery, the 20-trial batches and packaged checks remain open. D02 passed independent correction review.
-
-Dependencies: D01.
-
-Likely files: `desktop/src/main.cjs`, `desktop/src/control.cjs`, `desktop/test/control.test.cjs`, `desktop/test/polish-proof.cjs`, `docs/desktop.md`.
-
-Estimated scope: medium, up to five files. The useful result is the complete dock and its failure handling, not the extraction of a helper or installation of instrumentation.
-
-## Checkpoint D-A
-
-- [x] D01-D02 pass their controlled regressions and real candidate journeys. Applicable checks/builds pass, and observed evidence is linked outside Git.
-- [x] Preserve refusal, placement and sound evidence for the final owner review. The authorized completion run in the plan permits continuing after independent review.
-
-## D03: recover when a docked target becomes unusable
-
-- [x] D03 complete.
-
-While the owner is docked, turn target loss into a visible floating avatar without restarting or stopping the agent. Preserve voice routing through the existing coordinator.
-
-Acceptance:
-
-- Cover, minimise or close the target, switch workspaces, and change monitor arrangement/scaling. Whenever the target becomes unusable, the floating avatar returns. Reattachment requires a new deliberate dock. Covers D5.
-- The same agent and event capture continue. Ending its control attachment stops native voice without starting the private microphone; uncertain voice confirmation does not block visible recovery. Covers D7.
-- A later refresh or old reply cannot hide the recovered controls or restore the obsolete attachment. Record recovery timing from the triggering action.
-
-Verification:
-
-- Run `node --test desktop/test/control.test.cjs desktop/test/conversation.test.cjs`, the plan's desktop checks and the existing service control regressions. Use full Rust checks if a Rust boundary needs a change.
-- Exercise the covered-target failure before the fix or in a deliberately invalid fixture.
-- Run the actual cover/minimise/close, workspace and monitor/scale journeys on the candidate. Check service identity and capture before/after. Dock Codex, dock Bash and undock to demonstrate the existing voice destination rules. Extend the polish proof as part of this slice; retain manual/audio observations where automated receipts cannot prove the result.
-
-Dependencies: checkpoint D-A.
-
-Likely files: `desktop/src/main.cjs`, `desktop/test/control.test.cjs`, `desktop/test/polish-proof.cjs`, `docs/desktop.md`, `docs/voice.md`.
-
-Estimated scope: medium, up to five files. Native voice policy and private voice handoff behavior remain unchanged.
-
-D03 implementation evidence:
-
-- Failing covered/hidden refresh tests now pass. A late placement result cannot release a newer attachment. Display changes cancel control and clamp the recovery controls to an available display.
-- The real workspace test initially failed because a mapped off-workspace window counted as visible. The X11 probe now verifies workspace membership, with a failing-then-passing Rust regression. Floating controls remain available across workspaces.
-- All 70 desktop tests, 53 ordinary Rust tests, formatting, candidate binary build and Clippy pass. The xterm native journey passed cover, minimise, workspace, arrangement, scale and close, with the same Codex process and capture. Each individual recovery was under half a second; these are not the final timing batches.
-- Monitor trials use temporary configurations and verify restoration in a finally path. The existing polish journey also checks Codex voice, Bash with voice off and undocking without starting private audio. The same Ghostty journey passed. Initial review found one Required exception-path issue: failed panel confirmation could leave refresh permanently busy. The single corrective build adds real panel-query failure and stale-error regressions, reports the error, and resets busy in a finally block. All 72 desktop tests and formatting pass. Corrected native journeys pass on both viewers without forcing refresh during recovery measurement. Correction review passed with no Required or Critical findings.
-
-## D04: recover both controls through Applications
-
-- [x] D04 complete on the candidate. Independent re-review found no remaining Critical or Required product issues.
-
-Give the owner an independent recovery action that brings the panel and floating avatar onto the current display even when docking or placement has failed.
-
-Acceptance:
-
-- Opening the candidate through its separately named Applications launcher releases the attachment and shows both controls while docked and after failed placement. It does not depend on the terminal or keyboard shortcut and starts no replacement agent. Covers D6.
-- Both controls remain visible after refresh. Existing keyboard recovery still works. Agent/capture continuity and native/private voice rules remain correct. Covers D6-D7.
-- The recovery path is included in the real visibility proof and its measured outcome is retained. The temporary launcher exercises the candidate's executable and private state, never the installed app.
-
-Verification:
-
-- Run `node --test desktop/test/control.test.cjs desktop/test/conversation.test.cjs` and the plan's desktop checks. Add repeated-recovery and stale-refresh regression cases alongside the behavior change.
-- Extend `desktop/test/visibility-proof.cjs` and check it with `node --check desktop/test/visibility-proof.cjs`. Use the plan's candidate setup and actually select the temporary Applications launcher while docked and after a controlled placement failure. Repeat with keyboard recovery; record identities to prove no runtime was replaced.
-- Run the complete D1-D7 journey with xterm and Ghostty. Complete the timing batches and packaged check below before requesting capability acceptance.
-
-Dependencies: D03.
-
-Likely files: `desktop/src/main.cjs`, `desktop/test/control.test.cjs`, `desktop/test/visibility-proof.cjs`, `docs/desktop.md`.
-
-Estimated scope: medium, up to four files. The separately named launcher is a temporary test artifact, not a change to the installed Applications entry.
-
-D04 initial build evidence recorded before independent review:
-
-- All 79 desktop tests, 53 ordinary Rust tests, formatting and Clippy pass.
-- Actual GNOME Applications selections recover while docked and after failed
-  placement with both viewers. Twenty repeated launches per viewer all restore
-  controls within one second. Runtime and capture identities remain unchanged.
-- Native Ctrl+Alt+V recovery passes in an isolated GNOME/XWayland desktop. Its
-  initial missing-workspace and remote-input failures are retained; XTest key
-  events prove the shortcut without replacing the installed app's registration.
-- Twenty actual pointer drops per viewer all produce recorded output within two
-  seconds, with visible native placement and one sound request per attempt.
-  The largest observed onset is 267 ms. Output-monitor timing is not room audio.
-- A failing inherited-environment regression tightened launcher identification:
-  the candidate desktop entry now passes an explicit Applications flag. This
-  final launcher wiring was subsequently verified on the packaged candidate.
-- Packaged combined proof and fresh-context review were the next gates at this
-  point. Their results are recorded below.
-
-D04 independent review requested changes. The single corrective build:
-
-- Adds failing-then-passing startup tests for a cold Applications launch and a
-  failed panel confirmation that must not skip recovery setup.
-- Reasserts native panel workspace visibility after showing it. A fresh GNOME
-  proof now shows both controls while current-workspace metadata is still absent.
-  It records a compositor screenshot, then performs real workspace switching and
-  native shortcut tests. Terminal eligibility still treats missing observations
-  as unknown.
-- Makes the hover re-entry test use a verified native panel target rather than an
-  unchecked desktop corner, and repeats the contrast in each timing trial.
-- All 82 desktop tests pass. Corrected packaged evidence and re-review were
-  required next; their results are recorded below.
-
-D04 final verification and independent correction review, 24 October 2026:
-
-- The actual corrected package and bundled service pass with both viewers.
-  Twenty pointer drops per viewer produce recorded output within two seconds.
-  Maximum onset is 266.2 ms for xterm and 257.7 ms for Ghostty. Twenty recovery
-  launches per viewer all show both controls within one second, with maxima of
-  244.5 ms and 250.9 ms. Actual GNOME grid selections precede each launch batch.
-- Cold Applications startup and actual Ctrl+Alt+V pass in a fresh isolated GNOME
-  desktop. Candidate hashes match before and after each run. The archive checksum
-  passes. All 82 desktop tests, 53 ordinary Rust tests, formatting and Clippy pass.
-- Both viewers pass the six native target-loss cases and voice destination checks.
-  The Ghostty positive Bash case requires closing the recovered panel first,
-  because that panel otherwise covers its docking point. An external fixture
-  records this precondition without changing the package. Reopening the same
-  candidate after cleanup completes its hidden-panel screenshot. The unmodified
-  repository Ghostty command is not claimed to pass unattended.
-- Final voice teardown retains outcome_unknown after a participating connection
-  is lost. Earlier destination and microphone checks passed; final voice closure
-  is not claimed confirmed. Output recordings do not replace owner listening.
-- The independent reviewer approved the single correction with no remaining
-  Critical or Required product findings. Source, reviews, failed attempts and
-  fixture provenance are preserved in the owning human-facing evidence report.
-  Later optional fixture cleanup does not authorize another product build.
-
-## Checkpoint D-B: accept the docking capability
-
-- [x] All D1-D7 cases have evidence from the selected candidate, including both supported viewers and the refusal/failure controls. No required case is waived because a fixture passed.
-- [x] The approved Fedora timing batches pass: at least 19 of 20 unobstructed docks are audible within two seconds, and at least 19 of 20 recoveries reveal both controls within one second. Every trial recovers correctly. Record slow and failed trials, the viewer used, and any unsupported combinations.
-- [x] Applicable full Rust and desktop checks pass. Run `npm --prefix desktop run package:linux`, then repeat the combined docking/recovery cases and timing batches on the actual packaged app and bundled service in fresh private state. Record executable paths/hashes, display/audio setup, outcomes, limits and cleanup evidence.
-- [x] The owner accepted the updated packaged docking trial on 24 October 2026 and explicitly authorized merging, then starting the approved voice-handoff build. Resume and panel implementation remain outside this authorization. Installation, restart and release remain separate decisions.
-
-## D05: restore the floating controls to their pre-dock positions
-
-- [x] Capture before moving the avatar into a dock; recover both positions after target loss, including minimise and close. A move between targets retains the original floating positions.
-- [x] Clamp unavailable positions to a visible display, preserve deliberate floating repositioning, and retain explicit Applications recovery on the current display.
-- [x] Regression, full desktop checks, native trials with both viewers and independent review pass. Preserve the existing agent/capture and the owner's running trial.
-
-Files: desktop/src/main.cjs, desktop/test/docking.test.cjs, a focused native proof, and docs/desktop.md.
-
-D05 completion evidence, 24 October 2026: all 90 desktop tests and formatting
-pass. Both supported viewers pass the corrected checkout and packaged real-pointer
-minimise/close journeys. Native panel/avatar positions return exactly, remain
-after refresh, and preserve runtime/capture. The independent reviewer found an
-overlapping-display race; the single correction passed re-review and its
-mutation check. Candidate hashes and cleanup match. Physical monitor removal is
-not claimed; fallback and overlapping events are deterministic tests. The owner tested the corrected package after the trial desktop restarted and accepted it. The unchanged trial service and existing test Vessel were retained.
+# Tasks: return to a stopped conversation
+
+Status: planning draft, 25 October 2026. The owner requested this plan, not its
+implementation. The [plan](plan.md) owns design and commands; the
+[specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
+remain in Git history. The still-open voice tasks remain in the voice branch.
+
+## R00: prove safe idle loading
+
+- [ ] Show saved history and restrictive effective settings survive reopening the
+  same real Codex thread, with no new turn until an explicit instruction.
+- [ ] Check saved-goal and missing-settings cases without changing their meaning.
+  Record the provider/version, setting map and known-different result.
+- [ ] Complete Gate A, the transactional schema design and focused file map, then
+  obtain owner review before product implementation. Stop if idle loading is unproved.
+
+## R01: resume through the owner service API
+
+- [ ] Record/admit one immutable request and generation atomically before spawning.
+  Start the same saved conversation idle and preserve history and verified settings.
+- [ ] Confirm new owned runtime/capture/credentials while rejecting unsupported
+  records, stale generations and non-owner callers. Keep the viewer separate.
+- [ ] Run focused boundary tests, real-provider corroboration and independent review.
+  Covers core R1/R5/R7/R9. Keep each test's purpose and file scope explicit.
+
+## R02: resume and open through the CLI
+
+- [ ] Provide the owner command and same-request receipt lookup. Open only after
+  a fresh running observation. Verify the saved marker with a new explicit query.
+- [ ] Demonstrate a failed Open and successful later Open on the same process.
+  Reopening a viewer must not create work or a second runtime. Covers R1/R6.
+- [ ] Extend the maintained native runner, record actual app/service identities and
+  complete independent review. No separate feature-specific launcher.
+
+## Checkpoint R-A
+
+- [ ] Gate A and the complete owner resume/open journey pass without permission
+  increases, task replay or substitute conversations. Review before R03.
+
+## R03: preserve outcomes through races and disconnects
+
+- [ ] Separate focused cases cover same-ID reuse/conflict, competing requests and
+  client disconnect with a continuing service. Covers R3/R4.
+- [ ] Verify confirmed-stop restart, interrupted-service uncertainty, old-credential
+  refusal and old-event rejection without affecting unrelated processes. Covers
+  R2/R4/R7-R9. Historical completed receipts do not establish current liveness.
+- [ ] Required checks, all R1-R9 package journeys and independent review pass.
+
+## Final checkpoint
+
+- [ ] Preserve schema migration/legacy-read evidence and the pre-migration backup
+  procedure. Missing legacy settings remain inspectable and cannot resume.
+- [ ] Record complete test/helper inventory, disjoint exercised production ranges
+  and a relevant deliberately broken case that fails its check.
+- [ ] Present results and remaining limits for owner acceptance. Do not install,
+  restart the main service, or build another capability from this planning request.

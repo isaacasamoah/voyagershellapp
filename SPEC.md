@@ -3,6 +3,16 @@
 Project: VoyagerShellApp. Updated 24 October 2026.
 State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. Resume and panel still require implementation approval. Merge, installation and runtime rollout remain separate decisions.
 
+## This planning branch
+
+On 25 October, the owner accepted the current voice acknowledgement change and
+requested draft plans for resume and the panel. This branch owns the draft plan
+for saved-conversation resume in tasks/plan.md and tasks/todo.md. Implementation
+is not authorised. Remaining voice interruption, reconnect, failure and timing
+work stays in the existing voice plan; accepting the acknowledgement increment
+does not complete the full voice specification. The copied docking task list
+was complete before this branch replaced it, and remains in Git history.
+
 ## Purpose and terminology
 
 Make four everyday journeys dependable enough for the owner to keep using Voyager and learn what the product needs next. The application is a tracer-bullet build: a small working system whose code and boundaries we intend to retain and improve. A prototype is a disposable experiment used to resolve a specific uncertainty. This initiative adopted that terminology on 24 October. Earlier documents using "prototype" for the application retain their historical wording.

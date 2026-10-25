@@ -1,250 +1,160 @@
-# Plan: recoverable docking
+# Plan: return to a stopped conversation
 
-Status: D01-D05 passed independent review and packaged verification. D05 used one corrective build. Ready for owner review; owner acceptance and rollout remain separate decisions.
+Status: draft for owner review, 25 October 2026. Planning is authorised;
+implementation is not. Governing [specification](../SPEC-conversation-resume.md).
+The [task list](todo.md) owns completion. Follow [CONSTRAINTS.md](../CONSTRAINTS.md)
+and the installed application-proof reference.
 
-## Scope and outcome
+## What the owner will be able to do
 
-Implement only [docking-recovery](../SPEC-docking-recovery.md). The owner can dock onto a verified supported terminal, hear success only when docking is actually visible, understand a refusal, and recover the controls without restarting an agent.
+Select a previously managed, confirmed stopped Codex conversation and resume its
+saved history under the same Voyager identity. It starts idle. Opening a terminal
+and sending a new instruction remain separate actions. Unknown state never means
+stopped. Missing or unverifiable settings keep Resume unavailable with a reason.
 
-The four approved specifications remain unchanged. The initiative order remains docking, voice, resume, then panel. The [task list](todo.md) contains only the four docking slices. [Later-capability notes](future-capability-notes.md) preserve useful investigation from the superseded combined plan; they are reference material, not an active build queue. After docking is complete and reviewed, prepare the voice plan using what we learned.
+This planning branch starts from the merged docking baseline and the reviewed
+build rules. The voice integration must be incorporated before implementation so
+this branch uses the accepted shared desktop runner. The unfinished voice plan
+remains in its existing branch; this plan does not close or replace those tasks.
 
-## Build complete behaviors
+## Source findings and decisions
 
-Each slice includes the source changes, regression tests, current-behavior documentation and a real candidate check needed to demonstrate its outcome. Do not create separate database, API, UI or test phases. Small helpers may support a slice, but creating a helper is not a completed user outcome.
+The current worker starts a new thread and supplies permissive settings directly.
+It cannot be reused unchanged for Resume. The store currently links one worker
+launch to one logical session, so another run needs separate records.
 
-| Slice | What the owner can do afterward | Required contrast | Spec cases |
-|---|---|---|---|
-| D01 | See and understand why an unsupported or changed target cannot be docked. | An ordinary external terminal using a supported viewer still refuses; a verified managed target remains available. | D2, D3; eligibility part of D1 |
-| D02 | Complete a valid dock with the avatar visible and one audible confirmation. | Failed placement and late replies never create success feedback or leave an obsolete attachment. | D1, D4 |
-| D03 | Keep using Voyager when a docked target becomes covered or unavailable. | Losing a target restores the floating avatar while the agent and capture continue. | D5, D7 |
-| D04 | Open Voyager through Applications to recover both controls, independently of the terminal. | Recovery works after failed placement and remains visible through later refreshes. | D6, D7 |
+Use one transaction after schema version 3 to add runtime records keyed by
+Vessel ID and runtime generation, plus versioned nonsecret resume settings.
+A generation identifies one run of the same agent. Preserve original workers,
+launch inputs, operation receipts and events. Do not rewrite an old launch as a
+new one. Record each runtime attempt's operation, state and endpoint. Admit at
+most one current or unresolved attempt for a Vessel in the same transaction
+that records its immutable request. An interrupted attempt consumes its generation;
+it must not become eligible merely because its process cannot be found.
 
-D01 and D02 form the first review checkpoint. D03 and D04 form the second. Final verification repeats the combined docking cases and timing trials on the packaged candidate. It verifies the same capability; it is not a separate implementation project.
+Save verified effective settings when observed: working folder, model/provider,
+approval policy/reviewer, sandbox or named permission profile, and compatible
+workflow settings. Include their provider/version provenance. Store no credentials
+or copied conversation content. Legacy records get a stable baseline generation
+only after recorded stop evidence and absence of conflicts are verified. Otherwise
+keep them inspectable and explain why Resume is unavailable.
 
-A slice stays open until its own real journey is observed. A unit test or accepted service command alone is not enough. If the work grows, split by a smaller complete behavior, not by technical layer merely to meet a file-count target. Keep the current system working between slices.
+The live child process, not a stored PID, proves ownership. Reuse the existing
+credential issuer, which revokes the old credential before issuing another.
+Keep current valid assignments and Fleet placement. A new event-capture generation
+must reject delayed events from the previous connection.
 
-## Existing code to build on
+## Gate A: verify the provider before product implementation
 
-The implementation branch starts from the [approved documentation branch](https://github.com/isaacasamoah/voyagershellapp/pull/24). The following observations describe the starting code and guided the slices:
+The generated Codex 0.164.0 schema accepts a saved thread ID and returns effective
+settings. Its resume response includes an optional active permission profile.
+The [official app-server documentation](https://learn.chatgpt.com/docs/app-server)
+separates reading, resuming and starting work, and says a named permission profile
+must not be combined with the legacy sandbox field. Use the saved thread ID;
+never replace it with a new thread, fork, supplied history or rollout-path override.
 
-- [Binding](../desktop/src/binding.cjs) already verifies process start identity, executable and window matching. Extend this rather than building another discovery system.
-- [The desktop main process](../desktop/src/main.cjs) uses different hover/drop checks and can register an external agent during a drop. `placeAboveTerminal()` can hide the avatar and return, after which its caller can reach the success-sound path.
-- [The control connection](../desktop/src/control.cjs) already checks attachment acceptance and generation. Keep the service authoritative and reject late results from earlier attempts.
-- [Voice routing](../docs/voice.md) already separates private app voice, docked Codex voice and Bash. Docking changes must preserve those rules; private voice handoff improvements belong to the later capability.
-- The separate [desktop startup fix](https://github.com/isaacasamoah/voyagershellapp/pull/23) was open during the earlier inspection. Recheck before implementation. Do not silently integrate it. Candidate tests must pass `--ozone-platform=x11` when starting Electron and record the actual display backend.
+`excludeTurns` controls returned history. It does not establish idle behaviour.
+[Persisted goals can continue work](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex),
+so the first task must verify safe inspection and idle loading before any product
+resume path is built. If the installed provider cannot establish that a saved
+conversation will remain idle without changing its goal or permissions, report
+that limitation and stop for a design decision. Do not silently disable the goal.
 
-The missing incident trace remains a limitation. These source paths identify things to fix and test, not proof of every step in the original freeze incident.
+Record the exact settings mapping and transactional migration in docs/lifecycle.md
+at this checkpoint. The native settings/idle result is currently unproved. This
+plan is not an implementation-ready claim about that capability.
 
-## Implementation approach
+## Ordered work
 
-Use one eligibility check for hover and drop, based on existing service observations and verified process/window identity. It returns checking, ready or refused with a short reason. It must not depend on the future resume API. Dropping repeats the check and does not implicitly register an external agent.
+### R00: prove that a saved conversation can be reopened idle
 
-Give placement an explicit result: visibly placed, failed, or replaced by a newer attempt. Check that the accepted control attachment and visible placement belong to the same current attempt before requesting one success sound. Failed attempts release their attachment and restore the visible floating avatar. Preserve generation checks through every asynchronous step.
+Use a disposable provider conversation with a saved marker and non-default
+restrictive settings. Reopen the same thread, inspect returned settings, and
+observe that no turn starts until an explicit new instruction. Separately test a
+saved active goal and missing settings. Keep this bounded experiment with the
+application's maintained proof code; do not build a second application runner.
 
-When a docked target becomes unusable, undock and show the floating avatar. Keep the runtime and event capture running. Stop native voice through the existing coordinator when control ends, without automatically starting the private microphone. Uncertain voice state must not delay restoring visible controls.
+Acceptance: the thread identity and effective settings match; idle behaviour is
+observed; unsafe or unsupported cases refuse without a substitute conversation.
+Verification: compare against a deliberately changed setting or unexpected turn.
+Likely files: a focused native-provider journey, the existing provider fixture,
+and docs/lifecycle.md. Scope: small. Dependency: approved plan. Gate A must pass.
 
-Applications recovery uses the existing second-instance path but explicitly releases the attachment and reveals the panel and floating avatar on the current display. It must work independently of the terminal or keyboard shortcut and must not create an agent.
+### R01: resume one verified stopped conversation through the owner service API
 
-Do not change runtime ownership, rank policy or the existing `dock` request shape. Keep native window operations in their current platform boundary. No new dependencies, TypeScript migration, platform framework or general terminal adoption are included.
+Implement the smallest complete owner request through storage, the provider and
+live process ownership. Validate the observed generation before recording and
+starting the attempt. Load the same saved thread, obtain fresh credentials,
+connect capture and save the final receipt. Leave the terminal closed.
 
-## Verification for each slice
+Acceptance: identity/history/settings survive; one new idle runtime is owned;
+rejected or failed starts neither substitute a thread nor grant broader access.
+Verification: one focused service-boundary test for the successful journey and
+one named refusal test. Use the real provider result from R00 as corroboration.
+Likely source: src/store.rs, src/worker.rs, src/actions.rs and
+src/service/lifecycle.rs. Extend tests/service.rs and tests/worker_server.py only
+where needed. This is the widest slice; confirm a focused file map after R00.
+If it grows beyond one reviewable behaviour or roughly five files, revise this
+plan into smaller complete behaviours before coding rather than hiding the scope.
+Dependency: R00. Covers the core of R1, R5, R7 and R9.
 
-Follow the governing spec and the project's Definition of Done. Each new regression test must first detect the old behavior or a deliberately invalid test setup. Use small, bounded diagnostics without terminal contents, credentials or private reasoning.
+### R02: resume through the CLI, then open the same running agent
 
-Run from the selected worktree root. The task list records which checks have run for the selected increment.
+Expose the owner command with request ID and expected generation. Retrieve the
+saved operation result, then use the existing Open command independently. Verify
+saved context by sending a new marker query only after the idle check.
+
+Acceptance: the CLI reports the actual outcome; an Open failure leaves the agent
+running; retrying Open or closing/reopening its viewer starts no second runtime
+and submits no work. Verification: a named shared-runner `resume` journey using
+real Codex and a deliberately failed viewer opening.
+Likely files: src/bin/voyager.rs, desktop/test/native-proof.cjs, a small resume
+journey, desktop/scripts/package-linux.cjs and docs/lifecycle.md. Scope: medium.
+Dependency: R01. Covers R1 and R6. Private voice-tool exposure is deferred.
+
+### R03: retain the right result through disconnects, repeats and service restart
+
+Complete request deduplication, concurrent request exclusion and receipt recovery.
+A lost client reply does not change an operation the service can still complete.
+An interrupted service after a possible effect leaves uncertainty, not a retry.
+
+Acceptance: duplicate requests create one runtime; confirmed stopped records can
+resume after restart while uncertain records remain blocked; delayed old capture
+and stale credentials cannot act as the new runtime. Verification: separate,
+focused cases for each failure, not one long test that triggers all of them.
+Likely files: src/store.rs, src/service/lifecycle.rs, tests/service.rs,
+tests/worker_server.py and the shared resume journey. Scope: medium.
+Dependency: R02. Covers R2-R4 and R7-R9. Reuse authority operations; changes to
+rank policy need separate review rather than being added to this task unnoticed.
+
+## Checkpoints, proof and review
+
+After R00, review provider settings, idle evidence and the concrete storage/file
+map before authorising product code. After R01-R02, demonstrate the whole owner
+resume-and-open journey. After R03, run all R1-R9 cases on the selected package.
+No production restart, automatic restoration or installation is part of this plan.
+
+The planned real-app command, after the `resume` journey is implemented, is:
 
 ```sh
-npm --prefix desktop ci
-node desktop/node_modules/electron/install.js
-npm --prefix desktop run format:check
-npm --prefix desktop test
+VOYAGER_PROOF_APP=/absolute/candidate/voyagershell \
+  python3 desktop/test/run-native-proof.py /tmp/NEW_RESUME_STATE resume
 ```
 
-Build the candidate Rust binaries for real desktop checks. If Rust code changes, also run all required Rust checks:
+This command is not available in the current runner yet. Use the normal desktop
+session environment, preserve caller identity, record provider/build identities,
+and retain native receipts and timings without credentials. Do not run parallel
+pointer journeys on the same desktop. Test a selected app with its matching service.
 
-```sh
-cargo build --locked --bins
-cargo fmt --check
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
-```
+Each test must name one behaviour and explain the failure it detects. Share
+setup, keep files readable and avoid duplicate checks. Multiple assertions may
+prove that behaviour. Inventory all tests and temporary helpers against the
+production functions exercised, including normal regressions used for acceptance.
+No source padding, compressed test strings or dropped assertions can meet the cap.
 
-The task list names focused tests. Run the relevant full checks at each checkpoint. Code examples, test fixtures and real desktop evidence answer different questions; none substitutes for the others.
-
-## Real candidate checks
-
-Run only after approval of this plan and its test scope. Use the same selected revision for app and service, with fresh private state and a separate desktop profile. Record their executable paths and hashes, source revision, provider version, viewer and display backend. Do not test new desktop code against the installed service and call that candidate proof.
-
-An ordinary authorized owner terminal can use the commands below. A bound Voyager instance must keep its identity and use the scoped route in [development-tests.md](../docs/development-tests.md). If that runner cannot perform a required check, arrange the owner-run check rather than removing identity or using an owner RPC fallback.
-
-For a fresh owner-run trial:
-
-```sh
-VOYAGER_TRIAL_STATE=$(mktemp -d /tmp/voyager-dock-XXXXXX)
-export VOYAGER_TRIAL_STATE
-./target/debug/voyager --state "$VOYAGER_TRIAL_STATE" start
-VOYAGER_STATE="$VOYAGER_TRIAL_STATE" \
-  ./desktop/node_modules/electron/dist/electron --ozone-platform=x11 ./desktop --expanded
-```
-
-This launches only the candidate against its private state. The service can start its private provider runtime. Real tests can use provider resources, microphone and desktop focus; a private state directory does not isolate those resources. Create only disposable test Vessels and record their identities. An external terminal used as a refusal control must also be a disposable test window, not an unrelated working session.
-
-Each slice adds its real journey to the existing evidence as it is implemented. Extend the [polish proof](../desktop/test/polish-proof.cjs) for docking/placement observations and the [visibility proof](../desktop/test/visibility-proof.cjs) for independent recovery where useful. Do not postpone real checks until those harnesses cover every case.
-
-After the relevant harness extensions, run the existing polish entry point in a separate fresh trial for each supported viewer:
-
-```sh
-VOYAGER_STATE="$VOYAGER_TRIAL_STATE" VOYAGER_PROOF_TERMINAL=xterm \
-  ./desktop/node_modules/electron/dist/electron --ozone-platform=x11 ./desktop --expanded --proof-polish
-```
-
-Repeat with `VOYAGER_PROOF_TERMINAL=ghostty`. The existing proof alone does not establish the new requirements. Perform actual pointer drops, cover/minimise/close actions, workspace and monitor/scale changes, and audible checks. For Applications recovery, use a separately named temporary candidate launcher retaining the candidate executable and state directory. The installed launcher would test the wrong build. Remove only this temporary launcher after the test.
-
-Measure drop, service acceptance, confirmed visible placement, audible sound onset and completion using a monotonic clock. A scheduled Web Audio event does not prove the sound was heard. Use listening or recorded output to confirm it. Start measurement with D02 and recovery measurement with D03; do not add instrumentation only after behavior is called complete.
-
-At the final checkpoint, run 20 unobstructed docking trials and 20 recovery trials on the development Fedora desktop. At least 19 docking trials must produce audible feedback within two seconds of drop; at least 19 recovery trials must reveal both controls within one second. Every trial must recover correctly. Retain all slow and failed trials. Test both supported viewers and report the viewer used for each timing run and any unsupported combination. These are local acceptance targets, not cross-platform guarantees.
-
-Keep raw evidence outside Git. The test records the resources it creates and cleans them up through verified lifecycle actions. Inspect cleanup outcomes separately from the test verdict. Do not kill an unverified process, delete useful failure evidence or restart main to recover a candidate test.
-
-## Packaged docking check
-
-After the four slices pass, run:
-
-```sh
-npm --prefix desktop run package:linux
-```
-
-Run the resulting packaged executable and bundled Rust service against fresh private state, record their exact paths/hashes, and repeat the combined docking/recovery checks and approved timing trials. This confirms the package contains the tested behavior. Do not install it, enable startup, restart main or merge automatically. Those remain separate owner decisions.
-
-## Review checkpoints and risks
-
-| Checkpoint | Evidence to review |
-|---|---|
-| After D01-D02 | Unsupported targets refuse clearly; a valid target docks visibly with one heard sound; stale/failed attempts cannot report success. Review unit/service regressions and real candidate results. |
-| After D03-D04 | Target loss and Applications recovery leave controls usable, preserve the agent and capture, and keep voice routing correct. Review the full D1-D7 evidence, timing trials and packaged candidate results. |
-
-The main risks are late asynchronous replies, window-state uncertainty, sound being scheduled but unheard, and accidentally exercising the installed build. The generation checks, explicit placement results and real-candidate evidence address them. Ghostty's separate rendering freeze is not repaired by this work; report it if it prevents a required journey from passing rather than claiming a fix.
-
-The owner approved the capability behavior and timing targets. The owner authorized the first build trial after reviewing the vertical slices. After docking is complete and reviewed, prepare a separate active plan for voice. Retain later investigation as reference and use Git history to preserve this plan; do not overwrite unfinished work or invent an automatic archive policy.
-
-## D01 implementation notes
-
-The slice needs eight product/test files rather than the five-file estimate:
-shared identity validation, main-process drag handling, candidate HTML/CSS,
-the panel reason, binding tests, main-process regression tests and a native
-pointer proof. These belong to the same refusal journey. Existing control-socket
-code and service authorization remain unchanged. README and the owning desktop
-guide describe the behavior; the plan and task list retain their existing roles.
-
-The native proof exposed a lost-target case: closing the terminal during a drag
-cleared the remembered target, so dropping showed no reason. A failing regression
-test now guards the fix. An earlier run also reproduced the separate D02 case of
-accepted control and a sound request while the avatar was hidden. D01's valid-target
-comparison records that observation without treating it as placement acceptance.
-
-`npm ci` installs this Electron package without its binary. The explicit installed
-package's `install.js` supplies the pinned runtime. Native checks must verify that
-binary exists before launch. Do not substitute the installed main app.
-
-## Authorized completion run
-
-On 24 October 2026 the owner requested the missing live external Codex test,
-then a fresh-context sub-agent review using the review skill for every slice.
-Continue through D01-D04 in dependency order without the intermediate human
-checkpoint. Keep checkpoint evidence for the final owner review. Each slice may
-have one corrective build after review. Re-review that correction; if required
-issues remain, report them and stop rather than starting another correction or
-building dependent slices. This instruction does not authorize merging,
-installation, main-service restart or release. The final review remains human-owned.
-
-## D02 implementation notes
-
-D02 uses a small placement module so native stack checks and explicit outcomes
-can be tested without adding another state framework to the main process.
-The complete behavior also changes binding validation and control response
-checks, with their existing tests. Native proof and output recording are test
-code; no audio capture is added to the product. This exceeds the five-file
-estimate because the same accepted-to-visible journey crosses those boundaries.
-The in-memory attempt records are bounded to 32 and contain no terminal content.
-
-The broader polish proof now resolves native windows by verified process identity,
-because Codex can change its title after launch. It activates the intended window
-before the unobstructed docking comparison. This does not change product discovery
-or permit docking onto external agents.
-
-## D03 implementation notes
-
-The real workspace trial required a small change in the existing Rust X11 probe:
-a mapped window is not necessarily on the current workspace. Workspace visibility
-stays in that native boundary. Main-process refresh consumes its result and the
-explicit placement result, releasing control and showing floating controls when
-the target is lost. Electron display-change events also invalidate docking.
-
-The native recovery helper and bounded monitor trial are test code. They extend
-the existing polish journey without a new test service or product framework.
-Their file scope exceeds the initial estimate because actual workspace and
-monitor behavior could not be established by renderer fixtures alone.
-
-## D04 implementation notes
-
-Applications and keyboard recovery share one operation that releases control,
-clears drag state and restores the existing controls. The requested panel anchor
-is explicit so asynchronous native geometry cannot send the panel back to the
-previous display. A small GNOME launch-context selector handles the stock
-Applications grid, whose primary-monitor position is independent of stale
-XWayland pointer observations. Keyboard recovery retains pointer-based placement.
-Custom desktop extensions and other platforms need their own verification.
-
-The final proof includes actual grid selection and repeated launches of that same
-temporary entry. Keyboard verification uses a separate GNOME desktop and actual
-XTest keys because the installed app already owns Ctrl+Alt+V. The isolated
-session initializes real workspace state before launching the candidate; it does
-not inject fake window metadata. The fresh-session missing-metadata failure is
-retained as a limitation for review.
-
-Native pointer scaling, packaged harness loading, audio timing batches and
-candidate hashing are test support for the same user outcome. Their file scope
-exceeds the initial estimate. No installed launcher, active shortcut or main
-service is changed.
-
-## Final candidate handoff
-
-All four slices used one corrective product build and passed independent
-re-review. The task list records technical completion and retains the owner
-acceptance item. No later capability is active. The reviewed package contains
-the same product source as the final documentation-only handoff revision.
-
-The final Ghostty polish test required an unobstructed Bash target and a visible
-panel for its final screenshot. Its original automatic sequence can cover the
-positive-case target with its own recovered panel. That expected refusal and the
-operator-assisted positive comparison are both retained. Improving that optional
-fixture is separate from product review. Voice teardown uncertainty remains
-visible in the evidence and is not represented as confirmed closure.
-
-## D05: restore pre-dock floating positions
-
-Isaac verified docking, undocking and external refusal, then requested that
-minimising or closing a docked terminal restore the controls to their earlier
-floating positions. Keep one in-memory snapshot for the current dock sequence.
-Capture it before a drag moves the avatar, or before a direct dock. Carry it
-through a target-to-target move. Automatic recovery uses the snapshot and the
-existing display clamps. Explicit Applications recovery retains its current-display
-behavior. This adds no persisted layout, process action or permission change.
-
-Verify a failing regression before implementation, including a target transfer,
-removed-display fallback, and a known-different deliberate repositioning. Then
-run isolated native minimise/close trials with both viewers and verify the same
-managed runtime survives. Independently review this refinement and use at most
-one corrective product build if required. Keep the owner's running trial intact.
-
-The D05 reviewer found an overlapping display-event race. The single corrective
-build retains the pending origin until restoration completes or a new explicit
-intent replaces it. The added regression first failed, then passed; a contrasting
-new-position test confirms that a deliberate move supersedes the older recovery.
-
-## Owner acceptance
-
-On 24 October 2026 the owner confirmed the updated packaged trial works and
-authorized merging docking to main, then building voice handoff. D01-D05 are
-complete. Preserve this completed plan in Git before replacing the active plan
-with the approved next module. Runtime installation and restart are separate.
+Rust changes require cargo fmt --check, cargo test --locked, and
+cargo clippy --locked --all-targets -- -D warnings. Desktop changes require the
+repository's desktop tests and format check. Build binaries before native proof.
+Use a fresh independent review for each completed behaviour; propose the same
+one-correction-and-re-review limit used in the voice trial. Do not start building
+from this draft without owner approval.
