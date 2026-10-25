@@ -104,6 +104,7 @@ impl Worker {
         let server = socket.to_string_lossy().into_owned();
         let cwd = cwd.to_owned();
         let name = name.map(str::to_owned);
+        let provider_executable = executable.to_owned();
         let (sender, ready) = std::sync::mpsc::channel();
         thread::spawn(move || {
             let result = (|| -> Result<(Codex, Value)> {
@@ -114,7 +115,49 @@ impl Worker {
                 }
                 let mut connection = Codex::connect(&socket)?;
                 let reply=connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?;
-                let metadata = reply["thread"].clone();
+                let mut metadata = reply["thread"].clone();
+                let keys = [
+                    "model",
+                    "modelProvider",
+                    "cwd",
+                    "approvalPolicy",
+                    "approvalsReviewer",
+                    "sandbox",
+                    "activePermissionProfile",
+                    "runtimeWorkspaceRoots",
+                    "instructionSources",
+                    "reasoningEffort",
+                ];
+                let strings = [
+                    "model",
+                    "modelProvider",
+                    "cwd",
+                    "approvalPolicy",
+                    "approvalsReviewer",
+                ];
+                let valid = strings
+                    .iter()
+                    .all(|k| reply[*k].as_str().is_some_and(|v| !v.is_empty()))
+                    && reply["sandbox"].is_object()
+                    && reply["activePermissionProfile"].is_null()
+                    && ["runtimeWorkspaceRoots", "instructionSources"]
+                        .iter()
+                        .all(|k| {
+                            reply[*k]
+                                .as_array()
+                                .is_some_and(|v| v.iter().all(Value::is_string))
+                        })
+                    && (reply["reasoningEffort"].is_null() || reply["reasoningEffort"].is_string());
+                if valid
+                    && keys.iter().all(|k| reply.get(*k).is_some())
+                    && connection.user_agent.is_some()
+                {
+                    let effective: serde_json::Map<String, Value> = keys
+                        .into_iter()
+                        .map(|k| (k.to_owned(), reply[k].clone()))
+                        .collect();
+                    metadata["resume_settings"] = json!({"version":1,"provider_executable":provider_executable,"provider_version":connection.user_agent,"effective":effective});
+                }
                 if let Some(name) = name {
                     connection.rpc(
                         "thread/name/set",
