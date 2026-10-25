@@ -89,4 +89,102 @@ function historyReader(rpc) {
     return { ...page, events: page.events.filter((event) => event.session_id === id) };
   };
 }
-module.exports = { instanceCreator, historyReader };
+function instanceResumer(rpc) {
+  const attempts = new Map();
+  return (input) => {
+    const { id, generation, terminal, request } = input || {};
+    if (
+      typeof id !== 'string' ||
+      !id ||
+      !Number.isSafeInteger(generation) ||
+      generation < 0 ||
+      !['ghostty', 'xterm'].includes(terminal) ||
+      typeof request !== 'string' ||
+      !request ||
+      Buffer.byteLength(request) > 128
+    )
+      return Promise.reject(
+        Error('Choose a saved conversation, its observed generation and a terminal viewer.'),
+      );
+    let attempt = attempts.get(id);
+    if (!attempt) {
+      attempt = { request, generation, terminal, submitted: false, busy: null };
+      attempts.set(id, attempt);
+    }
+    if (attempt.busy) return attempt.busy;
+    attempt.busy = (async () => {
+      let receipt;
+      if (!attempt.submitted) {
+        const record = (await rpc('list', '--include-removed')).find((row) => row.id === id);
+        if (record?.resume?.state === 'pending' && record.resume.request_id) {
+          attempt.request = record.resume.request_id;
+          attempt.submitted = true;
+        } else {
+          if (record?.resume?.state !== 'eligible') {
+            attempts.delete(id);
+            throw Error(record?.resume?.reason || 'This conversation is not available to resume.');
+          }
+          attempt.submitted = true;
+          try {
+            receipt = await rpc('resume-instance', id, attempt.request, String(attempt.generation));
+          } catch (error) {
+            attempt.error = error.message;
+          }
+        }
+      }
+      if (!receipt) {
+        try {
+          receipt = await rpc('operation', attempt.request);
+        } catch {
+          throw Error(
+            `Resume could not be confirmed. No retry was sent. Request ${attempt.request}. ${attempt.error || ''}`,
+          );
+        }
+      }
+      const deadline = Date.now() + 23000;
+      while (receipt.state === 'pending' && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        receipt = await rpc('operation', attempt.request);
+      }
+      if (receipt.state === 'pending') return { pending: true, request_id: attempt.request };
+      if (receipt.state !== 'completed') {
+        if (receipt.state !== 'uncertain') attempts.delete(id);
+        throw Error(
+          receipt.error || 'Resume has no confirmed successful outcome. Inspect its saved state.',
+        );
+      }
+      const current = (await rpc('list', '--include-removed')).find((row) => row.id === id);
+      if (
+        current?.lifecycle?.runtime !== 'running' ||
+        current.lifecycle.runtime_generation !== receipt.runtime_generation
+      )
+        throw Error(
+          'The earlier Resume finished, but its current runtime cannot be confirmed. No terminal was opened.',
+        );
+      attempt.openRequest ||= randomUUID();
+      try {
+        await rpc('open', id, attempt.terminal, '--request-id', attempt.openRequest);
+      } catch (error) {
+        const opening = await rpc('operation', attempt.openRequest).catch(() => null);
+        if (opening?.state === 'completed') {
+          attempts.delete(id);
+          return { session: id, runtime_generation: receipt.runtime_generation, opened: true };
+        }
+        const uncertain = !opening || ['pending', 'uncertain'].includes(opening.state);
+        if (!uncertain) attempts.delete(id);
+        return {
+          session: id,
+          runtime_generation: receipt.runtime_generation,
+          open_request_id: uncertain ? attempt.openRequest : null,
+          error: `Conversation resumed, but the terminal could not open. ${error.message} Use Open viewer for this running agent.`,
+        };
+      }
+      attempts.delete(id);
+      return { session: id, runtime_generation: receipt.runtime_generation, opened: true };
+    })().finally(() => {
+      attempt.busy = null;
+    });
+    return attempt.busy;
+  };
+}
+module.exports = { instanceCreator, historyReader, instanceResumer };

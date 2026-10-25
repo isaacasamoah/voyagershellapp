@@ -70,6 +70,7 @@ let busy = false;
 const dockAttempts = [];
 const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
+const resumeInstance = require('./instances.cjs').instanceResumer(rpc);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let dockOrigin = null;
@@ -1057,6 +1058,15 @@ app.whenReady().then(async () => {
     conversation.voiceActivity(speaker, active),
   );
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('resume-instance', [panelWin], async (input) => {
+    const polling = setInterval(refresh, 100);
+    try {
+      return await resumeInstance(input);
+    } finally {
+      clearInterval(polling);
+      await refresh();
+    }
+  });
   handle('instance-history', [panelWin], require('./instances.cjs').historyReader(rpc));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
@@ -1142,6 +1152,12 @@ app.whenReady().then(async () => {
       await refresh();
       await surface([id], true);
       return result;
+    } catch (error) {
+      const receipt = await rpc('operation', request).catch(() => null);
+      return {
+        error: error.message,
+        retry_with_new_request: ['partial', 'failed', 'cancelled'].includes(receipt?.state),
+      };
     } finally {
       await refresh();
     }

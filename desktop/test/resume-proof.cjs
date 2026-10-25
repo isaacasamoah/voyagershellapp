@@ -5,7 +5,11 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const exec = promisify(execFile);
 
-exports.run = async ({ rpc, stateDir, refresh, getState }, { wait, delay }) => {
+exports.run = async (
+  { rpc, stateDir, refresh, getState, panelWin, setExpanded },
+  { wait, delay, pageClick },
+) => {
+  const panel = process.env.VOYAGER_PROOF_JOURNEY === 'panel-resume';
   const cwd = path.join(stateDir, 'resume-project');
   const moved = cwd + '-hidden';
   await fs.mkdir(cwd);
@@ -72,14 +76,41 @@ exports.run = async ({ rpc, stateDir, refresh, getState }, { wait, delay }) => {
     await wait(row, (r) => r.window === 'closed');
     const before = (await events()).filter((e) => e.type === 'turn.started').length;
     const start = performance.now();
-    const resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    let resumed;
+    if (panel) {
+      await setExpanded(true, { x: 180, y: 100 });
+      await refresh();
+      await pageClick(panelWin, 'previous-toggle');
+      await panelWin.webContents.executeJavaScript(`
+        window.resumeControl = document.getElementById('resume-${id}');
+        window.resumeLabels = [];
+        new MutationObserver(() => {
+          const row = document.querySelector('#sessions [data-key="${id}"]');
+          if (row) window.resumeLabels.push(row.getAttribute('aria-label'));
+        }).observe(document.getElementById('sessions'), {childList:true,subtree:true});
+      `);
+      await pageClick(panelWin, `resume-${id}`);
+      const request = await panelWin.webContents.executeJavaScript(
+        'window.resumeControl.dataset.request',
+      );
+      resumed = await wait(
+        () => rpc('operation', request),
+        (r) => r.state === 'completed',
+      );
+      await wait(row, (r) => r.window === 'open');
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          "window.resumeLabels.some(label => label.includes('Resuming'))",
+        ),
+      );
+    } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
     const readyMs = performance.now() - start;
     assert.equal(resumed.state, 'completed');
     assert.equal(resumed.runtime_generation, 2);
     assert.notEqual(resumed.runtime_pid, created.runtime_pid);
     assert.equal(resumed.native_thread_id, original.native_thread_id);
     assert.equal(resumed.window, 'closed');
-    assert.deepEqual(await rpc('operation', 'resume-idle'), resumed);
+    if (!panel) assert.deepEqual(await rpc('operation', 'resume-idle'), resumed);
     await delay(5000);
     assert.equal((await events()).filter((e) => e.type === 'turn.started').length, before);
     const recalled = await ask(
@@ -108,17 +139,52 @@ exports.run = async ({ rpc, stateDir, refresh, getState }, { wait, delay }) => {
     assert.equal(bound.session_id, id);
     const current = await row();
     const turns = (await events()).filter((e) => e.type === 'turn.started').length;
+    if (panel) {
+      await rpc('background', id);
+      await refresh();
+    }
     await fs.rename(cwd, moved);
     hidden = true;
-    await assert.rejects(rpc('open', id, 'xterm', '--request-id', 'resume-failed-open'));
-    const failedOpen = await rpc('operation', 'resume-failed-open');
+    let failedRequest = 'resume-failed-open';
+    if (panel) {
+      await pageClick(panelWin, `menu-${id}`);
+      await panelWin.webContents.executeJavaScript(
+        `window.openControl = document.getElementById('open-${id}')`,
+      );
+      await pageClick(panelWin, `open-${id}`);
+      await wait(() =>
+        panelWin.webContents.executeJavaScript(
+          "document.getElementById('instance-error').textContent",
+        ),
+      );
+      failedRequest = await panelWin.webContents.executeJavaScript(
+        'window.openControl.dataset.request',
+      );
+    } else await assert.rejects(rpc('open', id, 'xterm', '--request-id', failedRequest));
+    const failedOpen = await rpc('operation', failedRequest);
     assert.equal(failedOpen.state, 'partial');
     assert.equal(failedOpen.runtime, 'running');
     assert.equal((await row()).lifecycle.runtime_generation, 2);
     await fs.rename(moved, cwd);
     hidden = false;
     const openStart = performance.now();
-    const opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');
+    let opened;
+    if (panel) {
+      await wait(
+        () =>
+          panelWin.webContents.executeJavaScript(`document.getElementById('open-${id}').disabled`),
+        (disabled) => !disabled,
+      );
+      await pageClick(panelWin, `open-${id}`);
+      const request = await panelWin.webContents.executeJavaScript(
+        'window.openControl.dataset.request',
+      );
+      assert.notEqual(request, failedRequest);
+      opened = await wait(
+        () => rpc('operation', request),
+        (r) => r.state === 'completed',
+      );
+    } else opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');
     const attachment = await attached(opened, current.server);
     const attachedMs = performance.now() - openStart;
     await exec('xdotool', ['windowclose', String(opened.window_id)]);
@@ -128,6 +194,11 @@ exports.run = async ({ rpc, stateDir, refresh, getState }, { wait, delay }) => {
     await delay(1000);
     assert.equal((await rpc('attach-info', id)).pid, resumed.runtime_pid);
     assert.equal((await events()).filter((e) => e.type === 'turn.started').length, turns);
+    if (panel)
+      await fs.writeFile(
+        path.join(stateDir, 'panel-resume.png'),
+        (await panelWin.webContents.capturePage()).toPNG(),
+      );
     return {
       id,
       thread: resumed.native_thread_id,

@@ -207,11 +207,13 @@ function renderState(value) {
           ],
           s.terminal || 'ghostty',
         );
-        addAction(
+        viewer.id = `open-viewer-${s.id}`;
+        const open = addAction(
           'Open viewer',
           (request) => api.openInstance(s.id, viewer.value, request),
           () => [viewer.value],
         );
+        open.id = `open-${s.id}`;
       }
       addAction('Stop', (request) => api.stopInstance(s.id, request));
     }
@@ -230,6 +232,63 @@ function renderState(value) {
     }
     if (value.serviceError)
       for (const button of row.querySelectorAll('button')) button.disabled = true;
+    if (s.resume?.state === 'eligible' || s.resume?.state === 'pending') {
+      const controls = element('div', '', 'resume-controls');
+      const viewer = element('select', '');
+      viewer.id = `resume-viewer-${s.id}`;
+      viewer.setAttribute('aria-label', 'Terminal viewer after Resume');
+      for (const [value, label] of [
+        ['xterm', 'xterm'],
+        ['ghostty', 'Ghostty'],
+      ]) {
+        const option = element('option', label);
+        option.value = value;
+        viewer.append(option);
+      }
+      viewer.value = s.terminal || 'xterm';
+      const resume = element(
+        'button',
+        s.resume.state === 'pending' ? 'Check Resume' : 'Resume conversation',
+      );
+      resume.id = `resume-${s.id}`;
+      resume.disabled = Boolean(value.serviceError);
+      resume.onclick = async () => {
+        const key = JSON.stringify([s.id, 'Resume', s.lifecycle.runtime_generation]);
+        if (!pendingActions.has(key))
+          pendingActions.set(key, s.resume.request_id || crypto.randomUUID());
+        resume.disabled = true;
+        resume.dataset.request = pendingActions.get(key);
+        try {
+          const result = await api.resumeInstance({
+            id: s.id,
+            generation: s.lifecycle.runtime_generation,
+            terminal: viewer.value,
+            request: pendingActions.get(key),
+          });
+          if (result?.open_request_id)
+            pendingActions.set(
+              JSON.stringify([s.id, 'Open viewer', viewer.value]),
+              result.open_request_id,
+            );
+          if (result?.error) throw Error(result.error);
+          if (result?.pending)
+            showError(
+              'Resume is still in progress. Check its status without starting another request.',
+            );
+          else {
+            pendingActions.delete(key);
+            showError('');
+          }
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          resume.disabled = Boolean(lastState?.serviceError);
+        }
+      };
+      controls.append(viewer, resume);
+      row.append(controls);
+    } else if (s.resume?.reason)
+      row.append(element('p', s.resume.reason.replace(/^[a-z_]+:\s*/, ''), 'agent-reason'));
     history.decorate(row, s);
     return row;
   }
@@ -352,9 +411,13 @@ function actionMenu(name, key) {
       if (!pendingActions.has(id)) pendingActions.set(id, crypto.randomUUID());
       for (const node of actions.querySelectorAll('button')) node.disabled = true;
       button.textContent = 'Working…';
+      button.dataset.request = pendingActions.get(id);
       try {
         const result = await call(pendingActions.get(id));
-        if (result?.error) throw Error(result.error);
+        if (result?.error) {
+          if (result.retry_with_new_request) pendingActions.delete(id);
+          throw Error(result.error);
+        }
         pendingActions.delete(id);
         if (close && actions.isConnected) actions.hidePopover();
         showError('');
@@ -367,6 +430,7 @@ function actionMenu(name, key) {
       }
     };
     actions.append(button);
+    return button;
   }
   menu.append(summary, actions);
   return { menu, actions, addAction };
