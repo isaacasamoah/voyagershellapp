@@ -1287,13 +1287,14 @@ app.whenReady().then(async () => {
   )
     console.error('Ctrl+Alt+V is unavailable; hover and pull the astronaut');
   if (process.argv.includes('--proof-conversation')) {
-    require('./conversation-proof.cjs')
+    require('../test/native-proof.cjs')
       .run({
         panelWin,
         avatarWin,
         conversation,
         rpc,
         directory: process.env.VOYAGER_CONVERSATION_PROOF_DIR,
+        journey: 'conversation',
         screen,
       })
       .catch(async (error) => {
@@ -1308,6 +1309,7 @@ app.whenReady().then(async () => {
   timer = setInterval(refresh, 750);
   dragTimer = setInterval(updatePointer, 32);
   if (
+    process.argv.includes('--proof-native') ||
     process.argv.includes('--proof-docking') ||
     process.argv.includes('--proof-fleet-creation') ||
     process.argv.includes('--proof-visibility') ||
@@ -1324,28 +1326,32 @@ app.whenReady().then(async () => {
     require(
       path.join(
         proofDirectory,
-        process.argv.includes('--proof-fleet-creation')
-          ? 'fleet-creation-proof.cjs'
-          : process.argv.includes('--proof-visibility')
-            ? 'visibility-proof.cjs'
-            : process.argv.includes('--proof-polish')
-              ? 'polish-proof.cjs'
-              : process.argv.includes('--proof-fleets')
-                ? 'fleets-proof.cjs'
-                : process.argv.includes('--proof-authority')
-                  ? 'authority-proof.cjs'
-                  : process.argv.includes('--proof-lifecycle')
-                    ? 'lifecycle-proof.cjs'
-                    : process.argv.includes('--proof-control')
-                      ? 'control-proof.cjs'
-                      : process.argv.includes('--proof-registration')
-                        ? 'registration-proof.cjs'
-                        : process.argv.includes('--proof-docking')
-                          ? 'docking-proof.cjs'
-                          : 'live-proof.cjs',
+        process.argv.includes('--proof-native')
+          ? 'native-proof.cjs'
+          : process.argv.includes('--proof-fleet-creation')
+            ? 'fleet-creation-proof.cjs'
+            : process.argv.includes('--proof-visibility')
+              ? 'visibility-proof.cjs'
+              : process.argv.includes('--proof-polish')
+                ? 'polish-proof.cjs'
+                : process.argv.includes('--proof-fleets')
+                  ? 'fleets-proof.cjs'
+                  : process.argv.includes('--proof-authority')
+                    ? 'authority-proof.cjs'
+                    : process.argv.includes('--proof-lifecycle')
+                      ? 'lifecycle-proof.cjs'
+                      : process.argv.includes('--proof-control')
+                        ? 'control-proof.cjs'
+                        : process.argv.includes('--proof-registration')
+                          ? 'registration-proof.cjs'
+                          : process.argv.includes('--proof-docking')
+                            ? 'docking-proof.cjs'
+                            : 'live-proof.cjs',
       ),
     )
       .run({
+        conversation,
+        screen,
         avatarWin,
         panelWin,
         candidateWin,
@@ -1378,6 +1384,28 @@ app.whenReady().then(async () => {
       })
       .catch(async (error) => {
         console.error(error);
+        if (process.argv.includes('--proof-native')) {
+          try {
+            await fs.writeFile(
+              path.join(stateDir, 'native-proof.json'),
+              JSON.stringify(
+                {
+                  journey: process.env.VOYAGER_PROOF_JOURNEY,
+                  verdict: 'rework',
+                  error: error.stack,
+                  candidate: { app: process.execPath, service: binary, packaged: app.isPackaged },
+                },
+                null,
+                2,
+              ),
+            );
+          } finally {
+            process.exitCode = 1;
+            app.quit();
+          }
+          return;
+        }
+
         const file = path.join(
           stateDir,
           process.argv.includes('--proof-fleet-creation')

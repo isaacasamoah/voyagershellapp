@@ -1,7 +1,7 @@
 # Spec: voice acknowledgement and result handoff
 
-Module id: `voice-handoff`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
-The [capability map](SPEC.md) is approved. The owner approved this specification and requested planning. The implementation plan still requires review.
+Module id: `voice-handoff`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner authorized the approved voice build after docking merged on 25 October 2026.
+The [capability map](SPEC.md) is approved. The owner approved this specification and requested planning. The approved implementation plan and task list now cover this module.
 
 ## Objective and scope
 

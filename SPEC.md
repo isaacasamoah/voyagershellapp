@@ -1,14 +1,16 @@
 # Tracer-bullet usability specification index
 
 Project: VoyagerShellApp. Updated 24 October 2026.
-State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. Resume and panel still require implementation approval. Merge, installation and runtime rollout remain separate decisions.
+State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. The owner approved building resume and panel in dependency order on 25 October 2026, with independent review and bounded correction passes. Merge, installation and runtime rollout remain separate decisions.
 
-## This planning branch
+## This build branch
 
 On 25 October, the owner accepted the current voice acknowledgement change and
-requested draft plans for resume and the panel. This branch owns the draft plan
-for the current-work panel in tasks/plan.md and tasks/todo.md. Implementation
-is not authorised. Remaining voice interruption, reconnect, failure and timing
+requested draft plans for resume and the panel. The resume module passed R00-R03 review and selected-package verification.
+This branch owns the approved current-work panel plan in tasks/plan.md and
+tasks/todo.md, built after that dependency. The owner approved implementation
+with independent review and bounded correction passes. Merge and installation
+remain separate decisions. Remaining voice interruption, reconnect, failure and timing
 work stays in the existing voice plan; accepting the acknowledgement increment
 does not complete the full voice specification. The copied docking task list
 was complete before this branch replaced it, and remains in Git history.
@@ -58,7 +60,7 @@ Each module specification defines its successful journey, a deliberately differe
 
 Each specification owns its behaviour, contracts and acceptance cases. The owner
 approved the four specifications. This branch's [draft plan](tasks/plan.md) and
-[task list](tasks/todo.md) cover `current-work-panel` for review only. Docking is
+[task list](tasks/todo.md) cover `conversation-resume` for review only. Docking is
 accepted and merged. The owner has accepted the current voice acknowledgement
 increment and requested planning for resume and the panel. Remaining voice work
 stays open in its existing task list. No resume or panel implementation has begun.

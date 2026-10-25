@@ -1,6 +1,8 @@
 # Tasks: a panel focused on current work
 
-Status: planning draft, 25 October 2026. The owner requested planning only.
+Status: owner approved build, 25 October 2026. Resume R00-R03 passed review.
+Use one independent review, at most one corrective pass and another review per
+increment. Merge and installation remain separate decisions.
 The [plan](plan.md) owns design and commands; the
 [specification](../SPEC-current-work-panel.md) owns P1-P9. Old docking tasks remain
 in Git history; this does not overwrite or complete the voice task list.

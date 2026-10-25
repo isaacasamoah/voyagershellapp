@@ -14,6 +14,20 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod settings;
+pub use settings::Settings;
+
+pub struct Resume {
+    pub session: String,
+    pub native: String,
+    pub generation: i64,
+    pub settings: Settings,
+}
+pub enum ThreadStart {
+    New(Option<String>),
+    Resume(Resume),
+}
+
 struct Process(Child);
 impl Process {
     fn stop(&mut self) -> Result<ExitStatus> {
@@ -48,6 +62,7 @@ pub struct Worker {
     pub executable: String,
     pub alive: bool,
     pub generation: i64,
+    stopping: bool,
 }
 
 impl Worker {
@@ -57,7 +72,7 @@ impl Worker {
         executable: &str,
         launch: &str,
         cwd: &str,
-        name: Option<&str>,
+        mode: ThreadStart,
         context: &Path,
     ) -> Result<StartingWorker> {
         let dir = state.join(format!("w-{}", uuid::Uuid::new_v4().simple()));
@@ -67,13 +82,21 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
+        let (sandbox, approval) = match &mode {
+            ThreadStart::New(_) => ("danger-full-access", "never"),
+            ThreadStart::Resume(_) => ("read-only", "on-request"),
+        };
+        let resume_identity = match &mode {
+            ThreadStart::Resume(r) => Some((r.session.clone(), r.generation)),
+            _ => None,
+        };
         let child = Command::new(executable)
             .args([
                 "app-server",
                 "-c",
-                "sandbox_mode=\"danger-full-access\"",
+                &format!("sandbox_mode={}", json!(sandbox)),
                 "-c",
-                "approval_policy=\"never\"",
+                &format!("approval_policy={}", json!(approval)),
                 "--listen",
                 &format!("unix://{}", socket.display()),
             ])
@@ -103,9 +126,10 @@ impl Worker {
             .context("start worker Codex server")?;
         let server = socket.to_string_lossy().into_owned();
         let cwd = cwd.to_owned();
-        let name = name.map(str::to_owned);
+        let provider_executable = executable.to_owned();
         let (sender, ready) = std::sync::mpsc::channel();
         thread::spawn(move || {
+            let mut load_requested = false;
             let result = (|| -> Result<(Codex, Value)> {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 while !socket.exists() {
@@ -113,8 +137,30 @@ impl Worker {
                     thread::sleep(Duration::from_millis(20));
                 }
                 let mut connection = Codex::connect(&socket)?;
-                let reply=connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?;
-                let metadata = reply["thread"].clone();
+                let (reply, name) = match mode {
+                    ThreadStart::New(name) => (connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?,name),
+                    ThreadStart::Resume(resume) => {
+                        resume.settings.verify_before_load(&mut connection)?;
+                        let goal = connection.rpc("thread/goal/get",json!({"threadId":resume.native})).context("provider_failed: Codex could not inspect the saved conversation before resume")?;
+                        ensure!(goal.get("goal").is_some_and(Value::is_null),"settings_unavailable: this conversation has a goal or its goal state cannot be verified; it was not loaded");
+                        let params = json!({"threadId":resume.native,"excludeTurns":true});
+                        load_requested = true;
+                        let reply = connection.rpc("thread/resume",params).context("provider_failed: Codex could not reopen this conversation with its saved settings")?;
+                        ensure!(reply["thread"]["id"] == resume.native,"thread_unavailable: provider returned another conversation");
+                        ensure!(reply["thread"]["status"]["type"] == "idle","outcome_unknown: resumed conversation did not report idle");
+                        resume.settings.verify_after_load(&mut connection,&reply,&provider_executable)?;
+                        let current = connection.rpc("thread/read",json!({"threadId":resume.native,"includeTurns":false}))?;
+                        ensure!(current["thread"]["status"]["type"] == "idle" && !connection.pending.iter().any(|e| matches!(e["method"].as_str(),Some("turn/started"|"item/started"))),"outcome_unknown: unexpected work started during resume");
+                        connection.pending.clear();
+                        (reply,None)
+                    }
+                };
+                let mut metadata = reply["thread"].clone();
+                if let Ok(snapshot) =
+                    Settings::capture(&mut connection, &reply, &provider_executable)
+                {
+                    metadata["resume_settings"] = snapshot;
+                }
                 if let Some(name) = name {
                     connection.rpc(
                         "thread/name/set",
@@ -123,11 +169,14 @@ impl Worker {
                 }
                 Ok((connection, metadata))
             })();
-            let _ = sender.send(result);
+            let _ = sender.send((load_requested, result));
         });
         Ok(StartingWorker {
             process: Some(Process(child)),
             ready,
+            resume: resume_identity,
+            load_requested: None,
+            cleanup: None,
             launch: launch.into(),
             server,
             executable: executable.into(),
@@ -151,6 +200,19 @@ impl Worker {
     }
 
     fn persist(&self, store: &Store, message: Value) -> Result<()> {
+        if message["method"] == "thread/settings/updated"
+            && message["params"]["threadId"] == self.native
+            && store.generation(&self.session)? == Some(self.generation)
+        {
+            if let Some(saved) = store.resume_record(&self.session)? {
+                let updated = Settings::refresh(
+                    &saved["settings"],
+                    &message["params"]["threadSettings"],
+                    &self.executable,
+                );
+                store.save_resume_settings(&self.launch, updated.as_ref().ok())?;
+            }
+        }
         if let Some(event) = events::normalize(&message) {
             if event.thread == self.native {
                 store.record(&self.session, self.generation, event)?;
@@ -173,6 +235,9 @@ impl Worker {
                 Ok(Some(event)) => self.persist(store, event)?,
                 Ok(None) => (),
                 Err(_) => {
+                    if !self.stopping {
+                        store.save_resume_settings(&self.launch, None)?;
+                    }
                     store.local(
                         &self.session,
                         "capture.gap",
@@ -184,6 +249,9 @@ impl Worker {
         }
         if self.alive {
             if let Some(exit) = self.process.0.try_wait()? {
+                if !self.stopping {
+                    store.save_resume_settings(&self.launch, None)?;
+                }
                 self.alive = false;
                 self.connection = None;
                 store.worker_state(&self.launch, "exited")?;
@@ -198,6 +266,7 @@ impl Worker {
     }
 
     pub fn request_stop(&mut self, force: bool) -> Result<()> {
+        self.stopping = true;
         if self.process.0.try_wait()?.is_none() {
             killpg(
                 Pid::from_raw(self.process.0.id() as i32),
@@ -221,16 +290,55 @@ impl Worker {
     }
 }
 
+struct Cleanup {
+    error: String,
+    force_at: Instant,
+    forced: bool,
+}
 pub struct StartingWorker {
     process: Option<Process>,
-    ready: std::sync::mpsc::Receiver<Result<(Codex, Value)>>,
+    ready: std::sync::mpsc::Receiver<(bool, Result<(Codex, Value)>)>,
+    pub load_requested: Option<bool>,
+    cleanup: Option<Cleanup>,
     launch: String,
     server: String,
     executable: String,
+    resume: Option<(String, i64)>,
     deadline: Instant,
 }
 
 impl StartingWorker {
+    pub fn begin_cleanup(&mut self, error: String) -> Result<()> {
+        let process = self.process.as_mut().context("startup process missing")?;
+        if process.0.try_wait()?.is_none() {
+            killpg(Pid::from_raw(process.0.id() as i32), Signal::SIGTERM)?;
+        }
+        self.cleanup = Some(Cleanup {
+            error,
+            force_at: Instant::now() + Duration::from_secs(2),
+            forced: false,
+        });
+        Ok(())
+    }
+    pub fn cleaning(&self) -> bool {
+        self.cleanup.is_some()
+    }
+    pub fn poll_cleanup(&mut self) -> Result<Option<(String, bool)>> {
+        let cleanup = self.cleanup.as_mut().context("cleanup missing")?;
+        let process = self.process.as_mut().context("startup process missing")?;
+        if process.0.try_wait()?.is_some() {
+            return Ok(Some((
+                cleanup.error.clone(),
+                self.load_requested == Some(false),
+            )));
+        }
+        if Instant::now() >= cleanup.force_at && !cleanup.forced {
+            killpg(Pid::from_raw(process.0.id() as i32), Signal::SIGKILL)?;
+            cleanup.forced = true;
+        }
+        Ok(None)
+    }
+
     pub fn poll(&mut self, store: &mut Store) -> Result<Option<Worker>> {
         let process = self.process.as_mut().context("startup process missing")?;
         ensure!(
@@ -242,7 +350,10 @@ impl StartingWorker {
             "outcome_unknown: native startup timed out"
         );
         let (connection, metadata) = match self.ready.try_recv() {
-            Ok(result) => result?,
+            Ok((load_requested, result)) => {
+                self.load_requested = Some(load_requested);
+                result?
+            }
             Err(std::sync::mpsc::TryRecvError::Empty) => return Ok(None),
             Err(_) => bail!("outcome_unknown: native startup connection ended"),
         };
@@ -250,8 +361,15 @@ impl StartingWorker {
             .as_str()
             .context("native identity missing")?
             .to_owned();
-        let session =
-            store.register_worker(&self.launch, &self.server, &metadata, process.0.id())?;
+        let session = if let Some((session, generation)) = &self.resume {
+            store.register_resumed(session, *generation, &self.launch, &self.server, &metadata)?;
+            session.clone()
+        } else {
+            store.register_worker(&self.launch, &self.server, &metadata, process.0.id())?
+        };
+        let capture_generation = store.session(&session)?["capture_generation"]
+            .as_i64()
+            .context("missing capture generation")?;
         store.local(
             &session,
             "worker.started",
@@ -266,7 +384,8 @@ impl StartingWorker {
             server: self.server.clone(),
             executable: self.executable.clone(),
             alive: true,
-            generation: 1,
+            generation: capture_generation,
+            stopping: false,
         }))
     }
 }

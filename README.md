@@ -23,16 +23,26 @@ is our starting point, and we’d love to build toward it with other developers.
 
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved. The [docking implementation plan](tasks/plan.md) is ready for owner review.
-Its four slices implement clear refusal of unsupported targets, visible placement
-before sound, recovery after target loss, and independent Applications recovery.
-The owner-trial refinement restores the floating controls to their pre-dock
-positions, clamped to an available display when necessary.
-All four passed independent review and packaged Fedora checks. The task list
-records test setup limits and voice teardown uncertainty. Owner acceptance,
-merge and installation remain separate decisions.
+approved. Docking recovery is accepted and merged, including returning the floating
+controls to their pre-dock position. The active [implementation plan](tasks/plan.md)
+now covers voice handoff. This branch enables Codex's native acknowledgement while
+retaining automatic result delivery. The muted native comparison distinguishes
+acknowledgement from the final answer, but audible timing and interruption remain
+unproved. The task list records current evidence and limits. Merge and installation
+remain separate decisions.
 
 ## Current prototype
+
+Owner `list` responses distinguish a live owned runtime, a confirmed stop and
+unknown process ownership. Managed starts retain a runtime generation and observed
+nonsecret settings for later recovery. A service restart preserves a confirmed
+stop and never restores ownership from a saved process number. The owner service
+API can explicitly resume an eligible saved Codex conversation without submitting
+work. The owner CLI exposes `resume-instance` with the observed generation and a
+request ID. It keeps the same identity and leaves its terminal closed for a separate
+Open. The previous viewer must be closed first. Panel controls remain a subsequent
+slice; older records with unverified settings remain
+inspectable and cannot resume.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native

@@ -300,6 +300,12 @@ impl Runtime {
             .into_iter()
             .filter(|s| {
                 s["kind"] == "codex"
+                    && (s["ownership"] != "managed"
+                        || s["id"].as_str().is_some_and(|id| {
+                            self.workers.get(id).is_some_and(|w| {
+                                w.alive && w.connection.is_some() && s["server"] == w.server
+                            })
+                        }))
                     && s["removed_ms"].is_null()
                     && !["stopped", "exited", "failed"]
                         .iter()

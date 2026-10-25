@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
+    poll::{PollFd, PollFlags, poll},
     sys::{
         socket::{getsockopt, sockopt},
         stat::{Mode, umask},
@@ -23,6 +24,7 @@ use std::{
     collections::HashMap,
     fs::{self, DirBuilder, OpenOptions},
     io::{self, BufRead, BufReader, Read, Write},
+    os::fd::AsFd,
     os::unix::process::CommandExt,
     os::unix::{
         fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt},
@@ -223,6 +225,10 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.run_state','uncertain','$.error','Parent service restarted; grants expired and runner ownership was not restored.') WHERE json_extract(receipt,'$.action')='test-start' AND json_extract(receipt,'$.run_state') IN ('starting','running','stopping')", [])?;
     store.0.execute("UPDATE operations SET receipt=json_set(receipt,'$.state','uncertain','$.error','Service restarted; inspect the existing instance before any new action.') WHERE json_extract(receipt,'$.state')='pending'", [])?;
     store.0.execute(
+        "UPDATE runtime_generations SET state='unknown' WHERE state IN ('starting','running')",
+        [],
+    )?;
+    store.0.execute(
         "UPDATE workers SET state='unknown' WHERE state IN ('starting','running')",
         [],
     )?;
@@ -407,7 +413,16 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         }
         runtime.observe()?;
         if idle && runtime.codex.is_none() {
-            std::thread::sleep(Duration::from_millis(50));
+            let mut sockets = [
+                PollFd::new(listener.as_fd(), PollFlags::POLLIN),
+                PollFd::new(instance_listener.as_fd(), PollFlags::POLLIN),
+            ];
+            if let Err(error) = poll(&mut sockets, 50u16) {
+                ensure!(
+                    error == nix::errno::Errno::EINTR,
+                    "service socket wait failed: {error}"
+                );
+            }
         }
     }
     runtime
@@ -548,6 +563,7 @@ impl Runtime {
             "capabilities" => self.capabilities(&request)?,
             "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
+            "resume-instance" => self.resume_instance(&request)?,
             "operation" => {
                 let id = string(&request, "request_id")?;
                 let (inputs, mut receipt) = if let Some(operation) = self.store.operation(id)? {
@@ -602,6 +618,19 @@ impl Runtime {
                 );
                 let mut sessions = self.store.sessions()?;
                 for session in &mut sessions {
+                    let id = string(session, "id")?;
+                    let live = self.workers.get(id).is_some_and(|w| w.alive)
+                        || self.shells.get(id).is_some_and(|s| s.alive);
+                    session["lifecycle"] = self.store.runtime_observation(
+                        id,
+                        live,
+                        session["ownership"] == "external",
+                    )?;
+                    session["resume"] = if authority::is_owner(&request["actor"]) {
+                        self.resume_availability(session)?
+                    } else {
+                        json!({"state":"unavailable","request_id":null,"reason_code":"forbidden","reason":"Only the app owner can resume a conversation."})
+                    };
                     session["terminal"] = json!(
                         self.viewer_choices
                             .get(session["id"].as_str().unwrap_or(""))
@@ -656,6 +685,8 @@ impl Runtime {
                                     "rank",
                                     "supervisor_id",
                                     "worker_state",
+                                    "lifecycle",
+                                    "resume",
                                     "capture",
                                     "ownership",
                                     "window",

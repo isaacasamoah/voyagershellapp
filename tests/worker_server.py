@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import os
 import socket
 import struct
 import sys
@@ -12,17 +13,20 @@ from pathlib import Path
 
 path = sys.argv[sys.argv.index('--listen') + 1].removeprefix('unix://')
 settings = [sys.argv[n + 1] for n, arg in enumerate(sys.argv[:-1]) if arg == '-c']
-policy = tomllib.loads('\n'.join(settings))['shell_environment_policy']['set']
+runtime_settings = tomllib.loads('\n'.join(settings))
+policy = runtime_settings['shell_environment_policy']['set']
 assert Path(policy['VOYAGER_BIN']).is_file()
 assert Path(policy['VOYAGER_STATE']) == Path(path).parent.parent
 
 listener = socket.socket(socket.AF_UNIX)
 listener.bind(path)
 listener.listen()
+parent = os.getppid()
 counter = 0
 active = False
 current_turn = None
 lock = threading.Lock()
+subscribers = []
 
 
 def exact(stream, size):
@@ -44,6 +48,7 @@ def metadata():
 def handle(stream):
     global counter, active, current_turn
     write_lock = threading.Lock()
+    resume_preflight = False
 
     def send(value):
         data = json.dumps(value).encode()
@@ -53,6 +58,8 @@ def handle(stream):
 
     def event(method, params):
         send({'method': method, 'params': {'threadId': 'worker-thread', **params}})
+
+    subscribers.append(send)
 
     def complete(turn):
         global active
@@ -89,13 +96,65 @@ def handle(stream):
                 continue
             method = r['method']
             result = {}
-            if method == 'thread/start':
+            if method == 'initialize' and (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
+                result = {'userAgent': 'codex/0.164.0 fixture'}
+            elif method == 'fixture/exit-with-settings':
+                for push in subscribers:
+                    push({'method': 'fixture/buffered', 'params': {}})
+                    push({'method': 'thread/settings/updated', 'params': {'threadId': 'worker-thread', 'threadSettings': {'model': 'incomplete-update'}}})
+                os._exit(0)
+            elif method == 'config/read':
+                result = {'layers': [{'name': {'type': 'user', 'file': '/fixture/config.toml', 'profile': None},
+                                      'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'config-changed').exists() else 'original',
+                                      'disabledReason': None}]}
+            elif method == 'thread/goal/get':
+                if (Path(policy['VOYAGER_STATE']) / 'missing-thread').exists():
+                    send({'id': r['id'], 'error': {'code': -32602, 'message': 'saved thread is unavailable'}})
+                    continue
+                assert runtime_settings['sandbox_mode'] == 'read-only'
+                assert runtime_settings['approval_policy'] == 'on-request'
+                resume_preflight = True
+                if (Path(policy['VOYAGER_STATE']) / 'slow-resume').exists():
+                    time.sleep(.2)
+                result = {'goal': {'status': 'active'} if (Path(policy['VOYAGER_STATE']) / 'active-goal').exists() else None}
+            elif method == 'thread/start':
                 assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode', 'developerInstructions'}
                 assert r['params']['approvalPolicy'] == 'never'
                 assert r['params']['sandbox'] == 'danger-full-access'
                 assert r['params']['historyMode'] == 'legacy'
                 result = {'thread': metadata()}
-            elif method in ['thread/read', 'thread/resume']:
+                if (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
+                    result['thread']['cwd'] = str(Path(policy['VOYAGER_STATE']))
+                    result.update(model='fixture-model', modelProvider='openai', cwd=str(Path(policy['VOYAGER_STATE'])),
+                                  approvalPolicy='never', approvalsReviewer='user', sandbox={'type': 'dangerFullAccess'},
+                                  activePermissionProfile=None, runtimeWorkspaceRoots=[], instructionSources=[], reasoningEffort=None)
+                    if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():
+                        result.update(approvalPolicy='on-request', sandbox={'type': 'readOnly', 'networkAccess': False})
+                    if (Path(policy['VOYAGER_STATE']) / 'unsupported-sandbox').exists():
+                        result['sandbox'] = {'type': 'externalSandbox', 'networkAccess': 'enabled'}
+                    if (Path(policy['VOYAGER_STATE']) / 'missing-sandbox').exists():
+                        result.pop('sandbox')
+            elif method == 'thread/resume':
+                hold = Path(policy['VOYAGER_STATE']) / 'hold-resume'
+                if resume_preflight and hold.exists():
+                    (hold.parent / 'resume-loaded').write_text('1')
+                    while hold.exists():
+                        if os.getppid() != parent:
+                            os._exit(0)
+                        time.sleep(.01)
+                if resume_preflight:
+                    assert set(r['params']) == {'threadId', 'excludeTurns'}
+                result = {'thread': metadata(), 'model': 'fixture-model', 'modelProvider': 'openai',
+                          'cwd': str(Path(policy['VOYAGER_STATE'])), 'approvalPolicy': 'never', 'approvalsReviewer': 'user',
+                          'sandbox': {'type': 'dangerFullAccess'}, 'activePermissionProfile': None,
+                          'runtimeWorkspaceRoots': [], 'instructionSources': [], 'reasoningEffort': None}
+                if (Path(policy['VOYAGER_STATE']) / 'resume-wrong-thread').exists():
+                    result['thread']['id'] = 'unexpected-thread'
+                if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
+                    result['model'] = 'different-model'
+                if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():
+                    result.update(approvalPolicy='on-request', sandbox={'type': 'readOnly', 'networkAccess': False})
+            elif method == 'thread/read':
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
                 result = {'data': ['worker-thread'], 'nextCursor': None}
@@ -110,6 +169,8 @@ def handle(stream):
                     active = True
                     turn = f'worker-turn-{counter}'
                     current_turn = turn
+                if (Path(policy['VOYAGER_STATE']) / 'incomplete-settings-update').exists():
+                    event('thread/settings/updated', {'threadSettings': {'model': 'fixture-model'}})
                 event('turn/started', {'turn': {'id': turn, 'status': 'inProgress'}})
                 event('item/completed', {'turnId': turn, 'item': {'id': 'user', 'type': 'userMessage', 'content': r['params']['input']}})
                 result = {'turn': {'id': turn, 'status': 'inProgress'}}

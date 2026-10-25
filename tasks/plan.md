@@ -1,7 +1,8 @@
 # Plan: show current work and reveal older conversations on demand
 
-Status: draft for owner review, 25 October 2026. Planning is authorised;
-implementation is not. Governing [specification](../SPEC-current-work-panel.md).
+Status: owner approved build, 25 October 2026. Resume R00-R03 passed review
+and selected-package verification. Execute in dependency order with independent
+review, at most one corrective pass and re-review for each increment. Governing [specification](../SPEC-current-work-panel.md).
 The [task list](todo.md) owns completion. Apply [CONSTRAINTS.md](../CONSTRAINTS.md)
 and the installed application-proof reference.
 
@@ -120,7 +121,7 @@ panel journey. Scope: medium. Dependency: P03. Completes P6-P9.
 
 After P01-P02, review classification and long-history interaction before connecting
 Resume. After P03-P04, run the specification's P1-P9 cases against the packaged app
-and matching service. This draft does not start implementation or installation.
+and matching service. Implementation is approved; installation is not.
 
 The planned command, once the panel journey exists, is:
 
@@ -129,7 +130,7 @@ VOYAGER_PROOF_APP=/absolute/candidate/voyagershell \
   python3 desktop/test/run-native-proof.py /tmp/NEW_PANEL_STATE panel-current
 ```
 
-The current runner does not yet implement that journey. Extend its existing
+The shared runner will gain that named journey during the panel build. Extend its existing
 entry point and packaging helper list within a relevant slice, rather than adding
 an unreviewed extra task or a second test framework. Keep each final file map
 around five files; reslice before coding if a complete behaviour grows beyond that.
@@ -145,5 +146,4 @@ only an actual app/service run can establish the Resume and scrolling experience
 Keep screenshots and private evidence outside source control. Record pointer,
 keyboard, wheel and trackpad coverage separately; unavailable physical input stays
 unproved. Use an independent review for each behaviour and propose the same
-one-correction-and-re-review limit as the voice trial. Owner plan approval comes
-before implementation.
+one-correction-and-re-review limit as the voice trial. The owner has approved this plan for implementation.

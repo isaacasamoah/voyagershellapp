@@ -233,3 +233,248 @@ cause of every reported freeze. No graphics workaround or automatic restart is
 enabled. For a managed Vessel, explicit Background followed by Open replaces its
 viewer while preserving its runtime and capture; stopping the Vessel has different
 semantics. A live native check is still required before claiming this freeze fixed.
+
+## Saved-conversation recovery gate
+
+The recovery experiment uses Codex 0.164.0 with a disposable legacy-history thread.
+It proves the provider boundary, not a Voyager Resume operation or panel journey.
+The production operation is not implemented yet. Run the opt-in provider check
+with a fresh private directory:
+
+```sh
+VOYAGER_RESUME_PROOF_STATE=/tmp/NEW_PRIVATE_RESUME_PROOF \
+  cargo test --locked --test native_resume -- --include-ignored --nocapture
+```
+
+This check reuses Voyager's native Codex transport. It is separate from the
+maintained desktop runner because no recovery UI exists at this gate. Later
+resume-and-open journeys extend that runner rather than adding another app launcher.
+
+A new provider process must inspect `thread/goal/get` before loading. Only an
+explicit null goal permits this first increment. A missing field, provider error,
+or any saved goal, including a paused or completed one, refuses before loading.
+This conservative first policy preserves the goal rather than changing it. The
+preflight must leave `thread/loaded/list` empty. Reopening a thread already loaded
+in the same provider can ignore settings overrides, so that case cannot prove
+settings preservation for a replacement runtime.
+
+The supported first settings snapshot is versioned and records observed values:
+
+| Provider result | Recovery use |
+| --- | --- |
+| `model`, `modelProvider` | Nonempty exact strings. Do not enable model fallback. |
+| `cwd` | Canonical existing directory, equal to the saved effective directory. |
+| `approvalPolicy`, `approvalsReviewer` | Required recognized values, retained exactly. |
+| `sandbox` | Required recognized effective restrictions. The real gate currently proves read-only without network access. Convert that policy to its documented request mode, then compare the returned effective policy. |
+| `activePermissionProfile` | Required field. The real gate proves explicit null only. Named/custom profiles remain unsupported until their effective restrictions and provenance can be reproduced and verified. Never combine `permissions` with `sandbox`. |
+| `runtimeWorkspaceRoots`, `instructionSources`, `reasoningEffort` | Record observed nonsecret workflow provenance. The experiment does not prove arbitrary custom workspace, instruction, environment, plugin or tool overrides. Unsupported/missing workflow provenance makes a record ineligible, rather than inventing defaults. |
+| Executable/version and snapshot version | Preserve the provider that produced the values and validate compatibility before use. A changed or unverified provider is not silently accepted. |
+
+The later adapter must validate presence and types before comparing snapshots.
+Two absent values are not matching settings. It must check the returned thread
+identity and explicit idle status, then reject unexpected turn starts or active
+status. Five seconds of quiet in this experiment is bounded evidence for these
+threads, not a universal guarantee about provider automation. Resume submits no
+turn; a later explicit instruction proves context recall separately.
+
+The schema change is additive and transactional after version 3. Add a runtime
+ledger keyed by `(session_id, generation)`, with immutable originating operation,
+endpoint, observed state and provider provenance. Keep the original workers and
+launch operations unchanged. Add a separate versioned verified-settings record.
+Use a partial unique index to exclude two starting/running/uncertain attempts for
+one Vessel. Allocate the next generation and save the immutable operation in one
+immediate transaction before spawning. Roll back the transaction on any admission
+failure. A consumed uncertain generation cannot be retried through another ID.
+
+On service startup, retain confirmed stops but mark interrupted running/start
+records unknown or uncertain. Stored PIDs establish no ownership. A live child
+is the only source of running ownership. New capture generations exclude delayed
+events; fresh credentials revoke earlier credentials. Completed operation receipts
+remain historical evidence and must not overwrite fresh liveness observations.
+A legacy baseline is permitted only with confirmed stop evidence and no conflicting
+operation; missing verified settings still makes Resume unavailable. A later
+installation needs a closed-service database backup before migration. Rollback of
+an executable alone cannot undo a schema change or discard newer history.
+
+Refine R01 into two complete behaviours before implementation. First make lifecycle
+observations truthful and save verified settings when a new managed runtime starts.
+That slice changes `store.rs`, `worker.rs`, service list presentation, and focused
+service/provider fixtures. Second add owner-only Resume through lifecycle admission,
+the new worker-start mode and operation completion. It requires the same store and
+worker boundary plus lifecycle/service routing and the existing authority policy.
+Keep that source map explicit in the plan; do not replace it with a storage-only
+or transport-only slice that cannot demonstrate observable behaviour.
+
+Provider protocol references are the [official app-server guide](https://learn.chatgpt.com/docs/app-server)
+and [persisted-goal guide](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
+Generated schemas identify available fields; only the opt-in run establishes the
+observed settings and idle behaviour above. Missing or incompatible settings,
+unsupported profiles and unverified workflow customizations must remain readable
+refusals in the eventual product.
+
+
+## Runtime observations and saved settings
+
+Schema version 4 adds `runtime_generations` without rewriting original workers,
+launch operations or events. A newly registered owned runtime starts at generation
+1. Verified stopped/exited legacy workers receive baseline 0 only when migration
+finds no pending or uncertain operation for their Vessel. This baseline alone does
+not establish that the settings needed for Resume exist.
+
+The owner list reports a `lifecycle` object separately from window and capture
+observations. Running requires the current service's live child. An external
+registration makes no ownership claim. A confirmed recorded stop survives restart;
+previously running records become unknown. Removing a registration does not change
+these process facts. This increment supplies observations, not a Resume action.
+
+Worker startup retains a versioned subset of the provider's effective response
+only when its required fields and ordinary field types are present. The native
+initialize response supplies provider-version provenance, avoiding another process
+just to ask for a version. Missing or unsupported settings leave the snapshot
+absent and do not prevent the existing new-agent flow. The snapshot contains no
+conversation content, credentials, instructions text or account information. Named
+profiles are not supported by this first snapshot format. Later Resume must validate
+recognized values and compatibility before use; saving an observation does not
+make it eligible by itself.
+
+The optional real-provider boundary check uses the existing service fixture and
+its normal owned-child cleanup. It creates one background Codex, records its list
+state/settings, explicitly stops it, and restarts only its disposable service.
+Run it with an authenticated provider and a fresh evidence directory:
+
+```sh
+VOYAGER_NATIVE_RESUME_PROVIDER=/absolute/path/to/codex \
+VOYAGER_NATIVE_RESUME_EVIDENCE=/tmp/NEW_OBSERVATION_EVIDENCE \
+  cargo test --locked --test service \
+  native_runtime_observations_retain_settings_after_confirmed_stop -- --exact --ignored
+```
+
+This is real service/API evidence, not a terminal, panel interaction or a working
+Resume journey. The later full-module application check must still use the shared
+desktop runner and the selected package.
+
+
+## Owner-requested Resume
+
+`resume-instance` accepts the immutable request ID, Vessel ID and observed
+`expected_runtime_generation`. Only the local owner may request it. List responses
+add `resume` availability beside the separate `lifecycle` observation. Missing
+legacy settings keep history available but make Resume unavailable. Reading an
+old operation receipt never establishes that its earlier runtime is still live.
+
+The owner CLI uses `resume-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION`.
+Read the generation from a fresh list response. Resume leaves the terminal closed;
+use a separate `open SESSION_ID xterm` or `open SESSION_ID ghostty` afterward.
+Close the previous viewer first, or the service refuses with `viewer_still_open`.
+This prevents an old viewer from being reported as attached to a new runtime.
+`operation REQUEST_ID` returns the current saved receipt immediately, even when
+it records pending, partial or uncertain work. Inspecting a failed result is not
+another attempt. Action commands still fail when their own effects fail.
+
+The maintained native runner has a `resume` journey. It checks a retained old
+window, idle reopening, an explicit saved-marker answer, fresh instance-bound
+capabilities, failed Open followed by successful Open, and closing/reopening the
+same runtime's viewer. Its attachment observation matches the terminal child and
+native frontend to the new service endpoint. It does not measure docking or audio.
+
+The lifecycle owner's `resume.rs` submodule validates admission and progresses the
+operation. The store atomically saves the operation and allocates the next runtime
+generation before spawning. Concurrent starts are excluded. A new owned child
+opens the same saved native thread after the goal and settings preflight. It must
+report idle, retain verified effective settings and start no turn. Capture advances
+to a new generation and discards initialization/history notifications. Original
+worker launch records, current assignments, names and Fleet placement remain intact.
+
+Fresh credentials revoke the previous runtime's credentials. The old temporary
+development grant is removed. Current service policy still decides access; Resume
+neither changes rank nor restores docking authority. Opening a terminal remains a
+separate operation. This slice supplies the service operation, not its later CLI
+or panel controls.
+
+Recovery currently supports OpenAI-provider threads with a user approval reviewer,
+ordinary `never`, `on-request` or `untrusted` approval policies, and an exact saved
+full-access or read-only-without-network sandbox. Named profiles and other sandbox
+forms remain unavailable until they have their own proof. Resume starts the provider with a read-only, user-reviewed bootstrap and sends
+only the saved thread ID. Codex restores its persisted settings. Voyager verifies
+the returned model, provider, folder, workspace roots, reasoning and permissions
+against its last verified snapshot before reporting success. It does not force a
+cached broader policy over newer native settings or substitute launcher defaults.
+
+The snapshot also retains nonsecret config-layer names and versions, excluding
+per-runtime session flags, plus the loaded instruction files' filesystem identity,
+size and change/modified timestamps. Resume compares them before loading and checks
+returned effective settings afterward. Config contents, credentials and instruction
+text are not copied into the snapshot. This is a conservative compatibility check,
+not a cross-platform content-signing system. A changed or unverified workflow
+refuses with a readable reason. The provider gate proves the plain settings case. The service proof also retains
+a simple project instruction file. This does not establish every custom workflow;
+missing or unsupported provenance remains a refusal.
+
+Failure cleanup retains its actual owned child and advances between service passes.
+It sends TERM, observes exit, and escalates only that process group after the
+existing two-second stop interval. A confirmed refusal before any load produces a
+partial receipt with a stopped runtime. If loading may have happened, the result
+is uncertain and cannot be retried through a different request ID. Interrupted
+service operations remain uncertain after restart. No process is recovered from
+a saved PID or restored automatically.
+
+
+Supported `thread/settings/updated` observations refresh the verified snapshot for
+the current capture generation. An incomplete, unsupported or incompatible change
+makes the snapshot unavailable. Unexpected capture loss and registration removal
+also discard that derived snapshot. Old capture generations cannot update it.
+An unexpected owned-process exit invalidates the snapshot before closing capture,
+even when a preceding ordinary message hides a later settings update. History and
+the confirmed exit remain inspectable. Explicit owner Stop retains the existing
+saved-settings path; reopening still verifies the settings returned by Codex.
+
+The controlled provider experiment showed why permission overrides were unsafe:
+settings changed through the native interface may be newer than startup metadata.
+It also produced mixed shutdown/persistence observations. Those remain private
+evidence; they do not justify assuming that every acknowledged native change is
+durable. The complete service proof verifies both ordinary saved permissions and
+a read-only change observed by Voyager. Unsupported or mismatched restoration
+fails before the agent accepts new work. It never claims a universal native
+persistence guarantee.
+
+When no external discovery connection exists, the service waits on its two request
+listeners for up to the existing 50 ms quiet interval. Socket readiness wakes it
+immediately. It no longer adds a full fixed sleep between consecutive desktop
+reads. The existing 400 ms queued-read regression remains unchanged. This uses
+nix 0.31.3's [poll primitive](https://docs.rs/nix/0.31.3/nix/poll/fn.poll.html)
+and handles an interrupted wait by returning to observation. Other wait errors
+remain failures. Enabling the existing dependency's `poll` feature adds no package.
+
+## Resume failure verification
+
+The maintained process fixture can use a selected packaged service through
+`VOYAGER_SERVICE_TEST_BIN=/absolute/package/resources/bin/voyager`. It defaults
+to the current Cargo build. Its CLI helper uses that same executable. The authority
+fixture accepts the same selection for credential and temporary-grant checks.
+
+The focused failure cases hold provider startup at a known point. Two simultaneous
+requests admit one runtime. Losing the client reply leaves the service free to
+finish; receipt lookup returns pending immediately and later returns the same
+completed result. Killing the disposable service after the provider receives Resume
+preserves uncertainty on restart and blocks a new request. The held simulated
+provider exits itself when its parent disappears; the test never recovers ownership
+from its PID.
+
+A confirmed stop remains resumable after restart with name, supervisor and Fleet
+unchanged. Missing folders and missing or unexpected native threads fail without
+creating a replacement conversation. Removed, external, stopped Bash and already
+running records produce distinct refusals. Another running agent and the external
+server stay responsive. Old capture generations cannot insert new completion
+events; repeating a current event also cannot duplicate it.
+
+These process cases complement the shared real Codex `resume` application journey.
+They establish controlled failure ordering, not native provider behavior in every
+failure mode or platform. The provider journey proves saved context, idle loading,
+fresh bound capabilities and independent viewer attachment. Permission and legacy
+migration checks remain part of the ordinary service and authority suites.
+
+Before any future installation migrates existing state, explicitly stop owned
+runtimes, stop the service and wait for confirmed exit. Copy the closed
+`events.sqlite` to a private backup directory and retain the prior executable.
+Do not copy a live database file or treat an executable rollback as a schema
+rollback. A restore must preserve any newer history rather than overwrite it.

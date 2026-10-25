@@ -21,7 +21,7 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         let db = Connection::open(path)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        ensure!(version <= 3, "unsupported database schema version");
+        ensure!(version <= 4, "unsupported database schema version");
         db.execute_batch(
             "PRAGMA foreign_keys=ON;
             PRAGMA journal_mode=DELETE;
@@ -129,6 +129,25 @@ impl Store {
         }
         let invalid: i64 = db.query_row("SELECT count(*) FROM sessions WHERE kind NOT IN ('codex','shell') OR (kind='codex' AND (rank IS NULL OR rank NOT IN ('admiral','commodore','captain','crew'))) OR (kind='shell' AND rank IS NOT NULL)", [], |r| r.get(0))?;
         ensure!(invalid == 0, "invalid instance kind or rank in database");
+        if version < 4 {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                CREATE TABLE runtime_generations (
+                    session_id TEXT NOT NULL REFERENCES sessions(id), generation INTEGER NOT NULL,
+                    operation_id TEXT NOT NULL UNIQUE, server TEXT NOT NULL,
+                    state TEXT NOT NULL, settings TEXT,
+                    PRIMARY KEY(session_id,generation));
+                CREATE UNIQUE INDEX runtime_exclusive ON runtime_generations(session_id)
+                    WHERE state IN ('starting','running','unknown','uncertain');
+                INSERT INTO runtime_generations
+                    SELECT session_id,0,launch_id,s.server,w.state,NULL FROM workers w
+                    JOIN sessions s ON s.id=w.session_id WHERE w.state IN ('stopped','exited')
+                    AND NOT EXISTS(SELECT 1 FROM operations o
+                      WHERE json_extract(o.receipt,'$.session_id')=s.id
+                      AND json_extract(o.receipt,'$.state') IN ('pending','uncertain'));
+                PRAGMA user_version=4; COMMIT;",
+            )?;
+        }
         Ok(Self(db))
     }
 
@@ -168,7 +187,7 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,w.state,w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,COALESCE((SELECT state FROM runtime_generations g WHERE g.session_id=s.id ORDER BY generation DESC LIMIT 1),w.state),w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
@@ -243,6 +262,18 @@ impl Store {
             "UPDATE sessions SET kind=?2,rank=CASE WHEN ?2='shell' THEN NULL ELSE 'crew' END,name=(SELECT name FROM workers WHERE workers.session_id=sessions.id) WHERE id=?1",
             params![id, metadata["kind"].as_str().unwrap_or("codex")],
         )?;
+        tx.execute(
+            "INSERT INTO runtime_generations VALUES (?1,1,?2,?3,'running',?4)",
+            params![
+                id,
+                launch,
+                server,
+                metadata
+                    .get("resume_settings")
+                    .filter(|v| v.is_object())
+                    .map(Value::to_string)
+            ],
+        )?;
         tx.commit()?;
         self.local(
             &id,
@@ -254,9 +285,100 @@ impl Store {
 
     pub fn worker_state(&self, launch: &str, state: &str) -> Result<()> {
         self.0.execute(
+            "UPDATE runtime_generations SET state=?2 WHERE operation_id=?1",
+            params![launch, state],
+        )?;
+        self.0.execute(
             "UPDATE workers SET state=?2 WHERE launch_id=?1",
             params![launch, state],
         )?;
+        Ok(())
+    }
+
+    pub fn runtime_observation(&self, session: &str, live: bool, external: bool) -> Result<Value> {
+        let saved: Option<(i64, String)> = self.0.query_row(
+            "SELECT generation,state FROM runtime_generations WHERE session_id=?1 ORDER BY generation DESC LIMIT 1",
+            [session], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let state = if external {
+            "external"
+        } else if live {
+            "running"
+        } else if saved
+            .as_ref()
+            .is_some_and(|(_, s)| matches!(s.as_str(), "stopped" | "exited"))
+        {
+            "stopped"
+        } else if saved.as_ref().is_some_and(|(_, s)| s == "starting") {
+            "starting"
+        } else {
+            "unknown"
+        };
+        Ok(json!({"runtime":state,"runtime_generation":saved.map(|s|s.0)}))
+    }
+
+    pub fn save_resume_settings(&self, operation: &str, settings: Option<&Value>) -> Result<()> {
+        self.0.execute(
+            "UPDATE runtime_generations SET settings=?2 WHERE operation_id=?1",
+            params![operation, settings.map(Value::to_string)],
+        )?;
+        Ok(())
+    }
+
+    pub fn resume_record(&self, session: &str) -> Result<Option<Value>> {
+        self.0.query_row("SELECT generation,state,settings,operation_id FROM runtime_generations WHERE session_id=?1 ORDER BY generation DESC LIMIT 1",[session],|r|{
+            let settings: Option<String> = r.get(2)?;
+            Ok(json!({"generation":r.get::<_,i64>(0)?,"state":r.get::<_,String>(1)?,"settings":settings.and_then(|s|serde_json::from_str::<Value>(&s).ok()),"request_id":r.get::<_,String>(3)?}))
+        }).optional().map_err(Into::into)
+    }
+
+    pub fn claim_resume(&self, request: &Value, expected: i64, settings: &Value) -> Result<Value> {
+        let session = request["session_id"]
+            .as_str()
+            .context("invalid_input: missing session")?;
+        let id = request["request_id"]
+            .as_str()
+            .context("invalid_input: missing request")?;
+        let tx = self.0.unchecked_transaction()?;
+        let previous = self
+            .resume_record(session)?
+            .context("outcome_unknown: runtime generation is unverified")?;
+        ensure!(
+            previous["generation"] == expected
+                && ["stopped", "exited"]
+                    .iter()
+                    .any(|s| previous["state"] == *s),
+            "outcome_unknown: runtime changed or its stop is unverified"
+        );
+        let generation = expected
+            .checked_add(1)
+            .context("invalid_input: runtime generation overflow")?;
+        let receipt = json!({"request_id":id,"session_id":session,"action":"resume-instance","state":"pending","runtime":"starting","runtime_generation":generation,"window":"closed","registration":"active","actor":request["actor"],"effects":[{"phase":"start","state":"requested"}],"event_seq":null});
+        self.begin_operation(id, request, &receipt)?;
+        self.0.execute(
+            "INSERT INTO runtime_generations VALUES (?1,?2,?3,'','starting',?4)",
+            params![session, generation, id, settings.to_string()],
+        )?;
+        tx.commit()?;
+        Ok(receipt)
+    }
+
+    pub fn register_resumed(
+        &self,
+        session: &str,
+        generation: i64,
+        operation: &str,
+        server: &str,
+        metadata: &Value,
+    ) -> Result<()> {
+        let tx = self.0.unchecked_transaction()?;
+        ensure!(
+            self.session(session)?["native_thread_id"] == metadata["id"],
+            "thread_unavailable: saved conversation identity changed"
+        );
+        ensure!(self.0.execute("UPDATE runtime_generations SET state='running',server=?4 WHERE session_id=?1 AND generation=?2 AND operation_id=?3 AND state='starting'",params![session,generation,operation,server])? == 1,"outcome_unknown: runtime admission changed");
+        ensure!(self.0.execute("UPDATE sessions SET server=?2,capture_generation=capture_generation+1 WHERE id=?1 AND removed_ms IS NULL",params![session,server])? == 1,"registration_removed: conversation registration changed");
+        self.local(session,"capture.gap",json!({"reason":"conversation_resumed","replay_available":false,"runtime_generation":generation}))?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -333,6 +455,10 @@ impl Store {
         self.0.execute(
             "UPDATE sessions SET removed_ms=COALESCE(removed_ms,?2) WHERE id=?1",
             params![session, now()],
+        )?;
+        self.0.execute(
+            "UPDATE runtime_generations SET settings=NULL WHERE session_id=?1",
+            [session],
         )?;
         let edges: Vec<Value> = self
             .sessions()?
