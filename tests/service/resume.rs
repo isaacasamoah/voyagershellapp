@@ -279,3 +279,17 @@ fn incomplete_native_settings_update_makes_saved_settings_unavailable() {
         "settings_unavailable"
     );
 }
+
+#[test]
+fn starting_resume_does_not_add_an_unready_voice_participant() {
+    let mut f = Fixture::new();
+    let id = stopped_saved_agent(&mut f);
+    let selected = f.call(json!({"op":"voice","target":"app","request_id":"voice-before-resume"}));
+    assert_eq!(selected["state"], "completed");
+    assert_ne!(f.call(json!({"op":"status"}))["voice"]["state"], "failed");
+    fs::write(f.dir.join("slow-resume"), "1").unwrap();
+    let resumed = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"resume-with-voice","expected_runtime_generation":1}));
+    assert_eq!(resumed["state"], "completed");
+    assert_ne!(f.call(json!({"op":"status"}))["voice"]["state"], "failed");
+    f.call(json!({"op":"stop-instance","session_id":id}));
+}

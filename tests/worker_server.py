@@ -101,6 +101,8 @@ def handle(stream):
                 assert runtime_settings['sandbox_mode'] == 'read-only'
                 assert runtime_settings['approval_policy'] == 'on-request'
                 resume_preflight = True
+                if (Path(policy['VOYAGER_STATE']) / 'slow-resume').exists():
+                    time.sleep(.2)
                 result = {'goal': {'status': 'active'} if (Path(policy['VOYAGER_STATE']) / 'active-goal').exists() else None}
             elif method == 'thread/start':
                 assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode', 'developerInstructions'}
