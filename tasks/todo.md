@@ -65,6 +65,16 @@ transcripts do not prove output. The unmuted run stopped before input when other
 application audio failed the existing quiet-output check. The owner has been asked
 to pause that audio. V01 is not complete and V02 must not begin yet.
 
+V01 used its one corrective pass after fresh review found missing visible-chat
+and nested native-identity checks. The corrected muted comparison now verifies
+visible history, public output item text/IDs and delegation-return identity.
+Re-review resolves both code findings. The complete current budget, including
+executed Rust/Python tests and embedded unit modules, is 6,991 lines against
+7,201 distinctly mapped production lines. Corrected candidate CI passes and its
+Linux package builds. Only the quiet-output recording and content inspection
+remain before V01 acceptance. Do not make another corrective build if a Required
+code issue remains after this re-review without renewed owner authorization.
+
 The handoff journey stays in the shared native runner. It uses observed Codex v3
 events, including delegation.created, delegation.context.appended,
 output_transcript.added and turn.done. These differ from the legacy activity
