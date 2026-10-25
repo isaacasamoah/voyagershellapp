@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-exports.run = async ({ avatarWin, conversation, rpc, directory, setExpanded }, proof) => {
+exports.run = async ({ avatarWin, panelWin, conversation, rpc, directory, setExpanded }, proof) => {
   await proof.wait(async () => {
     await conversation.poll();
     return conversation.snapshot().status.phase === 'ready';
@@ -35,9 +35,12 @@ exports.run = async ({ avatarWin, conversation, rpc, directory, setExpanded }, p
         channel.addEventListener('message', ({ data }) => {
           const event = JSON.parse(data);
           events.push({ type: event.type, at: performance.now(), id: event.event_id,
-            item: event.item_id, response: event.response_id || event.response?.id,
+            item: event.item_id || event.item?.id, delegation: event.delegation_item_id,
+            itemFields: event.item ? Object.keys(event.item) : undefined,
+            startMs: event.start_ms, endMs: event.end_ms, offsetMs: event.offset_ms,
+            response: event.response_id || event.response?.id,
             turn: event.turn_id || event.turn?.id, fields: Object.keys(event),
-            transcript: /transcript|transcription/.test(event.type) ? event.transcript : undefined });
+            transcript: /^(input|output)_transcript\.added$/.test(event.type) ? event.item?.text : undefined });
         });
         return channel;
       };
@@ -115,8 +118,32 @@ exports.run = async ({ avatarWin, conversation, rpc, directory, setExpanded }, p
       ),
     );
     const events = result.result.voice.events;
+    const delegated = events.find((event) => event.type === 'delegation.created');
+    assert.equal(typeof delegated?.item, 'string', 'Missing native delegation identity');
     const returned = events.find((event) => event.type === 'delegation.context.appended');
     assert(returned, 'No native return of the backing result was observed');
+    assert(
+      events
+        .filter((event) => event.type === 'delegation.context.appended')
+        .every((event) => event.delegation === delegated.item),
+      'Native result returned to a different delegation',
+    );
+    const outputs = events.filter((event) => event.type === 'output_transcript.added');
+    assert(
+      outputs.every(
+        (event) => typeof event.item === 'string' && typeof event.transcript === 'string',
+      ),
+      'Missing public output item identity or transcript',
+    );
+    assert(
+      expectedCount.test(
+        outputs
+          .filter((event) => event.at >= returned.at)
+          .map((event) => event.transcript)
+          .join(''),
+      ),
+      'Native final transcript did not contain the actual count',
+    );
     const earlyOutput = events.some(
       (event) => event.type === 'output_transcript.added' && event.at < returned.at,
     );
@@ -125,12 +152,31 @@ exports.run = async ({ avatarWin, conversation, rpc, directory, setExpanded }, p
       expectAck,
       'Acknowledgement comparison did not distinguish early output',
     );
+    result.readable = await proof.wait(
+      () =>
+        panelWin.webContents.executeJavaScript(`(() => {
+        const disclosure = document.getElementById('chat-disclosure');
+        const history = document.getElementById('chat-messages').getBoundingClientRect();
+        return [...document.querySelectorAll('.chat-message[data-role="assistant"]')].map(node => {
+          const rect = node.getBoundingClientRect();
+          return { text: node.innerText, visible: !disclosure.inert && disclosure.getAttribute('aria-hidden') === 'false' && rect.height > 0 && rect.bottom > history.top && rect.top < history.bottom && rect.top < innerHeight && rect.bottom > 0 };
+        });
+      })()`),
+      (messages) =>
+        panelWin.isVisible() &&
+        messages.some((message) => message.visible && expectedCount.test(message.text)),
+      'The answer did not appear in visible chat',
+    );
+    await fs.writeFile(
+      path.join(directory, 'handoff-panel.png'),
+      (await panelWin.webContents.capturePage()).toPNG(),
+    );
+    assert.equal(conversation.snapshot().status.pid, initial.pid);
+    assert.deepEqual(await rpc('list'), []);
     assert(
       result.audio.peak > 20,
       'No recorded output; muted diagnostics cannot pass audio acceptance',
     );
-    assert.equal(conversation.snapshot().status.pid, initial.pid);
-    assert.deepEqual(await rpc('list'), []);
     return { initial, observations, ...result, realMicrophone: false, humanListening: false };
   } catch (error) {
     journeyError = error;
