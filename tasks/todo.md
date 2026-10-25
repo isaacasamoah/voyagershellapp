@@ -4,6 +4,14 @@ Status: owner approved build, 25 October 2026. The [plan](plan.md) owns design a
 [specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
 remain in Git history. The still-open voice tasks remain in the voice branch.
 
+Build stopped after R01b's second review. Its one corrective pass resolved the
+initial restrictive-permission test gap. The final review confirmed that an
+unexpected process exit can discard an unread settings update while leaving
+Resume available with older settings. R01b is not accepted. R02, R03 and the
+dependent panel build have not started. Another corrective pass requires a new
+owner decision under CONSTRAINTS.md. Production source remains the reviewed
+candidate; this note records the outcome only.
+
 ## R00: prove safe idle loading
 
 - [x] Show saved history and restrictive effective settings survive reopening the
