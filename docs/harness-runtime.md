@@ -214,3 +214,9 @@ runner with its bundled service. The package includes the selected shared native
 journeys and helpers; unrelated proof scripts remain outside the bundle. Cleanup
 attempts each owned resource even when a prior cleanup step fails, records every
 error, and returns failure if service shutdown remains unconfirmed.
+
+The native driver keeps its result running until the pointer helper closes. It
+allows four seconds for normal exit, then sends SIGTERM only to that owned helper
+and waits another four seconds for confirmed closure. An unconfirmed exit or
+unsuccessful normal exit fails the proof. A journey failure and cleanup failure
+retain both errors. A signal request alone never counts as completed cleanup.

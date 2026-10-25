@@ -124,8 +124,10 @@ The final handoff must distinguish implemented, proved and still-open behavior.
 
 ## Current checkpoint
 
-Fixture preparation stopped after its single corrective pass. Independent
-re-review still found an unconfirmed pointer-helper exit behind a successful
-result. The test budget also remains unverified. The task list records the
-evidence and exact next correction. Do not start V01 or make another corrective
-build without renewed owner authorization.
+Fixture preparation passed the additional owner-authorized correction and fresh
+review. Independent controls reject premature success and unconfirmed helper
+exit. Both active journeys passed on the actual package, with a retained
+unexplained initial drag failure. The complete scoped test budget passes. The
+task list records evidence and advisories. Continue V01 under the existing
+approved sequence and one-correction-per-slice rule. No new feature is merged,
+installed or accepted by this preparation checkpoint.
