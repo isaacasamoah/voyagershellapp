@@ -37,6 +37,18 @@ function element(tag, text, className) {
   if (className) e.className = className;
   return e;
 }
+function runtimeLabel(session) {
+  if (session.resume?.state === 'pending') return 'Resuming';
+  const runtime = session.lifecycle?.runtime;
+  if (runtime === 'starting') return 'Starting';
+  if (runtime === 'running') {
+    if (session.removed_ms != null) return 'Unregistered';
+    return session.capture === 'connected' ? 'Running' : 'Running, capture unavailable';
+  }
+  if (runtime === 'external') return 'External, process state unverified';
+  if (runtime === 'stopped') return 'Stopped';
+  return 'Runtime unverified';
+}
 function renderState(value) {
   lastState = value;
   const focused = document.activeElement?.dataset.key;
@@ -95,27 +107,12 @@ function renderState(value) {
     b.setAttribute('aria-pressed', String(s.id === value.selected));
     const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
     const runtime = s.lifecycle?.runtime;
-    let status =
-      runtime === 'starting' || s.resume?.state === 'pending'
-        ? s.resume?.state === 'pending'
-          ? 'Resuming'
-          : 'Starting'
-        : runtime === 'running'
-          ? s.removed_ms != null
-            ? 'Unregistered'
-            : s.capture === 'connected'
-              ? 'Running'
-              : 'Running, capture unavailable'
-          : runtime === 'external'
-            ? 'External, process state unverified'
-            : runtime === 'stopped'
-              ? 'Stopped'
-              : 'Runtime unverified';
+    let status = runtimeLabel(s);
     if (value.serviceError) status = `Last known: ${status}`;
     const dot = element('span', '', 'connection-dot');
     dot.setAttribute('aria-hidden', 'true');
     b.setAttribute('aria-label', `${name}, ${status}`);
-    b.title = `${name} — ${status}`;
+    b.title = `${name}. ${status}`;
     const identity = element('span', '', 'session-identity');
     identity.append(element('span', name, 'session-name'));
     if (s.rank) identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
