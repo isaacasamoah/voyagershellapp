@@ -7,15 +7,22 @@ owns V1-V8. No voice task is complete yet.
 
 ## Preparation: reuse the native proving fixture
 
-- [ ] Consolidate the active conversation and return-position journeys around one
+- [x] Consolidate the active conversation and return-position journeys around one
   runner and shared input, waiting, evidence and cleanup. Preserve existing checks.
-- [ ] Demonstrate native parity and record before/after test-line counts. Commit
+- [x] Demonstrate native parity and record before/after test-line counts. Commit
   the fixture refactor separately from behavior. Record remaining historical debt.
 
 Likely files: desktop/test/native-proof.cjs, the existing conversation and
 return-position journeys, and their launch wiring. Keep the shared API small.
 Verification: existing native journeys, desktop tests and formatting. Dependencies:
 none. This preparation changes test infrastructure, not product voice behavior.
+
+Preparation evidence: 90 desktop tests and formatting pass. Fresh private
+return-position and conversation journeys pass with matching launch/finish hashes
+and clean app/service exit. The latter retains synthetic input and muted output.
+The shared driver, launcher, two journeys and input/audio/manifest helpers total
+562 physical lines. The review must map those costs to the exercised production
+functions; this inventory alone is not a coverage claim.
 
 ## V01: hear acknowledgement and the inspection answer
 
