@@ -3,6 +3,16 @@
 Project: VoyagerShellApp. Updated 24 October 2026.
 State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. Resume and panel still require implementation approval. Merge, installation and runtime rollout remain separate decisions.
 
+## This planning branch
+
+On 25 October, the owner accepted the current voice acknowledgement change and
+requested draft plans for resume and the panel. This branch owns the draft plan
+for saved-conversation resume in tasks/plan.md and tasks/todo.md. Implementation
+is not authorised. Remaining voice interruption, reconnect, failure and timing
+work stays in the existing voice plan; accepting the acknowledgement increment
+does not complete the full voice specification. The copied docking task list
+was complete before this branch replaced it, and remains in Git history.
+
 ## Purpose and terminology
 
 Make four everyday journeys dependable enough for the owner to keep using Voyager and learn what the product needs next. The application is a tracer-bullet build: a small working system whose code and boundaries we intend to retain and improve. A prototype is a disposable experiment used to resolve a specific uncertainty. This initiative adopted that terminology on 24 October. Earlier documents using "prototype" for the application retain their historical wording.
@@ -46,7 +56,12 @@ Each module specification defines its successful journey, a deliberately differe
 | `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Verified settings required; insufficient legacy records stay inspectable but ineligible. |
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Current work, Needs attention and Previous agents; bounded history disclosure. |
 
-Each specification contains its behavior, contracts, commands, source ownership, conventions, tests and acceptance cases. The owner explicitly approved the detailed requirements, timing targets and interaction choices before requesting plans. The active [voice implementation plan](tasks/plan.md) and [task list](tasks/todo.md) record the approved voice build and its verification. Voice, resume and panel planning follow in separate capability cycles after the preceding capability is completed and reviewed. The docking build is accepted. Docking is merged and voice handoff is active; no later capability has started implementation.
+Each specification owns its behaviour, contracts and acceptance cases. The owner
+approved the four specifications. This branch's [draft plan](tasks/plan.md) and
+[task list](tasks/todo.md) cover `conversation-resume` for review only. Docking is
+accepted and merged. The owner has accepted the current voice acknowledgement
+increment and requested planning for resume and the panel. Remaining voice work
+stays open in its existing task list. No resume or panel implementation has begun.
 
 ## Review and development workflow
 
@@ -54,7 +69,7 @@ The capability boundaries, build order and four module specifications are approv
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The active `tasks/plan.md` and `tasks/todo.md` currently cover only `voice-handoff`. The completed docking plan remains in Git history. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
+Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The active `tasks/plan.md` and `tasks/todo.md` currently cover only `docking-recovery`. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 

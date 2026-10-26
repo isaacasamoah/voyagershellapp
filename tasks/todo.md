@@ -1,134 +1,56 @@
-# Tasks: voice acknowledgement and result handoff
+# Tasks: return to a stopped conversation
 
-Status: fixture preparation accepted after the additional owner-authorized correction
-and fresh review, 25 October 2026. Docking is merged. The owner approved this
-module's full build/review sequence. The [plan](plan.md) owns the approach;
-[the spec](../SPEC-voice-handoff.md) owns V1-V8. No voice behavior is complete yet.
+Status: planning draft, 25 October 2026. The owner requested this plan, not its
+implementation. The [plan](plan.md) owns design and commands; the
+[specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
+remain in Git history. The still-open voice tasks remain in the voice branch.
 
-## Preparation: reuse the native proving fixture
+## R00: prove safe idle loading
 
-- [x] Consolidate conversation and return-position around one runner and shared
-  input, waiting, evidence and cleanup. Preserve existing assertions.
-- [x] Demonstrate native parity and record complete test-line counts. Commit the
-  fixture refactor separately from behavior. Record historical migration debt.
+- [ ] Show saved history and restrictive effective settings survive reopening the
+  same real Codex thread, with no new turn until an explicit instruction.
+- [ ] Check saved-goal and missing-settings cases without changing their meaning.
+  Record the provider/version, setting map and known-different result.
+- [ ] Complete Gate A, the transactional schema design and focused file map, then
+  obtain owner review before product implementation. Stop if idle loading is unproved.
 
-The owner authorized one extra corrective pass after the initial correction
-missed pointer-helper exit confirmation. The driver now waits for closure before
-publishing its final result. Unconfirmed closure fails; journey and cleanup
-errors are both retained. The failing control rejects the previous implementation.
-Independent review accepts normal exit, confirmed fallback, stalled exit,
-journey failure, combined failure and nonzero exit cases.
+## R01: resume through the owner service API
 
-The actual package and bundled service passed conversation parity and both
-minimise/close recovery cases. Helper/app/service shutdown was confirmed and
-candidate hashes matched. The first packaged drag attempt failed to find an
-eligible target. The unchanged package passed with a diagnostic observer, whose
-timing effect is unmeasured. That first failure remains unexplained. The main
-error handler also drops structured cleanup fields while retaining failure text.
-Both are recorded advisories, not further corrections in this pass.
+- [ ] Record/admit one immutable request and generation atomically before spawning.
+  Start the same saved conversation idle and preserve history and verified settings.
+- [ ] Confirm new owned runtime/capture/credentials while rejecting unsupported
+  records, stale generations and non-owner callers. Keep the viewer separate.
+- [ ] Run focused boundary tests, real-provider corroboration and independent review.
+  Covers core R1/R5/R7/R9. Keep each test's purpose and file scope explicit.
 
-All 90 desktop tests, formatting and candidate CI pass. The final independent
-budget audit counts 603 maintained native lines, 284 temporary review/observer
-lines and 1,965 ordinary test lines: 2,852 against 3,090 distinct exercised
-production lines. Shared functions/helpers count once. Historical helper
-revisions remain disclosed separately. This is the audited preparation scope,
-not a claim about every repository test. No assertions were removed or code
-padded. The earlier provisional production count had a 100-line arithmetic error.
+## R02: resume and open through the CLI
 
-Conversation parity uses synthetic input and muted output. It does not prove
-voice acknowledgement, audible final answers or human interruption. Historical
-unrelated fixture entry points remain migration debt. The installed runtime is
-unchanged. [Shared fixture PR](https://github.com/isaacasamoah/voyagershellapp/pull/30).
+- [ ] Provide the owner command and same-request receipt lookup. Open only after
+  a fresh running observation. Verify the saved marker with a new explicit query.
+- [ ] Demonstrate a failed Open and successful later Open on the same process.
+  Reopening a viewer must not create work or a second runtime. Covers R1/R6.
+- [ ] Extend the maintained native runner, record actual app/service identities and
+  complete independent review. No separate feature-specific launcher.
 
-## V01: hear acknowledgement and the inspection answer
+## Checkpoint R-A
 
-- [ ] A real private voice inspection request produces a short acknowledgement and
-  the actual result through Codex's native automatic handoff. The answer is readable.
-- [ ] The acknowledgement-disabled comparison distinguishes missing acknowledgement
-  from a slow answer. Record correlated native events and recorded output.
-- [ ] Focused failing regression, full relevant checks, native journey and
-  fresh-context review pass. At most one correction followed by re-review.
+- [ ] Gate A and the complete owner resume/open journey pass without permission
+  increases, task replay or substitute conversations. Review before R03.
 
-Likely files: src/service/conversation.rs, tests/conversation_server.py,
-tests/conversation.rs and the shared native conversation journey. Dependencies:
-fixture preparation. Keep client-managed handoffs disabled. Covers V1 and the
-acknowledgement part of V2. Scope: one complete inspection journey.
+## R03: preserve outcomes through races and disconnects
 
-V01 checkpoint: the existing provider fixture now requires native acknowledgement
-and automatic result handoff. Its voice-lease test failed before the service
-change and passed afterward. All 53 Rust tests, 90 desktop tests, formatting and
-Clippy pass. A fresh empty native conversation called voyager_vessels and returned
-the correct zero count. The muted enabled/disabled comparison distinguishes early
-acknowledgement from the final answer, with the source restored after comparison.
-Both runs remain unsuccessful audio acceptance receipts by design, because muted
-transcripts do not prove output. The unmuted run stopped before input when other
-application audio failed the existing quiet-output check. The owner has been asked
-to pause that audio. V01 is not complete and V02 must not begin yet.
-
-V01 used its one corrective pass after fresh review found missing visible-chat
-and nested native-identity checks. The corrected muted comparison now verifies
-visible history, public output item text/IDs and delegation-return identity.
-Re-review resolves both code findings. The complete current budget, including
-executed Rust/Python tests and embedded unit modules, is 6,991 lines against
-7,201 distinctly mapped production lines. Corrected candidate CI passes and its
-Linux package builds. Only the quiet-output recording and content inspection
-remain before V01 acceptance. Do not make another corrective build if a Required
-code issue remains after this re-review without renewed owner authorization.
-
-The handoff journey stays in the shared native runner. It uses observed Codex v3
-events, including delegation.created, delegation.context.appended,
-output_transcript.added and turn.done. These differ from the legacy activity
-events currently used by the renderer. Do not treat a transcript timestamp as
-speaker onset or silently broaden this slice into all activity handling.
-
-## V02: receive truthful progress and one final outcome
-
-- [ ] Slow work reports only observed progress. Refusal, failure, interruption and
-  finishing without an answer remain distinguishable. No action is resubmitted.
-- [ ] Duplicate native items produce one visible final item; native voice speaks
-  it at most once. Preserve request/turn/item association and public messages only.
-- [ ] Failing regressions, native failure comparison, relevant full checks and
-  fresh-context review pass within the one-correction limit.
-
-Likely files: private conversation service, UI, their existing tests and shared
-journey. Dependencies: V01. Covers V2-V4. If native speech deduplication cannot be
-proved, stop for the specified design decision rather than adding an announcer.
-
-## Checkpoint V-A
-
-- [ ] V01-V02 are proved and independently reviewed. Record audio content, timings,
-  identity evidence, test budget and limitations before continuing.
-
-## V03: keep results through interruption and reconnects
-
-- [ ] Real microphone interruption defers speech. A newer request cannot receive
-  an older request's answer as its own. Keep the earlier result in history.
-- [ ] Disconnect/reconnect retires the old voice generation without replaying old
-  audio or work. The backing runtime survives and its result remains readable.
-- [ ] Delayed-event and lease tests, actual microphone/output journey and independent
-  review pass within the one-correction limit. Unproved physical input stays open.
-
-Likely files: existing service/client/UI voice path, its tests and shared journey.
-Dependencies: V-A. Covers V4-V6. Scope: one interrupted request through recovery.
-
-## V04: retain results when audio fails and preserve destinations
-
-- [ ] Audio failure leaves the answer visible with useful feedback. The service
-  remains responsive and the backing runtime continues.
-- [ ] Private app, managed Codex and Bash select their existing voice destinations.
-  A private answer never enters a Vessel conversation. No private auto-microphone.
-- [ ] Focused failure tests, native routing journey, full relevant checks and fresh
-  review pass within the one-correction limit.
-
-Likely files: existing conversation UI/client, their tests and shared native journey.
-Dependencies: V03. Covers V7-V8. Do not change native terminal voice policy.
+- [ ] Separate focused cases cover same-ID reuse/conflict, competing requests and
+  client disconnect with a continuing service. Covers R3/R4.
+- [ ] Verify confirmed-stop restart, interrupted-service uncertainty, old-credential
+  refusal and old-event rejection without affecting unrelated processes. Covers
+  R2/R4/R7-R9. Historical completed receipts do not establish current liveness.
+- [ ] Required checks, all R1-R9 package journeys and independent review pass.
 
 ## Final checkpoint
 
-- [ ] Build the package and prove V1-V8 on its app and bundled service.
-- [ ] Record all 20 delegated requests and meet the approved audible timing targets.
-  Report speech-detection delay and excluded human-speaking time separately.
-- [ ] All required checks, test-budget accounting, independent reviews and verified
-  cleanup pass. Retain failed attempts and known limits. No silent exceptions.
-- [ ] Present the complete module and skill report for owner review. Do not merge,
-  install or restart the main app without that separately authorized decision.
+- [ ] Preserve schema migration/legacy-read evidence and the pre-migration backup
+  procedure. Missing legacy settings remain inspectable and cannot resume.
+- [ ] Record complete test/helper inventory, disjoint exercised production ranges
+  and a relevant deliberately broken case that fails its check.
+- [ ] Present results and remaining limits for owner acceptance. Do not install,
+  restart the main service, or build another capability from this planning request.
