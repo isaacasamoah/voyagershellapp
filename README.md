@@ -47,7 +47,10 @@ state changes.
 New launch and Resume use current Codex model and effort settings. Launch and Resume
 select YOLO; permission-default controls remain deferred. Changed configuration or missing historic settings alone does not
 block Resume. Confirmed stop, saved identity and an available directory remain
-required. The compact Resume presentation is the next planned increment.
+required. Previous vessels offers Resume in one compact row, with viewer choice
+and saved details in its menu. Removed vessels has a separate view opened from
+the history menu. Vessel action failures stay beside that Vessel until dismissed
+or superseded by a later action. Details preserves the full message and request ID.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native

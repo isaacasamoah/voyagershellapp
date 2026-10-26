@@ -721,11 +721,22 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   font-size: 0.8rem;
   color: #42566a;
 }
-.removed-choice {
+.history-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.history-toolbar .instance-menu {
+  margin: 0;
+}
+.vessel-feedback {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 #agent-details {
   max-height: 30vh;

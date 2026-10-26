@@ -150,7 +150,27 @@ exports.run = async (
   })`);
   await fs.writeFile(path.join(stateDir, 'final-batch-focus.json'), JSON.stringify(finalFocus));
   assert.ok(finalFocus.withinList || finalFocus.list, 'Final Load more lost keyboard focus');
-  await proof.pageClick(panelWin, 'show-removed');
+  const normal = await snapshot();
+  const savedPosition = await historyState();
+  const registrations = await rpc('list');
+  assert.equal(
+    await panelWin.webContents.executeJavaScript(
+      "document.querySelectorAll('#previous-agents input[type=checkbox]').length",
+    ),
+    0,
+  );
+  await proof.pageClick(panelWin, 'menu-history');
+  await proof.pageKey(panelWin, 'Tab');
+  assert.equal((await historyState()).focus, 'show-removed');
+  await proof.pageKey(panelWin, 'Return');
+  assert.deepEqual((await snapshot()).previous, [removed.session_id]);
+  await proof.pageClick(panelWin, 'previous-back');
+  assert.deepEqual((await snapshot()).previous, normal.previous);
+  assert.equal((await historyState()).scroll, savedPosition.scroll);
+  assert.deepEqual(await rpc('list'), registrations);
+  await proof.pageClick(panelWin, 'menu-history');
+  await proof.pageKey(panelWin, 'Tab');
+  await proof.pageKey(panelWin, 'Return');
   const removedId = removed.session_id;
   await proof.wait(() =>
     panelWin.webContents.executeJavaScript(
