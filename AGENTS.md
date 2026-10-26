@@ -19,6 +19,15 @@ Voyager is an experimental Rust service around existing native agent interfaces.
 
 The detailed design work can evolve before an implementation increment is accepted. Update the README's actual status when behavior changes; do not call a scaffold a working feature.
 
+Use `rust-best-practices` from the installed BeautifulRust wrappers alongside
+implementation and testing skills whenever changing Rust. Use `rust-review`
+alongside `code-review-and-quality` for Rust reviews. This applies to current and
+future builds. Preserve this project's comment-free source rule, `CONSTRAINTS.md`,
+existing toolchain/lint policy and real-application proof. Keep required design and
+unsafe reasoning in the owning context documents. Do not copy upstream lint
+presets or add dependencies, abstractions or tools merely because a skill mentions
+them. Surface concrete conflicts and measured limits in the review.
+
 Read the small Rust conventions in `CONTRIBUTING.md`. Keep source readable for
 people learning with us, and preserve the same checks and docs in every increment.
 Use a working branch and PR; never use the admin bypass without Isaac explicitly

@@ -3,6 +3,16 @@
 Module id: `conversation-resume`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation authorized by the owner, 25 October 2026.
 The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). The owner approved this specification and requested planning. The owner approved the implementation plan, 25 October 2026.
 
+## Approved revision, 26 October 2026
+
+The earlier build restored and compared saved settings. Isaac has replaced that
+product decision: new Codex Vessels and resumed conversations use the current
+Codex model and effort configuration. YOLO remains the permission default unless
+the user explicitly changes that launch default. Model and effort controls in
+Voyager are deferred. This revision records that decision and proposes its
+acceptance checks. It supersedes the earlier requirements to reproduce an old
+settings snapshot. Implementation of this revision has not started.
+
 ## Objective and scope
 
 The owner can explicitly return to a confirmed stopped, previously managed Codex conversation, preserving its saved history and Voyager identity. The new runtime starts idle. Reopening a terminal, resuming a conversation and submitting work remain distinct actions.
@@ -13,15 +23,50 @@ First scope is active registrations for previously managed Codex conversations, 
 
 ## User journey and invariants
 
-1. Show Resume conversation only when service eligibility permits it. Its description says it opens the saved conversation without continuing the old task. A background but running agent offers Open instead.
+1. Show Resume only when service eligibility permits it. The action opens the saved conversation and its viewer without continuing the old task. A background but running Vessel offers Open instead. Detailed wording belongs in the secondary details, not a paragraph on every row.
 2. The owner selects Resume. Record one immutable operation intent before starting a process. Recheck eligibility at execution; a stale UI cannot cause a second runtime.
 3. Start a new service-owned Codex runtime for the same saved native thread. Verify that the provider returns that identity and an idle conversation before reporting success. Do not substitute `thread/start`, fork history or send a turn on failure. If persisted automation or a goal would start work on resume and the adapter cannot load it idle, refuse with an explanation; do not silently clear that goal or continue it.
 4. Preserve logical Vessel ID, name, current valid assignments, Fleet placement and historical events. Create fresh runtime and capture generations and credentials. Revalidate present authority; do not revive old credentials, temporary grants or dock authority.
-5. Resume the saved working directory and verified effective model/provider, approval and sandbox or named permission profile. Retain compatible user workflow settings. Persist only required nonsecret resume metadata. Do not replace a missing setting with the launcher's permissive defaults. Unavailable or incompatible settings produce a reason and inspection path.
+5. Keep the saved working directory and use its current Codex model and effort settings. Preserve the user's native workflow. Launch in YOLO unless the user explicitly changed that launch default. A configuration change since the previous run must not block Resume. Do not restore an old settings snapshot. Let Codex report actual invalid configuration or startup failures with a readable explanation.
 6. Capture new events after the successful resume boundary and record the gap. Historic turns loaded by the provider remain history; they cannot appear as freshly completed work.
 7. After runtime success, the panel may issue the existing Open operation as a distinct explicit step of the requested Resume-and-open journey. A viewer failure leaves the resumed agent running and offers Open again. It never starts another runtime.
 
 The service can establish ownership only for its actual new child. Persisted PID values are not ownership. A prior confirmed stop/exit and no conflicting current managed operation are required. Lost ownership, a pending earlier start or uncertainty about the old runtime blocks resume. A service restart preserves a previously confirmed stop but must not convert previously running or uncertain work into eligible stopped work. An unresolved legacy record offers Inspect with the recorded state and reason; this increment does not add an automatic ownership-recovery action. This increment does not detect every independently opened copy of a saved thread outside Voyager; retain provider conflicts and do not claim global uniqueness.
+
+## Current configuration at startup
+
+New Codex Vessels and Resume follow the same startup rules. Read current user and
+project model and effort settings when starting each runtime. Do not cache them
+until the service restarts. Preserve Voyager's fresh bound identity and existing
+service authority without replacing the user's coding workflow.
+
+YOLO means no approval prompts and full access for the Codex runtime. It is the
+default for both new launch and Resume. Honor a different launch default only
+when the user explicitly selects one. Do not replace this default with Codex's
+global approval or sandbox settings, or with the stopped thread's old permissions.
+Provider permissions and Voyager's authority to manage Vessels remain separate.
+This correction adds no permissions checkbox or per-Resume permissions form.
+
+For Resume, keeping history does not mean keeping the former model or effort.
+Use current model and effort settings even when Codex would otherwise restore an
+older thread-specific value. Verify the effective result against the current
+startup selection, including the chosen launch permission default, not the saved
+snapshot. Do not assume that omitting resume parameters
+will apply current defaults; prove that behavior with the installed provider.
+
+Changing configuration files, instruction files or the provider version is not
+by itself a reason to refuse. A provider that cannot start or cannot return the
+requested conversation still reports its actual failure. The saved thread must
+load idle, preserve its identity and wait for a new instruction.
+
+Missing historic model, effort or configuration fingerprints do not make an older
+record ineligible. Its thread identity, working directory and confirmed stop
+remain necessary. A recorded process ID alone is still insufficient evidence.
+Model and effort controls, Voyager-specific model defaults and a settings repair
+editor are deferred. No second model configuration store is part of this
+correction. Keep YOLO as the existing permission default; the plan must identify
+how any explicitly configured alternative is honored without inventing a new
+permissions editor.
 
 ## Service contract
 
@@ -89,18 +134,30 @@ Extend `tests/service.rs`, `tests/worker_server.py` and authority fixtures as ne
 | Id | Case and required evidence |
 |---|---|
 | R1 | Create a disposable conversation containing a marker, explicitly stop it and resume it. Logical Vessel and native thread IDs stay the same; owned process and credentials are new. The marker is available after an explicitly requested new query. No new turn starts merely from resume. |
-| R2 | Repeat after service restart following a confirmed stop. Preserve history, settings, name, valid assignments and Fleet placement. Previously live/uncertain records remain blocked. |
+| R2 | Repeat after service restart following a confirmed stop. Preserve history, name, valid assignments and Fleet placement. Use current Codex configuration, including after a configuration change while the service stays running. Previously live/uncertain records remain blocked. |
 | R3 | Duplicate the same request and race two distinct requests. Exactly one new owned runtime starts. Changed input under one ID refuses. |
 | R4 | Test both failures separately. Disconnect the requesting client after the service records the request, while startup is in progress; keep the service alive and let startup succeed. Reconnect and retrieve the completed receipt using the same request ID; exactly one runtime started. Separately, terminate the test service after a possible startup effect but before a final outcome is recorded. Restart it and verify that the unresolved operation is uncertain, its recorded evidence survives, and neither receipt lookup nor a new request ID starts another runtime. Neither case affects unrelated processes. |
-| R5 | Test each failure: the saved conversation cannot be found, its working folder is missing, its saved settings are invalid, or Codex returns a response Voyager cannot handle. Voyager explains the problem and does not create a different conversation as a fallback. If an older record lacks the settings needed to resume safely, its saved details remain available to inspect, but Resume is unavailable. |
+| R5 | Test each failure: the saved conversation cannot be found, its working folder is missing, the current Codex configuration is invalid, or Codex cannot return the requested conversation. Explain the actual failure without creating another conversation. An older confirmed-stopped record remains eligible when its thread and directory are known, even if historic settings are absent. |
 | R6 | Resume the agent successfully, then make opening its terminal window fail. The agent must remain running. Choosing Open again must connect a window to that same running agent. Closing and reopening the window must not send a task or continue earlier work. |
 | R7 | Verify that credentials from the previous runtime and expired temporary permissions no longer grant access. Only the local owner can request Resume. Resuming must not bypass the service's current rules for who may manage or instruct the agent. |
 | R8 | Deliver delayed events from the previous run's event connection. Voyager must not present them as activity from the new run. Loading saved conversation history must not report old task completions as newly completed work. |
 | R9 | Verify that Resume refuses each unsupported case: a stopped Bash shell, an agent started outside Voyager's ownership, a registration that has been removed, and a Voyager-managed agent that is already running. These cases must not start a new runtime. Voyager must not send signals, such as stop or kill, to any unrelated process. |
 
-Use controlled test processes to trigger failures at specific points in startup. Check that saved settings survive, operation receipts remain available after restart, and the service manages only the live child processes it actually started.
+Use controlled test processes to trigger failures at specific points in startup. Check that history and original receipts survive, current configuration is applied, and the service manages only the live child processes it actually started. Extend the maintained shared runner rather than creating another acceptance launcher.
 
-Also test with real Codex. That test must demonstrate that the saved conversation is available after resume and that the agent waits for a new instruction instead of continuing work automatically. Simulated responses alone cannot establish this.
+Also test with real Codex. Create and stop a disposable conversation, change its
+current configuration and Resume through the actual panel. The conversation and
+Vessel IDs stay the same. The changed model and effort are effective, no turn
+starts, and the viewer opens. A new Vessel must also use the changed defaults
+without restarting the service. Change an unrelated configuration setting as a
+known-different comparison; that edit must not block Resume either.
+
+Use the existing disposable process fixtures to verify that new launch and Resume
+both default to YOLO, even when global Codex approval or sandbox settings differ.
+Also verify that an explicitly changed launch default is honored. Never silently
+replace a rejected explicit choice with another permission policy. Keep the original no-duplicate-runtime,
+disconnect, uncertain-outcome and same-viewer journeys. Simulated responses alone
+do not establish real Codex configuration behavior.
 
 For each run, record the exact app and service builds and executable paths, the Codex version, the time until the agent is ready, and the time until its terminal window is connected. Record the observed Vessel, conversation, process, operation and generation identifiers so the results can be traced to the right run. Do not record credentials.
 
@@ -110,10 +167,17 @@ Keep the service responsive and retain its existing time limits. If an operation
 
 Resuming a conversation must preserve its original history and must not submit a task. The agent waits for an explicit instruction before doing more work.
 
-Broader recovery behavior needs a separate review before implementation. This includes automatically restoring agents, taking responsibility for agents started outside Voyager, and adding configurable permission changes.
+Broader recovery behavior needs a separate review before implementation. This includes automatically restoring agents, taking responsibility for agents started outside Voyager, and adding Voyager-specific permission controls. Applying the current model and effort configuration while retaining the selected launch permission default is part of this revision.
 
-An old process ID is not proof that Voyager owns the process now using that ID. Do not claim ownership from that number alone or kill a process that might be unrelated. Do not silently give a resumed agent more permissions than it had before. If the outcome of an earlier request is uncertain, do not issue a new request ID to bypass that uncertainty and try again.
+An old process ID is not proof that Voyager owns the process now using that ID. Do not claim ownership from that number alone or kill a process that might be unrelated. Use YOLO unless the user explicitly changed the launch permission default. Do not override an explicit alternative or fall back to broader permissions after its failure. If the outcome of an earlier request is uncertain, do not issue a new request ID to bypass that uncertainty and try again.
 
-For this first increment, the approved treatment of older records is to reuse their settings only when those settings can be verified. Otherwise, explain why Resume is unavailable. Keep the saved history readable and allow the owner to create a new agent through the existing creation flow. Creating a new agent is a separate choice, not a substitute presented as a successful resume.
+For older records, require the saved conversation identity, directory and verified
+stop evidence. Do not require obsolete configuration snapshots. Keep history
+readable if another eligibility condition prevents Resume. Creating a new Vessel
+remains a separate action, never a substitute for a failed Resume.
 
-Restoring removed registrations and providing an editor to repair missing settings are outside this increment. Before implementation, the plan must specify how resume information is stored and verify how Codex applies the saved settings. Missing or unsupported settings must not be concealed by falling back to defaults that grant more access.
+Restoring removed registrations and editing saved settings are outside this
+increment. The implementation plan must establish how current Codex configuration
+is applied on both new launch and Resume. The native proof must demonstrate the
+effective values and idle behavior. No schema change, provider substitution or
+new permission system is assumed by this revision.
