@@ -1,6 +1,8 @@
+import ctypes
 import json
 import os
 import shutil
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -30,6 +32,10 @@ if os.environ.get('VOYAGER_PROOF_CURRENT_CONFIG') == '1':
     (isolated / 'config.toml').write_text('model = "gpt-6.1-sol"\nmodel_reasoning_effort = "medium"\napproval_policy = "on-request"\ndefault_permissions = ":read-only"\n')
     env['CODEX_HOME'] = str(isolated)
     env['VOYAGER_PROOF_SOURCE_ROOT'] = str(root)
+libc = ctypes.CDLL(None, use_errno=True)
+if journey == 'reconnect':
+    assert libc.prctl(36, 1, 0, 0, 0) == 0, 'Could not retain orphaned fixture children'
+owned = {}
 service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'service.log').open('w'), stderr=subprocess.STDOUT)
 app = None
 verdict = None
@@ -46,6 +52,21 @@ try:
     (state / 'launch.json').write_text(json.dumps({'app': args, 'app_pid': app.pid, 'service': exe, 'service_pid': service.pid, 'provider': subprocess.check_output([os.environ.get('VOYAGER_CODEX_BIN', 'codex'), '--version'], text=True).strip()}, indent=2))
     deadline = time.monotonic() + 360
     while time.monotonic() < deadline:
+        control = state / 'proof-service-control.json'
+        if control.exists():
+            request = json.loads(control.read_text())
+            assert journey == 'reconnect' and request['action'] == 'restart'
+            for row in call('list'):
+                if row['ownership'] == 'managed' and row['lifecycle']['runtime'] == 'running':
+                    info = call('attach-info', row['id'])
+                    if info['pid'] not in owned:
+                        owned[info['pid']] = os.pidfd_open(info['pid'])
+            previous = service.pid
+            service.kill()
+            service.wait(timeout=10)
+            service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'restarted-service.log').open('w'), stderr=subprocess.STDOUT)
+            control.unlink()
+            (state / 'proof-service-restarted.json').write_text(json.dumps({'request': request['request'], 'before': previous, 'after': service.pid}))
         try:
             result = json.loads((state / 'native-proof.json').read_text())
             if result.get('verdict') in ['pass', 'rework']:
@@ -79,6 +100,15 @@ finally:
             cleanup.append(result)
     cleanup.append(clean('stop-service', lambda: call('stop')))
     clean('wait-service', lambda: service.wait(timeout=15))
+    for pid, handle in owned.items():
+        try:
+            signal.pidfd_send_signal(handle, signal.SIGKILL, None, 4)
+        except ProcessLookupError:
+            pass
+        except OSError as error:
+            errors.append({'stage': 'owned-runtime-cleanup', 'pid': pid, 'error': str(error)})
+        os.close(handle)
+        clean('reap-owned-runtime', lambda pid=pid: os.waitpid(pid, 0))
     (state / 'cleanup.json').write_text(json.dumps({'receipts': cleanup, 'errors': errors, 'service_exit': service.returncode, 'desktop_exit': app and app.returncode}, indent=2))
 finished = manifest()
 (state / 'finish-manifest.json').write_text(json.dumps(finished, indent=2))

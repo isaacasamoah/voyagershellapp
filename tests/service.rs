@@ -27,6 +27,9 @@ struct Fixture {
     service: Option<Child>,
 }
 
+#[path = "service/reconnect.rs"]
+mod reconnect;
+
 #[test]
 fn codex_found_on_path_has_a_canonical_viewer_executable() {
     let mut f = Fixture::new();

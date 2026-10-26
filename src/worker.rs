@@ -1,20 +1,19 @@
 use crate::{codex::Codex, events, store::Store};
 use anyhow::{Context, Result, bail, ensure};
-use nix::{
-    sys::signal::{Signal, killpg},
-    unistd::Pid,
-};
+use nix::sys::signal::Signal;
 use serde_json::{Value, json};
 use std::{
     fs,
     os::unix::process::CommandExt,
     path::Path,
-    process::{Child, Command, ExitStatus, Stdio},
+    process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
+mod process;
 mod settings;
+use process::Process;
 pub use settings::Settings;
 
 pub struct Resume {
@@ -25,30 +24,6 @@ pub struct Resume {
 pub enum ThreadStart {
     New(Option<String>),
     Resume(Resume),
-}
-
-struct Process(Child);
-impl Process {
-    fn stop(&mut self) -> Result<ExitStatus> {
-        if let Some(status) = self.0.try_wait()? {
-            return Ok(status);
-        }
-        killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGTERM)?;
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while Instant::now() < deadline {
-            if let Some(status) = self.0.try_wait()? {
-                return Ok(status);
-            }
-            thread::sleep(Duration::from_millis(20));
-        }
-        killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL)?;
-        Ok(self.0.wait()?)
-    }
-}
-impl Drop for Process {
-    fn drop(&mut self) {
-        let _ = self.stop();
-    }
 }
 
 pub struct Worker {
@@ -187,7 +162,7 @@ impl Worker {
             let _ = sender.send((load_requested, result));
         });
         Ok(StartingWorker {
-            process: Some(Process(child)),
+            process: Some(Process::Child(child)),
             ready,
             resume: resume_identity,
             load_requested: None,
@@ -197,6 +172,87 @@ impl Worker {
             executable: executable.into(),
             deadline: Instant::now() + Duration::from_secs(10),
         })
+    }
+
+    pub(crate) fn recover(
+        record: &Value,
+        receipt: &Value,
+        operation: &str,
+        context: &Path,
+    ) -> Result<Self> {
+        let server = record["server"]
+            .as_str()
+            .context("native endpoint missing")?;
+        let native = record["native_thread_id"]
+            .as_str()
+            .context("native conversation missing")?;
+        let mut connection = Codex::connect(Path::new(server))?;
+        ensure!(
+            receipt["runtime_pid"].as_u64() == Some(u64::from(connection.peer_pid)),
+            "native server process differs from the saved runtime"
+        );
+        let mut process = Process::checked(connection.peer_pid)?;
+        let identity = process.identity()?;
+        if let Some(saved) = receipt.get("process_identity") {
+            ensure!(*saved == identity, "native server process identity changed");
+        }
+        let command = fs::read(format!("/proc/{}/cmdline", process.id()))?;
+        let args: Vec<_> = command.split(|b| *b == 0).collect();
+        let endpoint = format!("unix://{server}");
+        let locator = format!(
+            "shell_environment_policy.set.VOYAGER_SESSION_CONTEXT={}",
+            json!(context)
+        );
+        ensure!(
+            args.contains(&b"app-server".as_slice())
+                && args.contains(&endpoint.as_bytes())
+                && args.contains(&locator.as_bytes()),
+            "native process does not match the saved managed launch"
+        );
+        ensure!(
+            connection.loaded()?.iter().any(|id| id == native),
+            "saved conversation is not loaded in this runtime"
+        );
+        let before = connection.metadata(native)?;
+        ensure!(
+            before["id"] == native && before["status"]["type"] != "notLoaded",
+            "native conversation is unavailable"
+        );
+        connection.pending.clear();
+        let reply = connection.rpc(
+            "thread/resume",
+            json!({"threadId":native,"excludeTurns":true}),
+        )?;
+        ensure!(
+            reply["thread"]["id"] == native,
+            "native subscription returned another conversation"
+        );
+        ensure!(
+            process.try_wait()?.is_none() && process.identity()? == identity,
+            "native server exited during recovery"
+        );
+        Ok(Self {
+            process,
+            connection: Some(connection),
+            session: record["id"]
+                .as_str()
+                .context("Vessel identity missing")?
+                .into(),
+            native: native.into(),
+            launch: operation.into(),
+            server: server.into(),
+            executable: identity["executable"]
+                .as_str()
+                .context("native executable missing")?
+                .into(),
+            alive: true,
+            generation: 0,
+            stopping: false,
+        })
+    }
+
+    pub(crate) fn identity(&self) -> Result<Value> {
+        self.process.identity()
     }
 
     pub fn client(&mut self) -> Result<&mut Codex> {
@@ -210,7 +266,7 @@ impl Worker {
         ensure!(self.alive, "worker process ended");
         ensure!(self.connection.is_some(), "worker capture is disconnected");
         Ok(
-            json!({"executable":self.executable,"args":["--remote",format!("unix://{}",self.server),"resume",self.native,"--no-alt-screen"],"pid":self.process.0.id(),"native_thread_id":self.native,"session_id":self.session}),
+            json!({"executable":self.executable,"args":["--remote",format!("unix://{}",self.server),"resume",self.native,"--no-alt-screen"],"pid":self.process.id(),"native_thread_id":self.native,"session_id":self.session}),
         )
     }
 
@@ -263,7 +319,7 @@ impl Worker {
             }
         }
         if self.alive {
-            if let Some(exit) = self.process.0.try_wait()? {
+            if let Some(exit) = self.process.try_wait()? {
                 if !self.stopping {
                     store.save_resume_settings(&self.launch, None)?;
                 }
@@ -282,15 +338,12 @@ impl Worker {
 
     pub fn request_stop(&mut self, force: bool) -> Result<()> {
         self.stopping = true;
-        if self.process.0.try_wait()?.is_none() {
-            killpg(
-                Pid::from_raw(self.process.0.id() as i32),
-                if force {
-                    Signal::SIGKILL
-                } else {
-                    Signal::SIGTERM
-                },
-            )?;
+        if self.process.try_wait()?.is_none() {
+            self.process.signal(if force {
+                Signal::SIGKILL
+            } else {
+                Signal::SIGTERM
+            })?;
         }
         Ok(())
     }
@@ -325,8 +378,8 @@ pub struct StartingWorker {
 impl StartingWorker {
     pub fn begin_cleanup(&mut self, error: String) -> Result<()> {
         let process = self.process.as_mut().context("startup process missing")?;
-        if process.0.try_wait()?.is_none() {
-            killpg(Pid::from_raw(process.0.id() as i32), Signal::SIGTERM)?;
+        if process.try_wait()?.is_none() {
+            process.signal(Signal::SIGTERM)?;
         }
         self.cleanup = Some(Cleanup {
             error,
@@ -341,14 +394,14 @@ impl StartingWorker {
     pub fn poll_cleanup(&mut self) -> Result<Option<(String, bool)>> {
         let cleanup = self.cleanup.as_mut().context("cleanup missing")?;
         let process = self.process.as_mut().context("startup process missing")?;
-        if process.0.try_wait()?.is_some() {
+        if process.try_wait()?.is_some() {
             return Ok(Some((
                 cleanup.error.clone(),
                 self.load_requested == Some(false),
             )));
         }
         if Instant::now() >= cleanup.force_at && !cleanup.forced {
-            killpg(Pid::from_raw(process.0.id() as i32), Signal::SIGKILL)?;
+            process.signal(Signal::SIGKILL)?;
             cleanup.forced = true;
         }
         Ok(None)
@@ -357,7 +410,7 @@ impl StartingWorker {
     pub fn poll(&mut self, store: &mut Store) -> Result<Option<Worker>> {
         let process = self.process.as_mut().context("startup process missing")?;
         ensure!(
-            process.0.try_wait()?.is_none(),
+            process.try_wait()?.is_none(),
             "provider_failed: native server exited during startup"
         );
         ensure!(
@@ -380,7 +433,7 @@ impl StartingWorker {
             store.register_resumed(session, *generation, &self.launch, &self.server, &metadata)?;
             session.clone()
         } else {
-            store.register_worker(&self.launch, &self.server, &metadata, process.0.id())?
+            store.register_worker(&self.launch, &self.server, &metadata, process.id())?
         };
         let capture_generation = store.session(&session)?["capture_generation"]
             .as_i64()
@@ -388,7 +441,7 @@ impl StartingWorker {
         store.local(
             &session,
             "worker.started",
-            json!({"pid":process.0.id(),"launch_id":self.launch,"ownership":"managed"}),
+            json!({"pid":process.id(),"launch_id":self.launch,"ownership":"managed"}),
         )?;
         Ok(Some(Worker {
             process: self.process.take().context("startup process missing")?,

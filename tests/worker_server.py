@@ -27,6 +27,7 @@ active = False
 current_turn = None
 lock = threading.Lock()
 subscribers = []
+connections = []
 
 
 def exact(stream, size):
@@ -60,15 +61,22 @@ def handle(stream):
         send({'method': method, 'params': {'threadId': 'worker-thread', **params}})
 
     subscribers.append(send)
+    connections.append(stream)
 
     def complete(turn):
         global active
         time.sleep(1)
+        while (Path(policy['VOYAGER_STATE']) / 'hold-turn').exists():
+            time.sleep(.01)
         try:
-            event('item/completed', {'turnId': turn, 'item': {'id': 'answer', 'type': 'agentMessage', 'text': 'fixture worker done'}})
+            for notify in list(subscribers):
+                try:
+                    notify({'method': 'item/completed', 'params': {'threadId': 'worker-thread', 'turnId': turn, 'item': {'id': 'answer', 'type': 'agentMessage', 'text': 'fixture worker done'}}})
+                    notify({'method': 'turn/completed', 'params': {'threadId': 'worker-thread', 'turn': {'id': turn, 'status': 'completed'}}})
+                except OSError:
+                    pass
             with lock:
                 active = False
-            event('turn/completed', {'turn': {'id': turn, 'status': 'completed'}})
         except OSError:
             pass
 
@@ -151,6 +159,15 @@ def handle(stream):
                                   sandbox={'type': 'dangerFullAccess'}, activePermissionProfile={'id': r['params']['permissions'], 'extends': None})
                     if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                         result['model'] = 'different-model'
+            elif method == 'fixture/count':
+                result = {'turns': counter}
+            elif method == 'fixture/disconnect':
+                for other in list(connections):
+                    if other is not stream:
+                        try:
+                            other.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
             elif method == 'thread/read':
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
