@@ -3,72 +3,69 @@
 Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner approved its implementation plan and build on 25 October 2026.
 The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The earlier candidate passed independent review for owner inspection on 26 October. The following row refinement is a specification and planning change, not implemented behavior. Merge and installation remain separate decisions.
 
-## Proposed refinement: expand a Vessel to see its details
+## Proposed refinement: compact Vessel rows with details in the menu
 
-Isaac selected this refinement on 27 October 2026. It applies to Vessels,
-Previous vessels and Removed vessels. It supersedes the earlier requirements to
-show routine state, rank, folder and activity text on every collapsed row.
+Isaac revised this refinement on 27 October 2026. It applies to Vessels,
+Previous vessels and Removed vessels. It supersedes the earlier inline-expansion
+proposal and requirements to show routine state, folder and activity text on every
+row.
 
-Show the Vessel's name by default. Keep the existing type, colors, spacing,
-rounded controls, captain-and-worker stacks and Fleet layout. A small disclosure
-control indicates that the row can expand. Keep the existing secondary menu
-available without adding another toolbar or always-visible form.
+Show the Vessel's name, its existing rank presentation and status dot. Keep the
+existing type, colors, spacing, rounded controls, Fleet layout and captain-and-
+worker stacks. Preserve the existing rules for which records have a rank. Do not
+add an always-visible Running label that repeats the status indicator. The dot
+must retain its actual existing meaning, including capture and connection state;
+this presentation change must not redefine it as proof of process ownership or
+liveness. Keep state available in accessible text and Details so color is not the
+only way to understand it.
 
-Clicking the name or its disclosure expands details directly beneath that Vessel.
-Clicking it again collapses them. Enter and Space do the same when the disclosure
-has focus. Expanding is a reading action. It never opens a terminal, resumes an
-agent, submits work or changes registration, assignments or Fleet placement.
-Use an explicit Open or Resume action in the expanded row for those operations,
-subject to the service's existing decisions. Keep maintenance actions in the
-secondary menu. Do not combine expansion with a process or window action.
+Clicking a running managed Vessel's name keeps the existing action that opens or
+brings forward its terminal. Preserve keyboard activation, selection and drag
+behavior. Previous vessels retain their explicit Resume action when the service
+allows it. Removed and external records keep only their existing permitted
+actions. Do not make clicking the name silently resume a stopped agent.
 
-Expanded details show a readable description of the Vessel's current state, its
-full working folder path and its last recorded activity date and time. Describe
-the date as Last activity. Say Activity time unavailable or Folder unavailable
-when the service supplies no usable value. Do not substitute registration time
-for unknown activity. Description here means existing state and explanatory text;
-this refinement does not add an editable description or new stored field. Keep
-rank and assignment details accessible here. Existing captured history remains
-available through Details in the secondary menu, without repeating the inline
-summary in a second permanent block.
+Use Details in the existing three-dot menu for the full working folder path,
+last recorded activity date and time, state and other existing metadata. Reuse
+the existing details view and captured-history access. Add no row disclosure,
+inline expansion, extra Inspect button or second details view. Do not introduce
+an editable description or new stored field. Label the timestamp Last activity.
+Say Activity time unavailable or Folder unavailable when necessary; do not
+substitute registration time for unknown activity.
 
-Routine metadata stays inside the expansion. Show pending progress or an action
-failure with its Vessel even when the row is collapsed, so Resuming, Reconnecting
-and a failed action do not disappear. Keep service-wide connection feedback at
-panel level. Preserve a visible Reports to explanation when a worker's captain is
-absent from the filtered list. These are exceptions for action feedback and
-missing responsibility context, not another routine metadata line.
+Keep pending progress and action failures with the affected Vessel. Keep service-
+wide connection feedback at panel level and retain a Reports to explanation when
+a worker's captain is absent from the filtered list. Routine successful state
+belongs in Details, while progress, errors and missing responsibility context
+remain visible when needed.
 
-Remember expansion by Vessel identity across state refresh, sorting and a move
-between current and previous lists. Several rows may be expanded independently.
-A new app session starts with rows collapsed. Collapsing a row that contains
-keyboard focus returns focus to its disclosure. Keep the focused row visible,
-retain history scroll position where possible and preserve the existing focus
-fallback when a whole group is closed.
+Refresh must retain useful keyboard focus and keep an open details view tied to
+the same Vessel. Preserve history scroll position and the existing focus fallback
+when a whole group closes. Details remain readable while the service is offline,
+with last-known information identified and service-dependent actions unavailable.
+Opening Details must not launch a terminal, resume an agent, submit work or change
+registration, assignments or Fleet placement.
 
 Measure panel size from rendered content through the existing ResizeObserver.
-Expanded rows wrap long text and fit within the existing display bounds and
-scroll areas. Do not estimate height from a Vessel count. Expansion remains
-available while the service is offline using clearly identified last-known data;
-actions requiring the service remain unavailable. Do not hide a process-state
-warning by presenting last-known details as current.
+Keep long details readable within the display bounds and existing scroll areas.
+Do not estimate height from a Vessel count. No avatar or docking change is part
+of this refinement.
 
 ### Refinement acceptance journeys
 
 | Id | What the owner can verify |
 |---|---|
-| N1 | Current, previous and removed lists initially show names without routine metadata. Expanding one row reveals its state description, full folder and labeled activity time. Unknown values are explicit. Collapsing it hides those details. |
-| N2 | Mouse and keyboard expansion leave runtime, native conversation, events, registration and assignments unchanged. Open and Resume remain explicit separate actions. Removed and external records receive only their existing permitted actions. |
-| N3 | Refresh, reordering and a running-to-stopped transition keep expansion attached to the same Vessel. Focus stays useful. Another Vessel's expansion and the history scroll position are preserved. |
-| N4 | Pending operations, failed actions, missing-supervisor context and service loss remain understandable with rows collapsed. Expanding stale data never enables an unavailable lifecycle action. |
-| N5 | Short and long lists, long names and paths, and narrow or short displays remain readable and keyboard usable. The real panel grows with content up to its display limit, then scrolls. Existing history batching, Fleet stacks and docking remain usable. |
+| N1 | Current, previous and removed rows show the name, applicable rank and status dot, without routine folder, date or Running text. Details in the three-dot menu exposes the existing metadata and labels missing values clearly. |
+| N2 | Clicking or keyboard-activating a live managed Vessel's name still opens or brings forward its terminal. Resume remains explicit for eligible previous Vessels. Opening Details causes no lifecycle, task, registration or assignment operation. |
+| N3 | Refresh, sorting and a change between current and previous lists preserve useful focus and keep the details view associated with the correct Vessel. History scrolling and menu keyboard access remain usable. |
+| N4 | Pending operations, failed actions, missing-supervisor context and service loss remain understandable. Status remains accessible without relying on color, and viewing stale details never enables an unavailable lifecycle action. |
+| N5 | Long names and paths, short and long history lists, and narrow or short displays remain readable and keyboard usable. Rendered content determines panel size within the display limit. Existing history batching, Fleet stacks and docking remain usable. |
 
-Use the existing renderer tests for deterministic transitions and the maintained
-native panel journey for real interaction and layout. First demonstrate that the
-old row does not satisfy N1 and that clicking its live name opens the window
-instead of expanding it. Preserve existing lifecycle and history assertions.
-Record the actual candidate app and bundled service used. No native proving or
-implementation is claimed by this specification update.
+Use existing renderer tests for deterministic behavior and the maintained native
+panel journey for real interaction and layout. Demonstrate that the baseline
+shows the unwanted routine metadata. Preserve existing name-click, Resume,
+lifecycle and history assertions. Record the candidate app and bundled service
+used. No implementation or native proving is claimed by this specification edit.
 
 ## Approved revision, 26 October 2026
 
@@ -146,7 +143,7 @@ Apply the following classification in order. Show each Vessel only once as a row
 | Exit is confirmed and the registration remains present | Show it in Previous vessels, collapsed by default. Offer details and history. Offer Resume only when the service allows it. |
 | Registration was removed and exit is confirmed, or an external registration was removed and Voyager owns no runtime for it | Show it in the Removed vessels view after the owner chooses Show removed vessels from the history menu. Keep history readable. Explicitly say that an external process's state is unverified. Do not silently register or resume it. |
 
-Previous vessels shows a count and expands with one click or a keyboard action. Apply the name-only row refinement above, with state, working folder and last activity in the row's expansion. Do not print technical IDs in the list. Order records by last recorded activity and stable Vessel ID.
+Previous vessels shows a count and expands with one click or a keyboard action. Apply the compact-row refinement above, with working folder, activity and routine state in Details in the three-dot menu. Do not print technical IDs in the list. Order records by last recorded activity and stable Vessel ID.
 
 Let the expanded history grow within the panel's available space, then scroll inside that area. The number of visible rows follows the available height rather than a fixed target of 50. Keep the other panel controls accessible. A short list should use only the space it needs; a long list must not push the panel beyond the display. Keep panel sizing based on rendered content and the display limit, not an estimate from the total number of records.
 
@@ -163,12 +160,11 @@ colors, type, rounded controls and Fleet layout. Reuse the established row and
 secondary-menu patterns. Add no dashboard, settings form or new visual theme.
 
 A previous Vessel has one compact row. Its name remains legible rather than
-looking disabled because the process is stopped. Show Stopped in the expanded
-details and provide one primary Resume button there. The existing secondary menu contains
+looking disabled because the process is stopped. Show Stopped in Details and retain one primary Resume button on the row. The existing secondary menu contains
 viewer changes, details and existing permitted maintenance actions. Do not show a
 full-width viewer selector, separate Inspect button, raw identifiers or a second
 metadata block beneath every row. Keep full paths and precise timestamps readable
-in the inline expansion. Do not rely on hover for access to any control.
+in Details in the three-dot menu. Do not rely on hover for access to any control.
 
 Resume uses the Vessel's retained viewer, or the existing supported default when
 no selection was retained. Choosing another viewer is optional and stays in the
@@ -263,12 +259,12 @@ The later plan must give the command for an isolated test of the real panel and 
 |---|---|
 | P1 | Supply test records covering every category above. Each Vessel must appear in the specified place. Vessels must exclude confirmed stopped agents and include running agents whose terminal windows are closed. |
 | P2 | Previous vessels starts collapsed. Expanding it reveals history without launching anything. Test a short list and a list longer than the available history area. The long list must scroll, and Load more must make records beyond the first batch reachable without losing the owner's place or forcing the panel to grow. The Show removed vessels menu action must open the labeled removed-records view with the same scrolling behavior. Back to previous vessels returns to the ordinary history list. No checkbox appears, and changing the view does not change registrations. |
-| P3 | Resume a real stopped conversation through the panel. After the owner expands the row, it offers one Resume action, uses current Codex model and effort settings with the selected launch permission default and shows Resuming, then running, before its terminal window opens. Viewer choice and details are reachable through its secondary menu. No per-row viewer form or separate Inspect button appears. If Open fails, offer a way to retry opening the window without starting a second runtime. |
+| P3 | Resume a real stopped conversation through the panel. The compact row offers one Resume action, uses current Codex model and effort settings with the selected launch permission default and shows Resuming, then running, before its terminal window opens. Viewer choice and details are reachable through its secondary menu. No per-row viewer form or separate Inspect button appears. If Open fails, offer a way to retry opening the window without starting a second runtime. |
 | P4 | Test outdated Resume availability, double clicks and lost replies. The service must still decide the outcome. Operations with uncertain outcomes must remain visible and must not be submitted again under another request ID. A known startup failure stays attached to its Vessel after refresh, with readable text instead of an internal error code. A panel-level connection warning remains distinct. |
 | P5 | Remove the registration of a running agent that Voyager manages. Keep it accessible as Unregistered, with Stop available subject to the existing permission checks. |
 | P6 | Show a running worker whose supervisor is stopped, hidden or unavailable. Keep the worker accessible and describe its supervisor accurately. Stored assignments and Fleet information must not change. |
 | P7 | Disconnect the service. Clearly mark existing rows as out of date. Do not silently mark any agent stopped or available to resume. On reconnect, refresh the existing rows by Vessel identity without creating duplicates. |
-| P8 | Use only the keyboard to expand groups and Vessel rows, scroll Previous vessels, load more records, inspect row details and activate available actions. Keep focus in a useful place when state changes and keep the focused row visible. Also check wheel and trackpad scrolling and that the scrollbar can be found. Text labels must explain state without requiring the user to distinguish colours. |
+| P8 | Use only the keyboard to expand groups, scroll Previous vessels, load more records, inspect row details and activate available actions. Keep focus in a useful place when state changes and keep the focused row visible. Also check wheel and trackpad scrolling and that the scrollbar can be found. Text labels must explain state without requiring the user to distinguish colours. |
 | P9 | Test an empty panel, a populated Fleet, and displays with limited width or height. The history area must adapt to the space available while keeping the other controls accessible. Content must remain usable without overflowing horizontally or growing beyond the display. Panel size must follow rendered content, not an estimate based on the number of Vessels. |
 
 Run P3, P5 and P7 in the real panel with fresh test records and the candidate service. For comparison, show how the old panel renders a stopped record. Check stored assignments, registration and event counts before and after actions that only reveal or hide information. Those actions must not change the underlying records. Use screenshots to verify presentation and service receipts to verify process operations. Neither is a substitute for the other.

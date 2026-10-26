@@ -5,7 +5,7 @@ State: The owner approved the capability boundaries, dependency direction, first
 
 ## This build branch
 
-This branch drafts the [name-only Vessel row refinement](SPEC-current-work-panel.md#proposed-refinement-expand-a-vessel-to-see-its-details)
+This branch drafts the [compact Vessel row refinement](SPEC-current-work-panel.md#proposed-refinement-compact-vessel-rows-with-details-in-the-menu)
 requested on 27 October. It belongs to `current-work-panel`, not a new capability.
 Its proposed interaction and implementation plan await review. This branch adds
 no product code and changes no running app.
