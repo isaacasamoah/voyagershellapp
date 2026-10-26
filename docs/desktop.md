@@ -476,3 +476,29 @@ native window journeys. Chromium input follows Electron's
 including focused-window and visible-control checks. It does not prove physical
 mouse, keyboard or trackpad delivery. A GNOME pointer attempt did not reach the
 expected window during this build; its delivery or coordinate cause remains open.
+
+Previous agents uses the latest saved event's recorded time, with stable Vessel
+identity breaking ties. Missing activity remains unavailable. The existing list
+response supplies nullable last_activity_ms through an indexed per-session lookup;
+registration and provider occurrence times are not substitutes. Instance callers
+retain their existing metadata allowlist.
+
+History rows appear in local batches sized from actual row and display measurements.
+The list keeps its own scroll position and a thin scrollbar, while Load more stays
+outside it. Removed records require the explicit checkbox. Inspect works for every
+visible row and displays saved metadata as text. Its named preload method reads
+one existing global event portion, filters the permitted result to the chosen
+agent, and preserves the original cursor. Empty filtered portions can advance;
+they do not mean the agent has no later history. Capture-gap events remain visible.
+No history action creates a runtime, registers an agent or submits work.
+
+The selected panel journey checks actual Chromium keyboard and wheel scrolling,
+local batch growth without window growth, removed-record reveal and bounded saved
+history. Physical wheel and trackpad input remain unproved by these synthetic
+Chromium events.
+
+When the final history batch hides Load more, focus moves to the last row's
+enabled Inspect control. Normal focus scrolling brings that control into view.
+Saved-details text is excluded from panel dragging, allowing the browser to select
+it. The shared journey checks both saved-text default handling and the different
+ordinary panel-background behavior, which still starts panel dragging.

@@ -43,6 +43,7 @@ impl Store {
                 session_id TEXT NOT NULL REFERENCES sessions(id), kind TEXT NOT NULL,
                 native_turn_id TEXT, source_key TEXT, occurred_ms INTEGER, recorded_ms INTEGER NOT NULL,
                 payload TEXT NOT NULL, UNIQUE(session_id,source_key));
+            CREATE INDEX IF NOT EXISTS events_session_seq ON events(session_id,seq);
             CREATE TABLE IF NOT EXISTS workers (
                 launch_id TEXT PRIMARY KEY, parent_id TEXT REFERENCES sessions(id),
                 cwd TEXT NOT NULL, prompt TEXT, state TEXT NOT NULL,
@@ -187,11 +188,11 @@ impl Store {
     }
 
     pub fn sessions(&self) -> Result<Vec<Value>> {
-        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,COALESCE((SELECT state FROM runtime_generations g WHERE g.session_id=s.id ORDER BY generation DESC LIMIT 1),w.state),w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
+        let mut query = self.0.prepare("SELECT s.id,s.server,s.native_id,s.native_session_id,s.cwd,s.registered_ms,w.parent_id,COALESCE((SELECT state FROM runtime_generations g WHERE g.session_id=s.id ORDER BY generation DESC LIMIT 1),w.state),w.launch_id,s.name,s.kind,s.removed_ms,s.capture_generation,s.rank,s.supervisor_id,(SELECT recorded_ms FROM events e WHERE e.session_id=s.id ORDER BY seq DESC LIMIT 1) FROM sessions s LEFT JOIN workers w ON w.session_id=s.id ORDER BY registered_ms")?;
         Ok(query.query_map([], |r| {
             let parent: Option<String> = r.get(6)?;
             let managed: Option<String> = r.get(8)?;
-            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?,"kind":r.get::<_,String>(10)?,"removed_ms":r.get::<_,Option<i64>>(11)?,"capture_generation":r.get::<_,i64>(12)?,"rank":r.get::<_,Option<String>>(13)?,"supervisor_id":r.get::<_,Option<String>>(14)?}))
+            Ok(json!({"id":r.get::<_,String>(0)?,"server":r.get::<_,String>(1)?,"native_thread_id":r.get::<_,String>(2)?,"native_session_id":r.get::<_,Option<String>>(3)?,"cwd":r.get::<_,String>(4)?,"registered_ms":r.get::<_,i64>(5)?,"ownership":if managed.is_some(){"managed"}else{"external"},"parent_id":parent,"worker_state":r.get::<_,Option<String>>(7)?,"name":r.get::<_,Option<String>>(9)?,"kind":r.get::<_,String>(10)?,"removed_ms":r.get::<_,Option<i64>>(11)?,"capture_generation":r.get::<_,i64>(12)?,"rank":r.get::<_,Option<String>>(13)?,"supervisor_id":r.get::<_,Option<String>>(14)?,"last_activity_ms":r.get::<_,Option<i64>>(15)?}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 

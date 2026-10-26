@@ -242,6 +242,7 @@ function sendState() {
         rank,
         supervisor_id,
         registered_ms,
+        last_activity_ms,
       }) => ({
         id,
         name,
@@ -258,6 +259,7 @@ function sendState() {
         rank,
         supervisor_id,
         registered_ms,
+        last_activity_ms,
       }),
     ),
     service,
@@ -267,6 +269,10 @@ function sendState() {
     platformError,
     dockError,
     selected,
+    displayHeight:
+      panelWin && !panelWin.isDestroyed()
+        ? screen.getDisplayMatching(panelWin.getBounds()).workArea.height
+        : null,
     defaultDirectory: require('node:os').homedir(),
   };
   for (const client of [avatarWin, panelWin]) {
@@ -1051,6 +1057,7 @@ app.whenReady().then(async () => {
     conversation.voiceActivity(speaker, active),
   );
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('instance-history', [panelWin], require('./instances.cjs').historyReader(rpc));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
   handle('stop-service', [panelWin], async () => {

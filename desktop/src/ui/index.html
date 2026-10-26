@@ -13,7 +13,7 @@
   <body>
     <main>
       <section id="panel" hidden aria-label="Voyager vessels">
-        <svg class="brand" viewBox="0 0 224 120" aria-hidden="true">
+        <svg id="panel-brand" class="brand" viewBox="0 0 224 120" aria-hidden="true">
           <defs>
             <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#ff5f56" />
@@ -147,8 +147,20 @@
             </section>
             <details id="previous-agents" class="history-group">
               <summary id="previous-toggle">Previous agents (0)</summary>
-              <div id="previous-sessions"></div>
+              <label class="removed-choice"
+                ><input id="show-removed" type="checkbox" /><span id="removed-label"
+                  >Show removed records (0)</span
+                ></label
+              >
+              <div
+                id="previous-sessions"
+                tabindex="0"
+                role="region"
+                aria-label="Previous agent list"
+              ></div>
+              <button id="previous-more" type="button" hidden>Load more</button>
             </details>
+            <section id="agent-details" aria-label="Saved agent details" hidden></section>
             <section id="conversation" aria-label="Voyager conversation" data-open="false">
               <div id="chat-disclosure" class="chat-disclosure" inert aria-hidden="true">
                 <div>
@@ -206,6 +218,7 @@
     </main>
     <script src="authority.js"></script>
     <script src="hierarchy.js"></script>
+    <script src="history.js"></script>
     <script src="renderer.js"></script>
     <script src="astronaut.js"></script>
     <script src="conversation.js"></script>

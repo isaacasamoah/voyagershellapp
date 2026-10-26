@@ -32,6 +32,12 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   assert.equal(initial.count, 'Previous agents (1)');
   assert.match(initial.text, /Running/);
   assert.match(initial.text, /Unregistered/);
+  assert.ok(
+    await panelWin.webContents.executeJavaScript(
+      "document.querySelector('.session-name').getBoundingClientRect().height < 40",
+    ),
+    'Agent name was squeezed into an unreadable column',
+  );
   const before = await rpc('events');
   await fs.writeFile(
     path.join(stateDir, 'panel-before.png'),
@@ -88,6 +94,93 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
   );
   const after = await rpc('events');
   assert.equal(after.cursor, before.cursor);
+  const previous = [];
+  for (let i = 0; i < 12; i++) {
+    const agent = await make(`History ${i}`);
+    await rpc('stop-instance', agent.session_id);
+    previous.push(agent.session_id);
+  }
+  await rpc('stop-instance', removed.session_id);
+  await refresh();
+  const historyState = () =>
+    panelWin.webContents.executeJavaScript(`({
+    count:document.querySelectorAll('#previous-sessions [data-key]').length,
+    height:document.getElementById('previous-sessions').clientHeight,
+    total:document.getElementById('previous-sessions').scrollHeight,
+    scroll:document.getElementById('previous-sessions').scrollTop,
+    more:!document.getElementById('previous-more').hidden,
+    focus:document.activeElement.id,
+    bounds:document.getElementById('previous-sessions').getBoundingClientRect().toJSON(),
+    viewport:innerHeight
+  })`);
+  await proof.wait(
+    historyState,
+    (s) => s.count > 0 && s.count < 13 && s.more && s.total > s.height,
+  );
+  await proof.pageClick(panelWin, 'previous-toggle');
+  await proof.pageKey(panelWin, 'Space');
+  await proof.pageKey(panelWin, 'Tab');
+  await proof.pageKey(panelWin, 'Tab');
+  assert.equal((await historyState()).focus, 'previous-sessions');
+  await proof.pageKey(panelWin, 'End');
+  await fs.writeFile(
+    path.join(stateDir, 'history-layout.json'),
+    JSON.stringify(await historyState()),
+  );
+  await proof.wait(historyState, (s) => s.scroll > 0);
+  await proof.pageWheel(panelWin, 'previous-sessions', 300);
+  await fs.writeFile(
+    path.join(stateDir, 'history-wheel.json'),
+    JSON.stringify(await historyState()),
+  );
+  await proof.wait(historyState, (s) => s.scroll === 0);
+  const first = await historyState();
+  await proof.pageClick(panelWin, 'previous-more');
+  const grown = await proof.wait(historyState, (s) => s.count > first.count);
+  assert.equal(grown.height, first.height);
+  assert.equal(grown.scroll, first.scroll);
+  while ((await historyState()).more) await proof.pageClick(panelWin, 'previous-more');
+  const finalFocus = await panelWin.webContents.executeJavaScript(`({
+    id: document.activeElement.id,
+    withinList: document.getElementById('previous-sessions').contains(document.activeElement),
+    list: document.activeElement.id === 'previous-sessions'
+  })`);
+  await fs.writeFile(path.join(stateDir, 'final-batch-focus.json'), JSON.stringify(finalFocus));
+  assert.ok(finalFocus.withinList || finalFocus.list, 'Final Load more lost keyboard focus');
+  await proof.pageClick(panelWin, 'show-removed');
+  const removedId = removed.session_id;
+  await proof.wait(() =>
+    panelWin.webContents.executeJavaScript(
+      `Boolean(document.getElementById('inspect-${removedId}'))`,
+    ),
+  );
+  await proof.pageClick(panelWin, `inspect-${removedId}`);
+  const beforeRead = await rpc('events');
+  await proof.pageClick(panelWin, 'history-read');
+  await proof.wait(
+    () =>
+      panelWin.webContents.executeJavaScript(
+        "document.getElementById('history-status').textContent",
+      ),
+    (s) => s.includes('saved portion'),
+  );
+  assert.equal((await rpc('events')).cursor, beforeRead.cursor);
+  await panelWin.webContents.executeJavaScript(`
+    window.reviewTextPointer = null;
+    document.getElementById('panel').addEventListener('pointerdown', event => {
+      window.reviewTextPointer = {target: event.target.id, prevented: event.defaultPrevented};
+    });
+  `);
+  await proof.pageClick(panelWin, 'history-status');
+  const textPointer = await panelWin.webContents.executeJavaScript('window.reviewTextPointer');
+  await fs.writeFile(path.join(stateDir, 'history-text-pointer.json'), JSON.stringify(textPointer));
+  assert.equal(textPointer.prevented, false, 'Reading saved text triggered panel dragging');
+  await proof.pageClick(panelWin, 'panel-brand');
+  assert.equal(
+    await panelWin.webContents.executeJavaScript('window.reviewTextPointer.prevented'),
+    true,
+  );
+  await proof.delay(100);
   const png = await panelWin.webContents.capturePage();
   await fs.writeFile(path.join(stateDir, 'panel-current.png'), png.toPNG());
   return {
@@ -96,6 +189,14 @@ exports.run = async ({ rpc, stateDir, refresh, panelWin, setExpanded, inventory 
     removed: removed.session_id,
     initial,
     expansionChangedEvents: false,
+    history: {
+      first,
+      grown,
+      inspected: removedId,
+      keyboard: true,
+      wheel: true,
+      physicalTrackpad: false,
+    },
     disconnectWithMenu: true,
     reconnectRefreshed: true,
   };

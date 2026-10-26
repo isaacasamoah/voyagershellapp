@@ -110,3 +110,17 @@ test('work groups use runtime observations and include each record exactly once'
   );
   assert.equal(JSON.stringify(rows), original);
 });
+
+test('history orders known recorded activity first and uses identity to break ties', () => {
+  const rows = [
+    { id: 'z', registered_ms: 9999 },
+    { id: 'b', last_activity_ms: 100 },
+    { id: 'a', last_activity_ms: 100 },
+    { id: 'c', last_activity_ms: 200 },
+  ];
+  assert.deepEqual(
+    hierarchy.historyOrder(rows).map((row) => row.id),
+    ['c', 'a', 'b', 'z'],
+  );
+  assert.equal(rows[0].id, 'z');
+});

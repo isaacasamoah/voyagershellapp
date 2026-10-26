@@ -707,3 +707,54 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   display: grid;
   gap: 5px;
 }
+
+#previous-sessions {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.saved-metadata {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  color: #42566a;
+}
+.removed-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+#agent-details {
+  max-height: 30vh;
+  overflow: auto;
+  user-select: text;
+  border-top: 1px solid #444;
+}
+.saved-event {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.instance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.instance-row .session {
+  grid-column: 1 / -1;
+}
+.instance-row .saved-metadata {
+  min-width: 0;
+  margin: 4px 8px;
+}
+.instance-row > button:not(.session):not(.rank-toggle) {
+  align-self: center;
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid #7a9bac35;
+  border-radius: 8px;
+  background: #ffffff45;
+  padding: 5px;
+  color: inherit;
+}
