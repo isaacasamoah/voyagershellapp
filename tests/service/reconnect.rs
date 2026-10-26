@@ -26,6 +26,12 @@ impl Drop for OwnedFixture {
     }
 }
 
+fn lose_service(f: &mut Fixture) {
+    let mut service = f.service.take().unwrap();
+    service.kill().unwrap();
+    service.wait().unwrap();
+}
+
 #[test]
 fn background_runtime_reconnects_after_service_loss_without_repeating_work() {
     let mut f = Fixture::new();
@@ -36,10 +42,7 @@ fn background_runtime_reconnects_after_service_loss_without_repeating_work() {
     let before = f.call(json!({"op":"list"}))[0].clone();
     let context = voyager_shell::authority::Credentials::locator(&f.dir, "reconnect-existing");
     let old_context: Value = serde_json::from_slice(&fs::read(&context).unwrap()).unwrap();
-    let child = f.service.as_mut().unwrap();
-    child.kill().unwrap();
-    child.wait().unwrap();
-    f.service.take();
+    lose_service(&mut f);
     let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
     let (_, mut receipt) = store.operation("reconnect-existing").unwrap().unwrap();
     receipt.as_object_mut().unwrap().remove("process_identity");
@@ -121,10 +124,7 @@ fn resumed_generation_renews_its_current_locator() {
     let session = super::resume::stopped_saved_agent(&mut f);
     let resumed = f.call(json!({"op":"resume-instance","session_id":session,"request_id":"latest-runtime","expected_runtime_generation":1}));
     let _owned = OwnedFixture::new(resumed["runtime_pid"].as_u64().unwrap() as u32);
-    let child = f.service.as_mut().unwrap();
-    child.kill().unwrap();
-    child.wait().unwrap();
-    f.service.take();
+    lose_service(&mut f);
     f.start();
     wait(|| f.call(json!({"op":"list"}))[0]["capture"] == "connected");
     assert_eq!(
@@ -143,10 +143,7 @@ fn changed_native_thread_cannot_claim_the_surviving_managed_process() {
     let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"different-thread","name":"Control","cwd":f.dir}));
     let _owned = OwnedFixture::new(created["runtime_pid"].as_u64().unwrap() as u32);
     let before = f.call(json!({"op":"list"}))[0].clone();
-    let child = f.service.as_mut().unwrap();
-    child.kill().unwrap();
-    child.wait().unwrap();
-    f.service.take();
+    lose_service(&mut f);
     let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
     store
         .0
@@ -165,4 +162,43 @@ fn changed_native_thread_cannot_claim_the_surviving_managed_process() {
         native.metadata("worker-thread").unwrap()["id"],
         "worker-thread"
     );
+}
+
+#[test]
+fn capture_change_during_verification_rejects_the_old_result() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"stale-check","name":"Stale","cwd":f.dir}));
+    let id = created["session_id"].as_str().unwrap();
+    let _owned = OwnedFixture::new(created["runtime_pid"].as_u64().unwrap() as u32);
+    fs::write(f.dir.join("hold-reconnect"), "1").unwrap();
+    lose_service(&mut f);
+    f.start();
+    wait(|| f.dir.join("reconnect-pending").exists());
+    let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
+    let generation = store.reactivate(id).unwrap();
+    drop(store);
+    fs::remove_file(f.dir.join("hold-reconnect")).unwrap();
+    wait(|| f.call(json!({"op":"list"}))[0]["recovery"]["state"] == "disconnected");
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(row["capture_generation"], generation);
+    assert_eq!(row["capture"], "disconnected");
+    assert!(!voyager_shell::authority::Credentials::locator(&f.dir, "stale-check").exists());
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+}
+
+#[test]
+fn later_native_calls_share_the_original_connection_deadline() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"deadline","name":"Deadline","cwd":f.dir}));
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    let mut native = Codex::connect_before(
+        Path::new(row["server"].as_str().unwrap()),
+        Instant::now() + Duration::from_millis(200),
+    )
+    .unwrap();
+    thread::sleep(Duration::from_millis(100));
+    assert!(native.rpc("fixture/slow", json!({})).is_err());
+    f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
 }

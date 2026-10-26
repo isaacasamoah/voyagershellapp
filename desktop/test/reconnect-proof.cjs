@@ -1,11 +1,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const exec = promisify(execFile);
 
-exports.run = async ({ rpc, stateDir }, { wait, delay }) => {
+exports.run = async ({ rpc, stateDir }, { wait }) => {
   const cwd = path.join(stateDir, 'reconnect-project');
   await fs.mkdir(cwd);
   await fs.writeFile(
@@ -24,9 +21,6 @@ exports.run = async ({ rpc, stateDir }, { wait, delay }) => {
   const row = async () => (await rpc('list')).find((r) => r.id === id);
   const events = async () => (await rpc('events')).events.filter((e) => e.session_id === id);
   const before = await row();
-  const started = performance.now();
-  const context = path.join(stateDir, 'contexts', 'reconnect-proof.json');
-  const originalContext = JSON.parse(await fs.readFile(context));
   const sent = await rpc(
     'send',
     id,
@@ -34,7 +28,10 @@ exports.run = async ({ rpc, stateDir }, { wait, delay }) => {
     'Run sleep 15 in the shell, then reply RECONNECTED_WORK_FINISHED. Use no other tools.',
   );
   await wait(events, (items) => items.some((e) => e.type === 'tool.started'));
+  const receipt = await rpc('operation', 'reconnect-proof');
+  assert.equal(receipt.process_identity, undefined);
   const request = 'active-service-restart';
+  const started = performance.now();
   await fs.writeFile(
     path.join(stateDir, 'proof-service-control.json'),
     JSON.stringify({ action: 'restart', request }),
@@ -56,14 +53,26 @@ exports.run = async ({ rpc, stateDir }, { wait, delay }) => {
   assert.equal(recovered.native_thread_id, before.native_thread_id);
   assert.deepEqual(recovered.lifecycle, before.lifecycle);
   assert.equal((await rpc('attach-info', id)).pid, created.runtime_pid);
-  assert.notDeepEqual(JSON.parse(await fs.readFile(context)), originalContext);
   const readyMs = performance.now() - started;
-  await wait(
+  const completed = await wait(
     events,
     (items) =>
       items.some((e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id),
     'Original turn did not finish after reconnect',
     90000,
+  );
+  const original = completed.find(
+    (e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id,
+  );
+  assert.equal(original.payload.has_error, false);
+  assert(
+    completed.some(
+      (e) =>
+        e.native_turn_id === sent.native_turn_id &&
+        e.type === 'message' &&
+        e.payload.role === 'assistant' &&
+        e.payload.text.includes('RECONNECTED_WORK_FINISHED'),
+    ),
   );
   const answer = await rpc(
     'send',
@@ -95,14 +104,9 @@ exports.run = async ({ rpc, stateDir }, { wait, delay }) => {
     new Set(finalEvents.filter((e) => e.type === 'turn.started').map((e) => e.native_turn_id)).size,
     2,
   );
-  await delay(100);
   const stopped = await rpc('stop-instance', id, '--request-id', 'reconnect-explicit-stop');
   assert.equal(stopped.runtime, 'stopped');
-  assert.equal((await row()).lifecycle.runtime, 'stopped');
-  const { stdout } = await exec('readlink', [`/proc/${created.runtime_pid}/exe`]).catch(() => ({
-    stdout: '',
-  }));
-  assert.equal(stdout, '');
+  await assert.rejects(fs.readlink(`/proc/${created.runtime_pid}/exe`), { code: 'ENOENT' });
   return {
     id,
     nativeThread: before.native_thread_id,

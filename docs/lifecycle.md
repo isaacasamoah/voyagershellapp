@@ -527,7 +527,11 @@ only after checking that the peer is its group leader. That flag requires Linux
 6.9; normal child launch keeps its existing path. Failure or cancellation drops
 the new connection and descriptor without signalling the existing process.
 
-Provider I/O runs outside the service loop. Admission rechecks registration,
+Provider I/O runs outside the service loop. Initialization and every verification
+RPC share one absolute deadline. A cancelled or timed-out check retains its result
+receiver until its connection is relinquished, so a retry cannot overlap it. A
+registration change cancels subscription before it starts, or rejects the result
+at admission if that subscription was already pending. Admission rechecks registration,
 capture generation and the current runtime record, then records a capture gap and
 advances capture identity while retaining runtime generation. Same-service loss
 retains its owned child and credential. A service restart renews credentials at

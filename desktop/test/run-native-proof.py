@@ -36,7 +36,8 @@ libc = ctypes.CDLL(None, use_errno=True)
 if journey == 'reconnect':
     assert libc.prctl(36, 1, 0, 0, 0) == 0, 'Could not retain orphaned fixture children'
 owned = {}
-service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'service.log').open('w'), stderr=subprocess.STDOUT)
+seed = os.environ.get('VOYAGER_PROOF_SEED_SERVICE', exe)
+service = subprocess.Popen([seed, '--state', str(state), 'serve'], env=env, stdout=(state / 'service.log').open('w'), stderr=subprocess.STDOUT)
 app = None
 verdict = None
 cleanup = []
@@ -49,7 +50,7 @@ try:
     assert call('list') == [], 'Native proof requires fresh empty service state'
     args = ([str(packaged)] if packaged else [str(root / 'desktop/node_modules/electron/dist/electron'), str(root / 'desktop')]) + ['--ozone-platform=x11', '--expanded', '--proof-native']
     app = subprocess.Popen(args, env=env, stdout=(state / 'desktop.log').open('w'), stderr=subprocess.STDOUT)
-    (state / 'launch.json').write_text(json.dumps({'app': args, 'app_pid': app.pid, 'service': exe, 'service_pid': service.pid, 'provider': subprocess.check_output([os.environ.get('VOYAGER_CODEX_BIN', 'codex'), '--version'], text=True).strip()}, indent=2))
+    (state / 'launch.json').write_text(json.dumps({'app': args, 'app_pid': app.pid, 'service': exe, 'seed_service': seed, 'service_pid': service.pid, 'provider': subprocess.check_output([os.environ.get('VOYAGER_CODEX_BIN', 'codex'), '--version'], text=True).strip()}, indent=2))
     deadline = time.monotonic() + 360
     while time.monotonic() < deadline:
         control = state / 'proof-service-control.json'

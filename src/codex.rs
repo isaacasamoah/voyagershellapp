@@ -19,20 +19,34 @@ pub struct Codex {
     socket: WebSocket<UnixStream>,
     next_id: u64,
     failed: bool,
+    deadline: Option<Instant>,
     pub pending: VecDeque<Value>,
     replies: HashMap<u64, Value>,
 }
 
 impl Codex {
     pub fn connect(path: &Path) -> Result<Self> {
+        Self::connect_with_deadline(path, None)
+    }
+
+    pub fn connect_before(path: &Path, deadline: Instant) -> Result<Self> {
+        Self::connect_with_deadline(path, Some(deadline))
+    }
+
+    fn connect_with_deadline(path: &Path, deadline: Option<Instant>) -> Result<Self> {
         let stream = UnixStream::connect(path).context("connect to existing Codex socket")?;
         let peer = getsockopt(&stream, sockopt::PeerCredentials)?;
         ensure!(
             peer.uid() == Uid::effective().as_raw(),
             "different-user Codex server"
         );
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let timeout = deadline
+            .map(|at| at.saturating_duration_since(Instant::now()))
+            .unwrap_or(Duration::from_secs(5))
+            .min(Duration::from_secs(5));
+        ensure!(!timeout.is_zero(), "native connection check timed out");
+        stream.set_read_timeout(Some(timeout))?;
+        stream.set_write_timeout(Some(timeout))?;
         let (mut socket, _) = tungstenite::client("ws://localhost/", stream)?;
         socket.set_config(|c| {
             c.max_message_size = Some(4 * 1024 * 1024);
@@ -47,6 +61,7 @@ impl Codex {
             user_agent: None,
             next_id: 1,
             failed: false,
+            deadline,
             pending: VecDeque::new(),
             replies: HashMap::new(),
         };
@@ -63,7 +78,10 @@ impl Codex {
 
     pub fn rpc(&mut self, method: &str, params: Value) -> Result<Value> {
         let id = self.begin_rpc(method, params)?;
-        let deadline = Instant::now() + Duration::from_secs(8);
+        let deadline = self
+            .deadline
+            .unwrap_or(Instant::now() + Duration::from_secs(8))
+            .min(Instant::now() + Duration::from_secs(8));
         while Instant::now() < deadline {
             if let Some(value) = self.poll_rpc(id)? {
                 return Ok(value);
@@ -73,6 +91,13 @@ impl Codex {
     }
 
     pub fn begin_rpc(&mut self, method: &str, params: Value) -> Result<u64> {
+        if let Some(deadline) = self.deadline {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            ensure!(!remaining.is_zero(), "native connection check timed out");
+            self.socket
+                .get_mut()
+                .set_write_timeout(Some(remaining.min(Duration::from_secs(5))))?;
+        }
         let id = self.next_id;
         self.next_id += 1;
         self.socket.send(Message::Text(
@@ -81,6 +106,14 @@ impl Codex {
                 .into(),
         ))?;
         Ok(id)
+    }
+
+    pub(crate) fn finish_connection_check(&mut self) -> Result<()> {
+        self.deadline = None;
+        self.socket
+            .get_mut()
+            .set_write_timeout(Some(Duration::from_secs(5)))?;
+        Ok(())
     }
 
     pub fn poll_rpc(&mut self, id: u64) -> Result<Option<Value>> {

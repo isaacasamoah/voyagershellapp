@@ -3,7 +3,11 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    sync::mpsc::{Receiver, TryRecvError, channel},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, TryRecvError, channel},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -22,6 +26,7 @@ enum Phase {
     Checking {
         ready: Receiver<Result<Worker>>,
         deadline: Instant,
+        cancelled: Arc<AtomicBool>,
     },
     Waiting {
         at: Instant,
@@ -43,8 +48,8 @@ impl Runtime {
             Some(Phase::Waiting { reason, .. }) => {
                 json!({"state":"checking","reason":reason,"retry_available":false})
             }
-            Some(Phase::Checking { .. }) => {
-                json!({"state":"checking","reason":null,"retry_available":false})
+            Some(Phase::Checking { deadline, .. }) => {
+                json!({"state":"checking","reason":if Instant::now() >= *deadline {Some("Closing the timed-out connection check.")} else {None},"retry_available":false})
             }
             Some(Phase::Disconnected(reason)) => {
                 json!({"state":"disconnected","reason":reason,"retry_available":true})
@@ -55,63 +60,62 @@ impl Runtime {
 
     pub(super) fn advance_recoveries(&mut self) -> Result<()> {
         for row in self.store.sessions()? {
-            if row["kind"] != "codex"
-                || row["ownership"] != "managed"
-                || !row["removed_ms"].is_null()
-            {
+            if row["kind"] != "codex" || row["ownership"] != "managed" {
                 continue;
             }
             let id = string(&row, "id")?;
             let current = self.store.resume_record(id)?;
-            let eligible = current
-                .as_ref()
-                .is_some_and(|r| r["state"] == "unknown" || r["state"] == "running");
+            let eligible = row["removed_ms"].is_null()
+                && current
+                    .as_ref()
+                    .is_some_and(|r| r["state"] == "unknown" || r["state"] == "running");
             let connected = self
                 .workers
                 .get(id)
                 .is_some_and(|w| w.alive && w.connection.is_some());
-            if !eligible || connected {
-                self.recoveries.0.remove(id);
-                continue;
-            }
-            let current = current.context("runtime disappeared")?;
             let capture = row["capture_generation"]
                 .as_i64()
                 .context("capture identity missing")?;
-            let mut recovery = self
-                .recoveries
-                .0
-                .remove(id)
-                .filter(|r| r.runtime == current && r.capture == capture)
-                .unwrap_or_else(|| Recovery {
-                    runtime: current.clone(),
+            let mut recovery = match self.recoveries.0.remove(id) {
+                Some(recovery) => recovery,
+                None if eligible && !connected => Recovery {
+                    runtime: current.clone().context("runtime disappeared")?,
                     capture,
                     attempts: 0,
                     phase: Phase::Waiting {
                         at: Instant::now(),
                         reason: String::new(),
                     },
-                });
+                },
+                None => continue,
+            };
+            let stale = current.as_ref() != Some(&recovery.runtime) || capture != recovery.capture;
+            if !eligible || connected || stale {
+                if let Phase::Checking { cancelled, .. } = &recovery.phase {
+                    cancelled.store(true, Ordering::Release);
+                }
+            }
             let result = match &mut recovery.phase {
-                Phase::Checking { ready, deadline } => match ready.try_recv() {
+                Phase::Checking { ready, .. } => match ready.try_recv() {
                     Ok(result) => Some(result),
                     Err(TryRecvError::Disconnected) => {
                         Some(Err(anyhow::anyhow!("Native connection check ended.")))
-                    }
-                    Err(TryRecvError::Empty) if Instant::now() >= *deadline => {
-                        Some(Err(anyhow::anyhow!("Native connection check timed out.")))
                     }
                     Err(TryRecvError::Empty) => None,
                 },
                 _ => None,
             };
             if let Some(result) = result {
-                match result.and_then(|worker| self.admit_recovery(&row, &current, capture, worker))
-                {
+                if !eligible || connected {
+                    continue;
+                }
+                match result.and_then(|worker| {
+                    self.admit_recovery(&row, &recovery.runtime, recovery.capture, worker)
+                }) {
                     Ok(()) => continue,
                     Err(error) => {
                         let reason = format!("Could not reconnect this Vessel: {error}");
-                        recovery.phase = if recovery.attempts < 3 {
+                        recovery.phase = if recovery.attempts < 3 && !stale {
                             Phase::Waiting {
                                 at: Instant::now() + Duration::from_secs(1),
                                 reason,
@@ -122,8 +126,18 @@ impl Runtime {
                     }
                 }
             }
+            if matches!(recovery.phase, Phase::Checking { .. }) {
+                self.recoveries.0.insert(id.into(), recovery);
+                continue;
+            }
+            if !eligible || connected {
+                continue;
+            }
+            if stale {
+                recovery.phase = Phase::Disconnected("The Vessel changed during the connection check. Retry using its current state.".into());
+            }
             if matches!(recovery.phase, Phase::Waiting { at, .. } if Instant::now() >= at) {
-                let operation = string(&current, "request_id")?.to_owned();
+                let operation = string(&recovery.runtime, "request_id")?.to_owned();
                 let receipt = self
                     .store
                     .operation(&operation)?
@@ -133,20 +147,20 @@ impl Runtime {
                         let (sender, ready) = channel();
                         let context = Credentials::locator(&self.state, &operation);
                         let record = row.clone();
+                        let deadline = Instant::now() + Duration::from_secs(10);
+                        let cancelled = Arc::new(AtomicBool::new(false));
+                        let cancellation = Arc::clone(&cancelled);
                         thread::spawn(move || {
-                            let _ = sender.send(Worker::recover(&record, &receipt, &operation, &context));
+                            let _ = sender.send(Worker::recover(&record, &receipt, &operation, &context, deadline, &cancellation));
                         });
                         recovery.attempts += 1;
-                        recovery.phase = Phase::Checking { ready, deadline: Instant::now() + Duration::from_secs(10) };
+                        recovery.phase = Phase::Checking { ready, deadline, cancelled };
                     }
                     _ => recovery.phase = Phase::Disconnected("The saved runtime has no confirmed launch receipt. No replacement was started.".into()),
                 }
             }
             self.recoveries.0.insert(id.into(), recovery);
         }
-        self.recoveries
-            .0
-            .retain(|id, _| self.store.generation(id).ok().flatten().is_some());
         Ok(())
     }
 

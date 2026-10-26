@@ -179,6 +179,8 @@ impl Worker {
         receipt: &Value,
         operation: &str,
         context: &Path,
+        deadline: Instant,
+        cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<Self> {
         let server = record["server"]
             .as_str()
@@ -186,7 +188,7 @@ impl Worker {
         let native = record["native_thread_id"]
             .as_str()
             .context("native conversation missing")?;
-        let mut connection = Codex::connect(Path::new(server))?;
+        let mut connection = Codex::connect_before(Path::new(server), deadline)?;
         ensure!(
             receipt["runtime_pid"].as_u64() == Some(u64::from(connection.peer_pid)),
             "native server process differs from the saved runtime"
@@ -219,6 +221,10 @@ impl Worker {
             "native conversation is unavailable"
         );
         connection.pending.clear();
+        ensure!(
+            !cancelled.load(std::sync::atomic::Ordering::Acquire),
+            "Vessel changed during connection check"
+        );
         let reply = connection.rpc(
             "thread/resume",
             json!({"threadId":native,"excludeTurns":true}),
@@ -231,6 +237,7 @@ impl Worker {
             process.try_wait()?.is_none() && process.identity()? == identity,
             "native server exited during recovery"
         );
+        connection.finish_connection_check()?;
         Ok(Self {
             process,
             connection: Some(connection),
