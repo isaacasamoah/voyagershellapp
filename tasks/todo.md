@@ -26,13 +26,18 @@ focus and the persistent status announcement are checked in the actual panel.
 
 ## C3: history and feedback
 
-- [ ] Replace the checkbox with removed-view/back menu actions and exact membership checks.
-- [ ] Keep readable operation errors with their Vessel across refresh.
-- [ ] Pass desktop/history journeys, negative control and independent review.
+- [x] Replace the checkbox with removed-view/back menu actions and exact membership checks.
+- [x] Keep readable operation errors with their Vessel across refresh.
+- [x] Pass desktop/history journeys, negative control and independent review.
+
+C3 passed final independent review after one corrective pass. The history menu
+stays in its toolbar and Back matches existing secondary controls. Both exact-package
+native journeys pass, and the old package fails the new menu-bounds check.
+Complete size gate: 9,265 / 9,266, including all maintained and one-off acceptance.
 
 ## Final checkpoint
 
-- [ ] Record combined maintained/one-off test budget and PR sizes.
-- [ ] Deliver the BeautifulRust skills report and record their use in project instructions.
+- [x] Record combined maintained/one-off test budget and PR sizes.
+- [x] Deliver the BeautifulRust skills report and record their use in project instructions.
 - [ ] Restart only the verified idle test instance from the reviewed package, retaining closed-state backup.
 - [ ] Record executable identities, ready state, skills used and known limits for owner inspection.
