@@ -544,13 +544,10 @@ disposable provider children, restarts only its own service and cleans up throug
 anchored process handles. It never uses the owner's existing Vessel as a fixture.
 
 
-The current reconnect candidate does not yet meet the full deadline contract.
-Its initial UnixStream connection blocks before the deadline applies. A full
-listen queue reproduces this gap and can leave the connection check waiting
-indefinitely. The later RPC deadline test passes but does not cover this earlier
-step. Final review therefore blocks acceptance; surviving-viewer recovery and
-panel retry remain unimplemented. A further correction needs to bound the
-initial connection and preserve cancellation without blocking the service loop.
+The earlier review reproduced a blocking initial connection that could leave
+recovery waiting beyond its deadline. That finding is closed by the additional
+correction below. The previous stopped review remains historical evidence.
+Surviving-viewer recovery and panel retry remain separate planned capabilities.
 
 
 The owner-approved additional correction makes the initial recovery socket
@@ -568,3 +565,12 @@ runner. It checks the selected turn's completion status and error flag, and its
 expected assistant text when supplied. Each journey retains its own user actions,
 identity, credential and cleanup assertions. Both journeys must pass on the same
 packaged candidate before accepting this consolidation.
+
+
+The additional correction passed fresh general and BeautifulRust review. The same
+queue-full reproduction fails the earlier revision and passes the correction.
+Nine reconnect cases, normal checks, the packaged legacy-runtime journey and the
+packaged Resume journey pass. Arbitrarily fragmented WebSocket messages after the
+handshake remain an existing transport review limit; this result does not claim
+new absolute bounds for that broader case. The measured initial connection and
+handshake correction adds no native permission or workflow restriction.

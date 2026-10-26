@@ -165,9 +165,9 @@ Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
 Reports of real workflows, failures and integration limits are welcome.
 
 
-Background reconnect is implemented on its working branch and remains blocked
-in final review. The initial Unix socket connection can exceed the check deadline,
-and the complete acceptance-code inventory exceeds the project limit.
+Background reconnect has passed the owner-approved additional correction and
+fresh review on its working branch. Initial connection and handshake deadlines,
+cancellation and the full acceptance-code budget pass their focused checks.
 It checks an existing managed Codex runtime after service or capture loss rather
 than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
 identity checks, native process limits and the opt-in proof. It does not restore
