@@ -26,13 +26,13 @@ exports.run = async (
   const initial = await proof.wait(
     snapshot,
     (s) => s.current.includes(live.session_id),
-    'Running agent was not shown under Current work',
+    'Running agent was not shown under Vessels',
   );
   assert.deepEqual(initial.current, [live.session_id]);
   assert.deepEqual(initial.unregistered, [removed.session_id]);
   assert.deepEqual(initial.previous, [stopped.session_id]);
   assert.equal(initial.previousOpen, false);
-  assert.equal(initial.count, 'Previous agents (1)');
+  assert.equal(initial.count, 'Previous vessels (1)');
   assert.match(initial.text, /Running/);
   assert.match(initial.text, /Unregistered/);
   assert.ok(

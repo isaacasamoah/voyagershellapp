@@ -450,10 +450,10 @@ does not claim a physical monitor-removal test.
 
 ## Current and previous work
 
-The panel groups service observations into Current work, Needs attention and
-Previous agents. A running owned runtime stays current when its viewer is closed.
+The panel groups service observations into Vessels, Needs attention and
+Previous vessels. A running owned runtime stays current when its viewer is closed.
 A removed registration with a running owned runtime stays visible as Unregistered.
-A confirmed stop moves into the initially collapsed Previous agents group. Unknown
+A confirmed stop moves into the initially collapsed Previous vessels group. Unknown
 ownership and disconnected external capture remain visible under Needs attention.
 Each record appears once; selection does not change assignments or Fleet data.
 Fleet inheritance still uses all registered supervisors, including a supervisor
@@ -462,7 +462,7 @@ outside the current visible rows.
 State labels use words as well as the connection dot. A disconnected service keeps
 cached rows as last-known information and disables their actions. Connection loss
 closes an open Actions popover before rebuilding the rows. A late action result
-cannot enable an offline control. The Previous agents control is excluded from
+cannot enable an offline control. The Previous vessels control is excluded from
 panel dragging so its normal click and keyboard behavior remain available. An older service
 without lifecycle observations produces a service-update warning and unknown state,
 never an inferred stop. The desktop forwards the service's lifecycle and Resume
@@ -477,7 +477,7 @@ including focused-window and visible-control checks. It does not prove physical
 mouse, keyboard or trackpad delivery. A GNOME pointer attempt did not reach the
 expected window during this build; its delivery or coordinate cause remains open.
 
-Previous agents uses the latest saved event's recorded time, with stable Vessel
+Previous vessels uses the latest saved event's recorded time, with stable Vessel
 identity breaking ties. Missing activity remains unavailable. The existing list
 response supplies nullable last_activity_ms through an indexed per-session lookup;
 registration and provider occurrence times are not substitutes. Instance callers
@@ -553,13 +553,13 @@ assignments or inherited Fleet placement and creates no duplicate captain row.
 
 The small focus helper remembers a named control and its Vessel before rebuilding
 rows, including when an asynchronous action temporarily disables its button. If
-that Vessel moves into collapsed Previous agents, focus goes directly to the
+that Vessel moves into collapsed Previous vessels, focus goes directly to the
 summary. Otherwise it keeps a usable control on the same Vessel or the relevant
 group heading. A rectangle alone is insufficient evidence that a control inside a
 closed disclosure can receive focus. Restored focus scrolls into view.
 
 History reads return focus to their re-enabled button only if the reader has not
-moved elsewhere. Closing details returns to Inspect, or Previous agents when the
+moved elsewhere. Closing details returns to Inspect, or Previous vessels when the
 containing disclosure is closed. Offline state also disables Fleet actions,
 creation submission and service stop. Cached inspection remains available.
 
@@ -574,3 +574,18 @@ Chromium pointer input does not move the OS cursor. The ordinary-background
 comparison checks default event handling after the bounds and focus checks;
 it does not prove native panel dragging, which follows the OS cursor. Physical
 keyboard, mouse, wheel and trackpad delivery remain separate manual checks.
+
+
+Use the established Vessel terminology consistently in headings, accessible names
+and explanatory copy. Vessels identifies the current list; Previous vessels names
+its history. An agent and a Bash terminal share this product entity. A lifecycle
+state describes that entity rather than introducing another name for it.
+
+The desktop and its launch setup own internal storage configuration. The Linux
+worker socket adds 42 bytes to the state directory and requires a total below
+104 bytes. The shell socket also adds 42. A manual trial must choose a short persistent
+state path before starting the service. A CLI suggestion to change --state is not
+a usable remedy in the creation form. The long-path trial failure was caused by
+its launch configuration, before any vessel started; the normal default state
+path fits. Separating persistent data from short runtime socket paths remains a
+broader architecture question, not a change in this wording correction.

@@ -42,6 +42,7 @@ for (const file of [
   'voice-handoff-proof.cjs',
   'resume-proof.cjs',
   'panel-proof.cjs',
+  'creation-proof.cjs',
   'panel-context-proof.cjs',
 ])
   fs.copyFileSync(path.join(desktop, 'test', file), path.join(app, 'test', file));

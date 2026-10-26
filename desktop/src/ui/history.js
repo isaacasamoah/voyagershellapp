@@ -24,7 +24,7 @@ function createHistory(api, element, hierarchy) {
       ...groups.previous,
       ...(removed.checked ? groups.removed : []),
     ]);
-    get('previous-toggle').textContent = `Previous agents (${groups.previous.length})`;
+    get('previous-toggle').textContent = `Previous vessels (${groups.previous.length})`;
     get('removed-label').textContent = `Show removed records (${groups.removed.length})`;
     const scroll = list.scrollTop;
     const focus = document.activeElement?.id;
@@ -85,7 +85,7 @@ function createHistory(api, element, hierarchy) {
         get('history-events').append(line);
       }
       get('history-status').textContent = advanced
-        ? 'Read one saved portion. Continue for later events; other agents may have occupied this portion.'
+        ? 'Read one saved portion. Continue for later events; other vessels may have occupied this portion.'
         : 'No later saved events. Missing capture does not mean no work occurred.';
       get('history-read').textContent = 'Read next portion';
     } catch (error) {
@@ -105,7 +105,7 @@ function createHistory(api, element, hierarchy) {
     cursor = 0;
     loading = false;
     token++;
-    const title = element('h3', session.name || 'Saved agent');
+    const title = element('h3', session.name || 'Saved vessel');
     const metadata = element(
       'p',
       `${session.cwd}\n${session.id}\n${activity(session)}\n${session.lifecycle?.runtime || 'Runtime unverified'}`,

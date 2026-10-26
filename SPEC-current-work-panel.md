@@ -13,6 +13,12 @@ Keep the existing panel and Fleet layout. Show additional detail when the owner 
 
 ## Presentation contract
 
+Owner correction, 26 October 2026: use Vessels and Previous vessels as the section
+names. Keep Vessel as the product term for both registered coding agents and
+terminals. State labels describe a Vessel without replacing its name with a new
+concept. This correction changes wording, not classification or lifecycle rules.
+
+
 Use the process state and Resume availability reported by the service, as defined in the conversation-resume specification. A registration, visible window or matching title does not prove that an agent is running. If an older service does not supply the new lifecycle information, treat the state as unknown and explain that the service must be updated before Resume is available.
 
 Apply the following classification in order. Show each Vessel only once as a row with actions. A label naming its supervisor provides context; it must not create another actionable row for that supervisor.
@@ -20,15 +26,15 @@ Apply the following classification in order. Show each Vessel only once as a row
 | Observation | Location and available behavior |
 |---|---|
 | The service is unavailable or its observations are out of date | Keep a connection warning visible. Retain existing rows as last-known information, but disable actions that need a current check. Do not mark an agent stopped just because its information is out of date. |
-| Creation or resume is still in progress | Show the agent in Current work as Starting or Resuming, with the operation status. Do not allow the same action to be submitted again. |
-| The service confirms that a process it owns is running | Show the agent in Current work whether its terminal window is open, minimised or closed. Keep the existing permitted Open, Background and Stop actions. Show a warning if event capture has a problem. |
-| Registration was removed, but the service confirms its managed process is still running | Show the agent in Current work as Unregistered. Keep the existing permitted Open, Stop and Register again actions. Do not hide it in history or suggest that event capture continues. |
-| An external agent is registered and its event capture is connected | Show it in Current work as External, with the supported read-only details and history. Do not offer actions reserved for processes Voyager manages or imply Voyager owns it. |
+| Creation or resume is still in progress | Show the agent in Vessels as Starting or Resuming, with the operation status. Do not allow the same action to be submitted again. |
+| The service confirms that a process it owns is running | Show the agent in Vessels whether its terminal window is open, minimised or closed. Keep the existing permitted Open, Background and Stop actions. Show a warning if event capture has a problem. |
+| Registration was removed, but the service confirms its managed process is still running | Show the agent in Vessels as Unregistered. Keep the existing permitted Open, Stop and Register again actions. Do not hide it in history or suggest that event capture continues. |
+| An external agent is registered and its event capture is connected | Show it in Vessels as External, with the supported read-only details and history. Do not offer actions reserved for processes Voyager manages or imply Voyager owns it. |
 | A managed agent's process state is unknown, an operation has no established outcome, or an external registration remains present but its capture is disconnected | Show it in Needs attention without requiring the owner to open history. Offer Inspect and explain the actual problem. Do not offer Resume until the service confirms it is allowed. |
-| Exit is confirmed and the registration remains present | Show it in Previous agents, collapsed by default. Offer details and history. Offer Resume conversation only when the service allows it. |
-| Registration was removed and exit is confirmed, or an external registration was removed and Voyager owns no runtime for it | Show it within Previous agents after the owner selects Show removed records. Keep history readable. Explicitly say that an external process's state is unverified. Do not silently register or resume it. |
+| Exit is confirmed and the registration remains present | Show it in Previous vessels, collapsed by default. Offer details and history. Offer Resume conversation only when the service allows it. |
+| Registration was removed and exit is confirmed, or an external registration was removed and Voyager owns no runtime for it | Show it within Previous vessels after the owner selects Show removed records. Keep history readable. Explicitly say that an external process's state is unverified. Do not silently register or resume it. |
 
-Previous agents shows a count and expands with one click or a keyboard action. Each row shows the name, working folder, state and last recorded activity when known. Say when a timestamp is unavailable. Order records by last recorded activity and stable Vessel ID.
+Previous vessels shows a count and expands with one click or a keyboard action. Each row shows the name, working folder, state and last recorded activity when known. Say when a timestamp is unavailable. Order records by last recorded activity and stable Vessel ID.
 
 Let the expanded history grow within the panel's available space, then scroll inside that area. The number of visible rows follows the available height rather than a fixed target of 50. Keep the other panel controls accessible. A short list should use only the space it needs; a long list must not push the panel beyond the display. Keep panel sizing based on rendered content and the display limit, not an estimate from the total number of records.
 
@@ -40,7 +46,7 @@ When a running worker's captain is not in the visible set, show a small label su
 
 ## Resume interaction
 
-Offer Resume conversation for a previous conversation only when the service allows it. Give the owner's request one identifier. Reuse that identifier when retrieving the saved operation result, called its receipt, rather than starting another request. While the operation is pending, move the same Vessel row into Current work and show Resuming.
+Offer Resume conversation for a previous conversation only when the service allows it. Give the owner's request one identifier. Reuse that identifier when retrieving the saved operation result, called its receipt, rather than starting another request. While the operation is pending, move the same Vessel row into Vessels and show Resuming.
 
 After resume succeeds, get a fresh service observation confirming that the agent is still running. Then call the existing Open action with its own request identifier. An earlier receipt saying resume completed does not prove the agent is still running now. If the terminal window fails to open, explain the failure without marking the agent stopped or starting it again.
 
@@ -95,14 +101,14 @@ The later plan must give the command for an isolated test of the real panel and 
 
 | Id | Case and required evidence |
 |---|---|
-| P1 | Supply test records covering every category above. Each Vessel must appear in the specified place. Current work must exclude confirmed stopped agents and include running agents whose terminal windows are closed. |
-| P2 | Previous agents starts collapsed. Expanding it reveals history without launching anything. Test a short list and a list longer than the available history area. The long list must scroll, and Load more must make records beyond the first batch reachable without losing the owner's place or forcing the panel to grow. Show removed records must reveal removed, stopped records with the same scrolling behavior. |
+| P1 | Supply test records covering every category above. Each Vessel must appear in the specified place. Vessels must exclude confirmed stopped agents and include running agents whose terminal windows are closed. |
+| P2 | Previous vessels starts collapsed. Expanding it reveals history without launching anything. Test a short list and a list longer than the available history area. The long list must scroll, and Load more must make records beyond the first batch reachable without losing the owner's place or forcing the panel to grow. Show removed records must reveal removed, stopped records with the same scrolling behavior. |
 | P3 | Resume a real stopped conversation through the panel. The same row must show Resuming, then running, before its terminal window opens. If Open fails, offer a way to retry opening the window without starting a second runtime. |
 | P4 | Test outdated Resume availability, double clicks and lost replies. The service must still decide the outcome. Operations with uncertain outcomes must remain visible and must not be submitted again under another request ID. |
 | P5 | Remove the registration of a running agent that Voyager manages. Keep it accessible as Unregistered, with Stop available subject to the existing permission checks. |
 | P6 | Show a running worker whose supervisor is stopped, hidden or unavailable. Keep the worker accessible and describe its supervisor accurately. Stored assignments and Fleet information must not change. |
 | P7 | Disconnect the service. Clearly mark existing rows as out of date. Do not silently mark any agent stopped or available to resume. On reconnect, refresh the existing rows by Vessel identity without creating duplicates. |
-| P8 | Use only the keyboard to expand groups, scroll Previous agents, load more records, inspect row details and activate available actions. Keep focus in a useful place when state changes and keep the focused row visible. Also check wheel and trackpad scrolling and that the scrollbar can be found. Text labels must explain state without requiring the user to distinguish colours. |
+| P8 | Use only the keyboard to expand groups, scroll Previous vessels, load more records, inspect row details and activate available actions. Keep focus in a useful place when state changes and keep the focused row visible. Also check wheel and trackpad scrolling and that the scrollbar can be found. Text labels must explain state without requiring the user to distinguish colours. |
 | P9 | Test an empty panel, a populated Fleet, and displays with limited width or height. The history area must adapt to the space available while keeping the other controls accessible. Content must remain usable without overflowing horizontally or growing beyond the display. Panel size must follow rendered content, not an estimate based on the number of Vessels. |
 
 Run P3, P5 and P7 in the real panel with fresh test records and the candidate service. For comparison, show how the old panel renders a stopped record. Check stored assignments, registration and event counts before and after actions that only reveal or hide information. Those actions must not change the underlying records. Use screenshots to verify presentation and service receipts to verify process operations. Neither is a substitute for the other.
@@ -113,4 +119,4 @@ Use the service's observations, preserve history and explain why an action is un
 
 Do not delete records to reduce clutter, treat a closed terminal window as a stopped agent, move Fleets while filtering rows, or let the renderer grant permissions.
 
-The approved first UI uses Current work, Needs attention and Previous agents. Previous agents uses the panel's available space, internal scrolling and small batches rather than a fixed 50-record batch. Check the batch sizing and scrolling interaction in the real panel during implementation. Full transcript search, recovery of native conversations and restoration of removed records remain deferred. The first increment's approved limits on resuming older records also apply here: if their settings cannot be verified, keep history accessible even though Resume is unavailable.
+The approved first UI uses Vessels, Needs attention and Previous vessels. Previous vessels uses the panel's available space, internal scrolling and small batches rather than a fixed 50-record batch. Check the batch sizing and scrolling interaction in the real panel during implementation. Full transcript search, recovery of native conversations and restoration of removed records remain deferred. The first increment's approved limits on resuming older records also apply here: if their settings cannot be verified, keep history accessible even though Resume is unavailable.

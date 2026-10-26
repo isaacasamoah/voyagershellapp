@@ -39,8 +39,8 @@ stop and never restores ownership from a saved process number. The owner service
 API can explicitly resume an eligible saved Codex conversation without submitting
 work. The owner CLI exposes `resume-instance` with the observed generation and a
 request ID. It keeps the same identity and leaves its terminal closed for a separate
-Open. The previous viewer must be closed first. The panel uses those same service decisions. Current work keeps running agents
-visible with closed viewers; Previous agents reveals stopped conversations and
+Open. The previous viewer must be closed first. The panel uses those same service decisions. Vessels keeps running agents
+visible with closed viewers; Previous vessels reveals stopped conversations and
 saved events. Panel Resume checks current runtime identity before a separate Open. A worker names
 its hidden supervisor, and keyboard focus follows meaningful controls through
 state changes.

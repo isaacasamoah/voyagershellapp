@@ -23,6 +23,7 @@ async function run(context) {
     resume: './resume-proof.cjs',
     'panel-resume': './resume-proof.cjs',
     'panel-current': './panel-proof.cjs',
+    creation: './creation-proof.cjs',
     'return-position': './recovery-position-proof.cjs',
   };
   if (!Object.hasOwn(journeys, journey)) throw Error('Select a supported native proof journey');
@@ -100,6 +101,11 @@ async function run(context) {
       await delay(30);
     }
   };
+  const pageFill = async (window, id, value) => {
+    await pageClick(window, id);
+    window.webContents.selectAll();
+    await window.webContents.insertText(value);
+  };
   const pageKey = async (window, keyCode) => {
     if (!window.isFocused()) throw Error('Proof window lost keyboard focus');
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode });
@@ -124,7 +130,7 @@ async function run(context) {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
       { ...context, directory },
-      { wait, input, click, pageClick, pageKey, pageWheel, delay, captureOutput },
+      { wait, input, click, pageClick, pageFill, pageKey, pageWheel, delay, captureOutput },
     );
   } catch (error) {
     failure = error;

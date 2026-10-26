@@ -285,7 +285,7 @@ test('the panel separates stopped and unknown records', () => {
   assert.deepEqual(ids('sessions'), ['live']);
   assert.deepEqual(ids('needs-attention-sessions'), ['legacy']);
   assert.deepEqual(ids('previous-sessions'), ['old']);
-  assert.equal(ui.nodes.get('previous-toggle').textContent, 'Previous agents (1)');
+  assert.equal(ui.nodes.get('previous-toggle').textContent, 'Previous vessels (1)');
   assert.match(ui.nodes.get('connection').textContent, /update/i);
 });
 
