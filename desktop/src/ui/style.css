@@ -758,3 +758,20 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   padding: 5px;
   color: inherit;
 }
+.resume-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.resume-controls button,
+.resume-controls select,
+#previous-more {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid #7a9bac35;
+  border-radius: 8px;
+  background: #ffffff45;
+  padding: 6px;
+  color: inherit;
+}

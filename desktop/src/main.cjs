@@ -70,6 +70,8 @@ let busy = false;
 const dockAttempts = [];
 const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
+const resumeInstance = require('./instances.cjs').instanceResumer(rpc);
+const openInstance = require('./instances.cjs').instanceOpener(rpc, refresh, surface);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
 let dockGeneration = 0;
 let dockOrigin = null;
@@ -1057,6 +1059,15 @@ app.whenReady().then(async () => {
     conversation.voiceActivity(speaker, active),
   );
   handle('toggle', [avatarWin], () => setExpanded(!expanded));
+  handle('resume-instance', [panelWin], async (input) => {
+    const polling = setInterval(refresh, 100);
+    try {
+      return await resumeInstance(input);
+    } finally {
+      clearInterval(polling);
+      await refresh();
+    }
+  });
   handle('instance-history', [panelWin], require('./instances.cjs').historyReader(rpc));
   handle('ready', [avatarWin, panelWin], sendState);
   handle('quit-ui', [panelWin], () => app.quit());
@@ -1137,14 +1148,7 @@ app.whenReady().then(async () => {
     if (!['ghostty', 'xterm'].includes(terminal)) throw Error('Choose a terminal viewer.');
     if (typeof request !== 'string' || request.length < 1 || Buffer.byteLength(request) > 128)
       throw Error('Invalid action request');
-    try {
-      const result = await rpc('open', id, terminal, '--request-id', request);
-      await refresh();
-      await surface([id], true);
-      return result;
-    } finally {
-      await refresh();
-    }
+    return openInstance(id, terminal, request);
   });
   handle('background-instance', [panelWin], (id, request) =>
     instanceAction(id, request, 'background'),

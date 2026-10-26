@@ -89,4 +89,164 @@ function historyReader(rpc) {
     return { ...page, events: page.events.filter((event) => event.session_id === id) };
   };
 }
-module.exports = { instanceCreator, historyReader };
+function matchesReceipt(receipt, action, session, request) {
+  return (
+    receipt?.request_id === request && receipt.action === action && receipt.session_id === session
+  );
+}
+function instanceOpener(rpc, refresh, surface) {
+  return async (id, terminal, request) => {
+    let result;
+    try {
+      try {
+        result = await rpc('open', id, terminal, '--request-id', request);
+      } catch (error) {
+        const receipt = await rpc('operation', request).catch(() => null);
+        const matched = matchesReceipt(receipt, 'open', id, request);
+        if (!matched || receipt.state !== 'completed')
+          return {
+            error: error.message,
+            retry_with_new_request:
+              matched && ['partial', 'failed', 'cancelled'].includes(receipt.state),
+          };
+        result = receipt;
+      }
+      if (!matchesReceipt(result, 'open', id, request) || result.state !== 'completed')
+        return {
+          error:
+            'The terminal result could not be matched to this request. Inspect its saved state.',
+        };
+      await refresh();
+      try {
+        await surface([id], true);
+      } catch (error) {
+        return {
+          ...result,
+          warning: `Terminal opened, but its window could not be arranged. ${error.message}`,
+        };
+      }
+      return result;
+    } finally {
+      await refresh();
+    }
+  };
+}
+function instanceResumer(rpc) {
+  const attempts = new Map();
+  return (input) => {
+    const { id, generation, terminal, request } = input || {};
+    if (
+      typeof id !== 'string' ||
+      !id ||
+      !Number.isSafeInteger(generation) ||
+      generation < 0 ||
+      !['ghostty', 'xterm'].includes(terminal) ||
+      typeof request !== 'string' ||
+      !request ||
+      Buffer.byteLength(request) > 128
+    )
+      return Promise.reject(
+        Error('Choose a saved conversation, its observed generation and a terminal viewer.'),
+      );
+    let attempt = attempts.get(id);
+    if (!attempt) {
+      attempt = { request, generation, terminal, submitted: false, busy: null };
+      attempts.set(id, attempt);
+    }
+    if (attempt.busy) return attempt.busy;
+    attempt.busy = (async () => {
+      let receipt;
+      if (!attempt.submitted) {
+        const record = (await rpc('list', '--include-removed')).find((row) => row.id === id);
+        if (record?.resume?.state === 'pending' && record.resume.request_id) {
+          attempt.request = record.resume.request_id;
+          attempt.submitted = true;
+        } else {
+          if (record?.resume?.state !== 'eligible') {
+            attempts.delete(id);
+            throw Error(record?.resume?.reason || 'This conversation is not available to resume.');
+          }
+          attempt.submitted = true;
+          try {
+            receipt = await rpc('resume-instance', id, attempt.request, String(attempt.generation));
+          } catch (error) {
+            attempt.error = error.message;
+          }
+        }
+      }
+      if (!receipt) {
+        try {
+          receipt = await rpc('operation', attempt.request);
+        } catch {
+          throw Error(
+            `Resume could not be confirmed. No retry was sent. Request ${attempt.request}. ${attempt.error || ''}`,
+          );
+        }
+      }
+      const deadline = Date.now() + 23000;
+      while (true) {
+        if (!matchesReceipt(receipt, 'resume-instance', id, attempt.request))
+          throw Error(
+            'The saved Resume result does not belong to this request and conversation. No new request was sent.',
+          );
+        if (receipt.state !== 'pending' || Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        receipt = await rpc('operation', attempt.request);
+      }
+      if (receipt.state === 'pending') return { pending: true, request_id: attempt.request };
+      if (receipt.state !== 'completed') {
+        if (receipt.state !== 'uncertain') attempts.delete(id);
+        throw Error(
+          receipt.error || 'Resume has no confirmed successful outcome. Inspect its saved state.',
+        );
+      }
+      const current = (await rpc('list', '--include-removed')).find((row) => row.id === id);
+      if (
+        !Number.isSafeInteger(receipt.runtime_generation) ||
+        current?.lifecycle?.runtime !== 'running' ||
+        current.lifecycle.runtime_generation !== receipt.runtime_generation
+      )
+        throw Error(
+          'The earlier Resume finished, but its current runtime cannot be confirmed. No terminal was opened.',
+        );
+      attempt.openRequest ||= randomUUID();
+      try {
+        const opened = await rpc('open', id, attempt.terminal, '--request-id', attempt.openRequest);
+        if (
+          !matchesReceipt(opened, 'open', id, attempt.openRequest) ||
+          opened.state !== 'completed'
+        )
+          throw Error('The terminal result could not be verified.');
+      } catch (error) {
+        const opening = await rpc('operation', attempt.openRequest).catch(() => null);
+        const matched = matchesReceipt(opening, 'open', id, attempt.openRequest);
+        if (matched && opening.state === 'completed') {
+          attempts.delete(id);
+          return { session: id, runtime_generation: receipt.runtime_generation, opened: true };
+        }
+        const uncertain = !matched || ['pending', 'uncertain'].includes(opening.state);
+        if (!uncertain) attempts.delete(id);
+        return {
+          session: id,
+          runtime_generation: receipt.runtime_generation,
+          open_request_id: uncertain ? attempt.openRequest : null,
+          error: uncertain
+            ? `Conversation resumed, but the terminal result is unconfirmed. Keep its original Open request. ${error.message}`
+            : `Conversation resumed, but the terminal could not open. ${error.message} Use Open viewer for this running agent.`,
+        };
+      }
+      attempts.delete(id);
+      return { session: id, runtime_generation: receipt.runtime_generation, opened: true };
+    })().finally(() => {
+      attempt.busy = null;
+    });
+    return attempt.busy;
+  };
+}
+module.exports = {
+  instanceCreator,
+  historyReader,
+  instanceResumer,
+  instanceOpener,
+  matchesReceipt,
+};

@@ -502,3 +502,44 @@ enabled Inspect control. Normal focus scrolling brings that control into view.
 Saved-details text is excluded from panel dragging, allowing the browser to select
 it. The shared journey checks both saved-text default handling and the different
 ordinary panel-background behavior, which still starts panel dragging.
+
+The owner can Resume an eligible saved conversation from its previous row. The
+chosen generation and one request ID go through a named preload method to the
+existing service command. Concurrent clicks share the in-flight attempt. After
+an interrupted reply, the desktop reads that original operation rather than
+submitting a replacement. Pending status reads remain bounded by the existing
+service deadline; a desktop polling limit does not make the runtime stopped.
+
+A completed Resume receipt is checked against a fresh list observation before
+Open. The runtime must still be running with that receipt's generation. Open has
+its own request ID. A known failed Open allows an explicit new Open request;
+a missing or uncertain result retains the original Open ID. A saved completed
+Open result resolves a lost reply without starting another viewer. A viewer error
+keeps the conversation running and reports the distinction in the panel.
+
+The shared real-Codex journey also runs as panel-resume. It reuses its original
+saved-marker, idle, identity, attachment and cleanup checks, but chooses Resume
+and failed/repaired Open through actual panel controls. It records the Resuming
+label before the runtime becomes current. Its input adapter verifies panel focus;
+after a native terminal cycle it can request activation of that exact proof window
+through the existing xdotool tool, then rechecks focus. This does not claim OS-level
+keyboard or pointer delivery for the Chromium events.
+
+Saved Resume and Open results are matched to the request ID, action and Vessel
+before use. A matching generation alone cannot identify a conversation. Polling
+checks that binding on each reply. The focused Resume test file keeps realistic
+receipt fixtures separate from creation and history tests.
+
+The desktop's Open adapter keeps service completion separate from subsequent
+window placement. If Open completed and placement fails, the result stays completed
+with a readable placement warning. The menu clears that completed request. The
+native panel journey waits for UI action completion and checks this distinction.
+The automatic placement warning remains a separate existing limitation; this
+increment changes no window geometry policy.
+
+A refused Resume whose original reply cannot be distinguished from lost admission
+can leave its desktop attempt pinned. Rechecks inspect that same request; they do
+not silently submit a new one. A broader distinction between confirmed admission
+refusal and uncertainty is deferred. This conservative UI limit can require a
+desktop restart after the service again reports eligibility. Restarting the client
+does not restore a runtime or bypass the service's current checks.

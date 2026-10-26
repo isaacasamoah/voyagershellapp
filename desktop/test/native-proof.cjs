@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
 const { createInterface } = require('node:readline');
 const { setTimeout: delay } = require('node:timers/promises');
 const { captureOutput } = require('./output-audio.cjs');
@@ -21,6 +21,7 @@ async function run(context) {
     conversation: '../src/conversation-proof.cjs',
     handoff: './voice-handoff-proof.cjs',
     resume: './resume-proof.cjs',
+    'panel-resume': './resume-proof.cjs',
     'panel-current': './panel-proof.cjs',
     'return-position': './recovery-position-proof.cjs',
   };
@@ -80,6 +81,16 @@ async function run(context) {
   };
   const pageClick = async (window, id) => {
     window.focus();
+    if (!window.isFocused()) {
+      await new Promise((resolve, reject) =>
+        execFile(
+          'xdotool',
+          ['windowactivate', '--sync', String(window.getNativeWindowHandle().readUInt32LE())],
+          { timeout: 3000 },
+          (error) => (error ? reject(error) : resolve()),
+        ),
+      );
+    }
     await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
     const point = await window.webContents.executeJavaScript(
       `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) throw Error('Control is outside the visible page'); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`,
