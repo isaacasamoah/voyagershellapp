@@ -54,7 +54,7 @@
           <div id="panel-flow">
             <div id="connection" role="status">Connecting…</div>
             <div class="instances-heading">
-              <span>Current work</span
+              <span id="current-heading" tabindex="-1">Current work</span
               ><button id="add" aria-label="New vessel" title="New vessel">+</button>
             </div>
             <form id="create-form" hidden>
@@ -132,7 +132,14 @@
                 placeholder="Fleet goal"
                 required
               />
-              <button type="submit" aria-label="Create fleet" title="Create fleet">↑</button>
+              <button
+                id="create-fleet"
+                type="submit"
+                aria-label="Create fleet"
+                title="Create fleet"
+              >
+                ↑
+              </button>
               <button id="cancel-fleet" type="button" aria-label="Cancel fleet">×</button>
             </form>
             <p id="fleet-error" role="alert" hidden></p>
@@ -142,7 +149,9 @@
               <div id="unregistered-sessions"></div>
             </section>
             <section id="needs-attention" hidden aria-label="Needs attention">
-              <div class="instances-heading">Needs attention</div>
+              <div id="attention-heading" class="instances-heading" tabindex="-1">
+                Needs attention
+              </div>
               <div id="needs-attention-sessions"></div>
             </section>
             <details id="previous-agents" class="history-group">
@@ -219,6 +228,7 @@
     <script src="authority.js"></script>
     <script src="hierarchy.js"></script>
     <script src="history.js"></script>
+    <script src="focus.js"></script>
     <script src="renderer.js"></script>
     <script src="astronaut.js"></script>
     <script src="conversation.js"></script>

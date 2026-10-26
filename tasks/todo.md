@@ -51,18 +51,27 @@ and the matching real-Codex panel journey pass. Complete budget: 8,744 / 9,042.
 
 ## P04: preserve useful context and keyboard focus
 
-- [ ] Keep a worker visible with an accurate supervisor label when its captain is
+- [x] Keep a worker visible with an accurate supervisor label when its captain is
   absent. Never add another actionable captain row or change Fleet placement.
-- [ ] Disconnect/reconnect marks last-known rows and refreshes by identity without
+- [x] Disconnect/reconnect marks last-known rows and refreshes by identity without
   duplicate actions. Keyboard focus remains useful after group/row changes.
-- [ ] Run P1-P9 in the selected package and record actual input coverage, exact
+- [x] Run P1-P9 in the selected package and record actual input coverage, exact
   build identities, required checks and independent review. Covers remaining P6-P9.
 
 ## Final checkpoint
 
-- [ ] Every focused test has a single stated purpose and a failure it catches.
+- [x] Every focused test has a single stated purpose and a failure it catches.
   Remove overlap without weakening the real-panel journey.
-- [ ] Complete test/helper counts and disjoint exercised production ranges pass
+- [x] Complete test/helper counts and disjoint exercised production ranges pass
   the project's limit; record an appropriate deliberately broken comparison.
-- [ ] Present the result and remaining limits for owner acceptance. No new
+- [x] Present the result and remaining limits for owner acceptance. No new
   dashboard, automatic record cleanup, permission changes or runtime rollout.
+
+P04 passed its first independent review with no Required correction. The combined
+candidate is ready for owner inspection. All 104 desktop checks, formatting and
+83 Rust checks against the selected bundled service pass, with the unchanged
+Rust repeat preserved after ETXTBSY. Selected-package Resume/context and the
+reviewer's same-package history journey pass with clean exits. The earlier
+history close-focus failure remains recorded; its timing cause is unproved.
+Physical input, native dragging and macOS remain unproved. No merge, installation
+or live-app restart is included. Complete reviewed budget: 8,935 / 9,111.

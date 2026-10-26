@@ -7,7 +7,7 @@ const exec = promisify(execFile);
 
 exports.run = async (
   { rpc, stateDir, refresh, getState, panelWin, setExpanded },
-  { wait, delay, pageClick },
+  { wait, delay, pageClick, pageKey },
 ) => {
   const panel = process.env.VOYAGER_PROOF_JOURNEY === 'panel-resume';
   const cwd = path.join(stateDir, 'resume-project');
@@ -21,6 +21,7 @@ exports.run = async (
   let paused;
   let hidden = false;
   let openFeedback;
+  let workerContext;
   const events = async () => (await rpc('events')).events.filter((e) => e.session_id === id);
   const row = async () => (await rpc('list')).find((r) => r.id === id);
   const ask = async (request, message) => {
@@ -204,6 +205,11 @@ exports.run = async (
     assert.equal((await rpc('attach-info', id)).pid, resumed.runtime_pid);
     assert.equal((await events()).filter((e) => e.type === 'turn.started').length, turns);
     if (panel)
+      workerContext = await require('./panel-context-proof.cjs').run(
+        { rpc, refresh, panelWin, stateDir, id, cwd, row },
+        { wait, pageClick, pageKey },
+      );
+    if (panel)
       await fs.writeFile(
         path.join(stateDir, 'panel-resume.png'),
         (await panelWin.webContents.capturePage()).toPNG(),
@@ -226,10 +232,12 @@ exports.run = async (
       idleSeconds: 5,
       savedMarkerRecalled: true,
       openFeedback,
+      workerContext,
     };
   } finally {
     if (paused) process.kill(paused, 'SIGCONT');
     if (hidden) await fs.rename(moved, cwd);
-    if (id) await rpc('stop-instance', id, '--request-id', 'resume-proof-cleanup');
+    if (id && (await row()).lifecycle.runtime === 'running')
+      await rpc('stop-instance', id, '--request-id', 'resume-proof-cleanup');
   }
 };

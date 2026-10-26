@@ -1,6 +1,6 @@
 # Tracer-bullet usability specification index
 
-Project: VoyagerShellApp. Updated 24 October 2026.
+Project: VoyagerShellApp. Updated 26 October 2026.
 State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. The owner approved building resume and panel in dependency order on 25 October 2026, with independent review and bounded correction passes. Merge, installation and runtime rollout remain separate decisions.
 
 ## This build branch
@@ -9,7 +9,8 @@ On 25 October, the owner accepted the current voice acknowledgement change and
 requested draft plans for resume and the panel. The resume module passed R00-R03 review and selected-package verification.
 This branch owns the approved current-work panel plan in tasks/plan.md and
 tasks/todo.md, built after that dependency. The owner approved implementation
-with independent review and bounded correction passes. Merge and installation
+with independent review and bounded correction passes. P01-P03 passed their
+corrective reviews. P04 passed its first independent review. The combined candidate is ready for owner inspection. Merge and installation
 remain separate decisions. Remaining voice interruption, reconnect, failure and timing
 work stays in the existing voice plan; accepting the acknowledgement increment
 does not complete the full voice specification. The copied docking task list

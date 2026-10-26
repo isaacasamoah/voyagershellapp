@@ -543,3 +543,34 @@ not silently submit a new one. A broader distinction between confirmed admission
 refusal and uncertainty is deferred. This conservative UI limit can require a
 desktop restart after the service again reports eligibility. Restarting the client
 does not restore a runtime or bypass the service's current checks.
+
+## Supervisor context and focus
+
+A visible worker names its supervisor when that supervisor is outside its visible
+stack. The label comes from the complete service list and reports the observed
+state. Missing metadata says Supervisor unavailable. Filtering does not change
+assignments or inherited Fleet placement and creates no duplicate captain row.
+
+The small focus helper remembers a named control and its Vessel before rebuilding
+rows, including when an asynchronous action temporarily disables its button. If
+that Vessel moves into collapsed Previous agents, focus goes directly to the
+summary. Otherwise it keeps a usable control on the same Vessel or the relevant
+group heading. A rectangle alone is insufficient evidence that a control inside a
+closed disclosure can receive focus. Restored focus scrolls into view.
+
+History reads return focus to their re-enabled button only if the reader has not
+moved elsewhere. Closing details returns to Inspect, or Previous agents when the
+containing disclosure is closed. Offline state also disables Fleet actions,
+creation submission and service stop. Cached inspection remains available.
+
+The shared runner's panel-context journey reuses the existing real-Codex session.
+It creates an owned disposable worker, stops its captain through keyboard input,
+and checks the worker's label, useful focus and unchanged assignments/Fleet data.
+The history journey checks keyboard inspection, reading and close behavior and
+verifies content fits the actual narrow panel and display before its final pointer
+comparison. No host display configuration changes are needed.
+
+Chromium pointer input does not move the OS cursor. The ordinary-background
+comparison checks default event handling after the bounds and focus checks;
+it does not prove native panel dragging, which follows the OS cursor. Physical
+keyboard, mouse, wheel and trackpad delivery remain separate manual checks.

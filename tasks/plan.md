@@ -1,8 +1,10 @@
 # Plan: show current work and reveal older conversations on demand
 
-Status: owner approved build, 25 October 2026. Resume R00-R03 passed review
-and selected-package verification. Execute in dependency order with independent
-review, at most one corrective pass and re-review for each increment. Governing [specification](../SPEC-current-work-panel.md).
+Status: built and independently reviewed for owner inspection, 26 October 2026.
+P01-P03 passed one corrective pass and re-review each; P04 passed first review.
+All required findings are resolved. The task list records evidence and unproved
+physical input. Merge and installation remain separate decisions. Governing
+[specification](../SPEC-current-work-panel.md).
 The [task list](todo.md) owns completion. Apply [CONSTRAINTS.md](../CONSTRAINTS.md)
 and the installed application-proof reference.
 
