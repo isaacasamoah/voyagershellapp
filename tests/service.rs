@@ -1489,7 +1489,7 @@ fn owned_start_saves_observed_settings_without_copying_thread_history() {
         )
         .unwrap();
     let saved: Value = serde_json::from_str(&encoded).unwrap();
-    assert_eq!(saved["version"], 1);
+    assert_eq!(saved["version"], 2);
     assert_eq!(saved["provider_version"], "codex/0.164.0 fixture");
     assert_eq!(saved["effective"]["model"], "fixture-model");
     assert_eq!(saved["effective"]["sandbox"]["type"], "dangerFullAccess");

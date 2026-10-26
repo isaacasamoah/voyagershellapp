@@ -192,7 +192,7 @@ fn missing_working_folder_keeps_resume_unavailable() {
     store
         .0
         .execute(
-            "UPDATE runtime_generations SET settings=json_set(settings,'$.effective.cwd',?1)",
+            "UPDATE sessions SET cwd=?1",
             [f.dir.join("missing").to_str().unwrap()],
         )
         .unwrap();

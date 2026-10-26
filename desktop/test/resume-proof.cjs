@@ -10,6 +10,7 @@ exports.run = async (
   { wait, delay, pageClick, pageKey },
 ) => {
   const panel = process.env.VOYAGER_PROOF_JOURNEY === 'panel-resume';
+  const configProof = process.env.VOYAGER_PROOF_CURRENT_CONFIG === '1';
   const cwd = path.join(stateDir, 'resume-project');
   const moved = cwd + '-hidden';
   await fs.mkdir(cwd);
@@ -22,6 +23,15 @@ exports.run = async (
   let hidden = false;
   let openFeedback;
   let workerContext;
+  const snapshot = async (session) => {
+    const { stdout } = await exec('python3', [
+      '-c',
+      'import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); print(c.execute("SELECT settings FROM runtime_generations WHERE session_id=? ORDER BY generation DESC LIMIT 1",[sys.argv[2]]).fetchone()[0])',
+      path.join(stateDir, 'events.sqlite'),
+      session,
+    ]);
+    return JSON.parse(stdout).effective;
+  };
   const events = async () => (await rpc('events')).events.filter((e) => e.session_id === id);
   const row = async () => (await rpc('list')).find((r) => r.id === id);
   const ask = async (request, message) => {
@@ -61,6 +71,34 @@ exports.run = async (
     id = created.session_id;
     const original = await row();
     await ask('resume-save-marker', 'Remember RESUME_WINDOW_743. Reply SAVED. Do not use tools.');
+    if (configProof) {
+      await exec(
+        'cargo',
+        [
+          'test',
+          '--locked',
+          '--manifest-path',
+          path.join(process.env.VOYAGER_PROOF_SOURCE_ROOT, 'Cargo.toml'),
+          '--test',
+          'native_resume',
+          'narrow_proof_thread_permissions',
+          '--',
+          '--ignored',
+          '--exact',
+        ],
+        {
+          env: {
+            ...process.env,
+            VOYAGER_PROOF_SERVER: original.server,
+            VOYAGER_PROOF_THREAD: original.native_thread_id,
+          },
+        },
+      );
+      await wait(
+        () => snapshot(id),
+        (effective) => effective.sandbox.type === 'readOnly',
+      );
+    }
     const oldViewer = await rpc('open', id, 'xterm', '--request-id', 'resume-old-viewer');
     await attached(oldViewer, original.server);
     assert.equal(await fs.realpath(`/proc/${oldViewer.pid}/exe`), '/usr/bin/xterm');
@@ -76,6 +114,11 @@ exports.run = async (
     paused = null;
     await rpc('background', id, '--request-id', 'resume-close-old');
     await wait(row, (r) => r.window === 'closed');
+    if (configProof)
+      await fs.writeFile(
+        path.join(process.env.CODEX_HOME, 'config.toml'),
+        'model = "gpt-6-sol"\nmodel_reasoning_effort = "low"\napproval_policy = "on-request"\ndefault_permissions = ":read-only"\n',
+      );
     const before = (await events()).filter((e) => e.type === 'turn.started').length;
     const start = performance.now();
     let resumed;
@@ -106,6 +149,27 @@ exports.run = async (
         ),
       );
     } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    if (configProof) {
+      const effective = await snapshot(id);
+      assert.equal(effective.model, 'gpt-6-sol');
+      assert.equal(effective.reasoningEffort, 'low');
+      assert.equal(effective.approvalPolicy, 'never');
+      assert.equal(effective.sandbox.type, 'dangerFullAccess');
+      const fresh = await rpc(
+        'create',
+        'codex',
+        'current-new-defaults',
+        'Current defaults',
+        cwd,
+        '--background',
+      );
+      const freshSettings = await snapshot(fresh.session_id);
+      assert.equal(freshSettings.model, 'gpt-6-sol');
+      assert.equal(freshSettings.reasoningEffort, 'low');
+      assert.equal(freshSettings.approvalPolicy, 'never');
+      assert.equal(freshSettings.sandbox.type, 'dangerFullAccess');
+      await rpc('stop-instance', fresh.session_id);
+    }
     const readyMs = performance.now() - start;
     assert.equal(resumed.state, 'completed');
     assert.equal(resumed.runtime_generation, 2);
@@ -231,6 +295,7 @@ exports.run = async (
       bound: { actor: bound.actor, rank: bound.rank },
       idleSeconds: 5,
       savedMarkerRecalled: true,
+      currentConfigurationApplied: configProof,
       openFeedback,
       workerContext,
     };

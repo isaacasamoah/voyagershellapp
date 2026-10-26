@@ -7,7 +7,7 @@ impl Runtime {
         let session = string(record, "id")?;
         let runtime = record["lifecycle"]["runtime"].as_str().unwrap_or("unknown");
         let current = self.store.resume_record(session)?;
-        let reason = if record["kind"] != "codex" {
+        let reason: Option<(&str, String)> = if record["kind"] != "codex" {
             Some((
                 "unsupported_kind",
                 "Only saved Codex conversations can be resumed.".into(),
@@ -45,24 +45,21 @@ impl Runtime {
                 "viewer_still_open",
                 "Close the previous terminal before resuming this conversation.".into(),
             ))
+        } else if !std::path::Path::new(string(record, "cwd")?).is_dir() {
+            Some((
+                "directory_unavailable",
+                "The saved working folder is unavailable.".into(),
+            ))
+        } else if record["native_thread_id"]
+            .as_str()
+            .is_none_or(str::is_empty)
+        {
+            Some((
+                "thread_unavailable",
+                "The saved conversation identity is missing.".into(),
+            ))
         } else {
-            let settings = current
-                .as_ref()
-                .map(|v| &v["settings"])
-                .unwrap_or(&Value::Null);
-            crate::worker::Settings::parse(settings, &self.executable)
-                .err()
-                .map(|e| {
-                    let message = e.to_string();
-                    (
-                        if message.starts_with("directory_unavailable:") {
-                            "directory_unavailable"
-                        } else {
-                            "settings_unavailable"
-                        },
-                        message,
-                    )
-                })
+            None
         };
         Ok(match reason {
             Some((code, reason)) => {
@@ -120,14 +117,7 @@ impl Runtime {
                 .as_str()
                 .unwrap_or("Resume is unavailable.")
         );
-        let current = self
-            .store
-            .resume_record(session)?
-            .context("outcome_unknown: runtime generation is unverified")?;
-        let settings = crate::worker::Settings::parse(&current["settings"], &self.executable)?;
-        let receipt = self
-            .store
-            .claim_resume(request, expected, &settings.snapshot)?;
+        let receipt = self.store.claim_resume(request, expected, &Value::Null)?;
         self.tests.grants.remove(session);
         let context = match self
             .credentials
@@ -149,9 +139,8 @@ impl Runtime {
             generation: receipt["runtime_generation"]
                 .as_i64()
                 .context("missing generation")?,
-            settings,
         });
-        let cwd = string(&current["settings"]["effective"], "cwd")?;
+        let cwd = string(&record, "cwd")?;
         match Worker::begin(
             &self.state,
             &self.binary,

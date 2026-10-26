@@ -330,8 +330,8 @@ these process facts. This increment supplies observations, not a Resume action.
 Worker startup retains a versioned subset of the provider's effective response
 only when its required fields and ordinary field types are present. The native
 initialize response supplies provider-version provenance, avoiding another process
-just to ask for a version. Missing or unsupported settings leave the snapshot
-absent and do not prevent the existing new-agent flow. The snapshot contains no
+just to ask for a version. Missing observations leave the snapshot absent and do not prevent a later
+explicit Resume using current configuration. The snapshot contains no
 conversation content, credentials, instructions text or account information. Named
 profiles are not supported by this first snapshot format. Later Resume must validate
 recognized values and compatibility before use; saving an observation does not
@@ -359,7 +359,8 @@ desktop runner and the selected package.
 `resume-instance` accepts the immutable request ID, Vessel ID and observed
 `expected_runtime_generation`. Only the local owner may request it. List responses
 add `resume` availability beside the separate `lifecycle` observation. Missing
-legacy settings keep history available but make Resume unavailable. Reading an
+historic settings do not prevent Resume when identity, directory and confirmed
+stop evidence remain available. Reading an
 old operation receipt never establishes that its earlier runtime is still live.
 
 The owner CLI uses `resume-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION`.
@@ -380,7 +381,7 @@ native frontend to the new service endpoint. It does not measure docking or audi
 The lifecycle owner's `resume.rs` submodule validates admission and progresses the
 operation. The store atomically saves the operation and allocates the next runtime
 generation before spawning. Concurrent starts are excluded. A new owned child
-opens the same saved native thread after the goal and settings preflight. It must
+opens the same saved native thread after checking persisted goal state and selecting current configuration. It must
 report idle, retain verified effective settings and start no turn. Capture advances
 to a new generation and discards initialization/history notifications. Original
 worker launch records, current assignments, names and Fleet placement remain intact.
@@ -391,24 +392,50 @@ neither changes rank nor restores docking authority. Opening a terminal remains 
 separate operation. This slice supplies the service operation, not its later CLI
 or panel controls.
 
-Recovery currently supports OpenAI-provider threads with a user approval reviewer,
-ordinary `never`, `on-request` or `untrusted` approval policies, and an exact saved
-full-access or read-only-without-network sandbox. Named profiles and other sandbox
-forms remain unavailable until they have their own proof. Resume starts the provider with a read-only, user-reviewed bootstrap and sends
-only the saved thread ID. Codex restores its persisted settings. Voyager verifies
-the returned model, provider, folder, workspace roots, reasoning and permissions
-against its last verified snapshot before reporting success. It does not force a
-cached broader policy over newer native settings or substitute launcher defaults.
+### Current startup configuration
 
-The snapshot also retains nonsecret config-layer names and versions, excluding
-per-runtime session flags, plus the loaded instruction files' filesystem identity,
-size and change/modified timestamps. Resume compares them before loading and checks
-returned effective settings afterward. Config contents, credentials and instruction
-text are not copied into the snapshot. This is a conservative compatibility check,
-not a cross-platform content-signing system. A changed or unverified workflow
-refuses with a readable reason. The provider gate proves the plain settings case. The service proof also retains
-a simple project instruction file. This does not establish every custom workflow;
-missing or unsupported provenance remains a refusal.
+New launch and Resume read current project-aware Codex model and effort settings
+when their runtime starts. An old configuration fingerprint, provider-version
+string or missing historic settings snapshot does not block Resume. The saved
+Vessel directory, native thread identity and confirmed stop remain required.
+Current configuration lookup and provider I/O run in the existing startup thread,
+not the service loop. Existing deadlines, receipt identity and failure cleanup
+remain unchanged.
+
+YOLO is selected explicitly for both new launch and Resume: never ask for
+approval and use full access. The proposed permission-mode selector was removed
+at the owner's request; permission-default controls remain deferred. This policy
+controls native tool permissions, not Voyager rank, assignment, process ownership
+or who may request Resume.
+
+The adapter reads config/read for the saved directory and applies the selected
+model and effort explicitly to thread/start or thread/resume. If either is unset,
+it uses model/list to obtain the provider's current model defaults. It does not
+assume that bare thread/resume replaces old thread-specific values. YOLO is passed as the native :danger-full-access permission profile, without a
+legacy sandbox parameter. The response profile is an object; verify its id and
+full-access sandbox rather than comparing that object with a string.
+
+Startup verifies the returned current model, effort, directory and explicit
+permission selection. It still checks the saved thread identity, idle state and
+absence of an automatic turn. A failure after a possible load remains uncertain;
+no new request ID can replay it. Invalid current configuration and provider errors
+remain readable failures rather than causes to substitute another conversation.
+
+Nonsecret effective settings are retained as version-two observations for
+inspection, without instruction text or configuration fingerprints. They describe
+what ran rather than deciding whether a later run may start. A successfully
+resumed generation records its own effective observation. Old version-one records
+remain readable and are not rewritten as evidence of current process ownership.
+Capture updates can refresh or invalidate this observation without disabling a
+future explicit Resume after a confirmed stop.
+
+The ordinary fixtures verify current selection, explicit YOLO, absent historic settings, invalid current configuration and
+unrelated configuration edits. The shared native
+resume journey can use VOYAGER_PROOF_CURRENT_CONFIG=1. Its runner copies account
+authentication into a private disposable Codex home, writes its own model/effort
+configuration, changes those values after Stop and verifies the actual resumed
+settings. It does not edit the owner's global configuration. The original marker,
+idle, credential, viewer and cleanup checks remain in that one journey.
 
 Failure cleanup retains its actual owned child and advances between service passes.
 It sends TERM, observes exit, and escalates only that process group after the
@@ -421,7 +448,7 @@ a saved PID or restored automatically.
 
 Supported `thread/settings/updated` observations refresh the verified snapshot for
 the current capture generation. An incomplete, unsupported or incompatible change
-makes the snapshot unavailable. Unexpected capture loss and registration removal
+makes the observation unavailable. Unexpected capture loss and registration removal
 also discard that derived snapshot. Old capture generations cannot update it.
 An unexpected owned-process exit invalidates the snapshot before closing capture,
 even when a preceding ordinary message hides a later settings update. History and

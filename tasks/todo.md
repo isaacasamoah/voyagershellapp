@@ -5,9 +5,14 @@ Previous completed panel tasks remain in Git history.
 
 ## C1: current model and effort
 
-- [ ] Prove changed config and missing historic settings fail before the fix.
-- [ ] Apply current model/effort and selected launch permission default without old fingerprint admission gates.
-- [ ] Pass existing Rust checks, real Codex proof, negative control and independent Rust review.
+- [x] Prove changed config and missing historic settings fail before the fix.
+- [x] Apply current model/effort and explicit YOLO without old fingerprint admission gates.
+- [x] Pass existing Rust checks, real Codex proof, negative control and independent Rust review.
+
+C1 passed final re-review after one corrective pass. Selected package203e9290d91b
+passed the expanded real-Codex journey with confirmed clean exits. Complete size
+gate9055 /9070 passes. Its readyMs is an upper bound including the additional
+new-Vessel check, not pure Resume readiness latency. Permission controls deferred.
 
 ## C2: compact Resume
 
