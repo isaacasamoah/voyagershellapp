@@ -119,17 +119,20 @@ impl Credentials {
         if bits > 0 {
             token.push(alphabet[((accumulator << (6 - bits)) & 63) as usize] as char);
         }
+        let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().simple()));
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .mode(0o600)
             .custom_flags(nix::libc::O_NOFOLLOW)
-            .open(&path)?;
+            .open(&temporary)?;
         writeln!(
             file,
             "{}",
             json!({"session_id":session,"service_instance":service,"token":token})
         )?;
+        file.sync_all()?;
+        fs::rename(&temporary, &path)?;
         self.tokens.insert(token, session.to_owned());
         self.paths.insert(session.to_owned(), path.clone());
         Ok(path)

@@ -44,6 +44,7 @@ mod development_ops;
 mod fleets;
 mod lifecycle;
 mod native;
+mod reconnect;
 mod voice;
 use native::NativeCall;
 
@@ -255,6 +256,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         captures: HashMap::new(),
         instance: uuid::Uuid::new_v4().to_string(),
         workers: HashMap::new(),
+        recoveries: reconnect::Recoveries::default(),
         shells: HashMap::new(),
         terminals: Vec::new(),
         viewer_choices: HashMap::new(),
@@ -444,6 +446,7 @@ struct Runtime {
     captures: HashMap<String, (Codex, i64)>,
     instance: String,
     workers: HashMap<String, Worker>,
+    recoveries: reconnect::Recoveries,
     shells: HashMap<String, Shell>,
     terminals: Vec<Terminal>,
     viewer_choices: HashMap<String, crate::viewer::Kind>,
@@ -621,11 +624,13 @@ impl Runtime {
                     let id = string(session, "id")?;
                     let live = self.workers.get(id).is_some_and(|w| w.alive)
                         || self.shells.get(id).is_some_and(|s| s.alive);
+                    let recovery = self.recovery_status(id);
                     session["lifecycle"] = self.store.runtime_observation(
                         id,
                         live,
                         session["ownership"] == "external",
                     )?;
+                    session["recovery"] = recovery;
                     session["resume"] = if authority::is_owner(&request["actor"]) {
                         self.resume_availability(session)?
                     } else {
@@ -876,6 +881,7 @@ impl Runtime {
                 }
             }
         }
+        self.advance_recoveries()?;
         self.observe_control()?;
         self.observe_voice()?;
         self.advance_native()?;

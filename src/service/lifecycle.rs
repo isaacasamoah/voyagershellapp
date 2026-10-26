@@ -219,6 +219,9 @@ impl Runtime {
         }
         operation.receipt["runtime_pid"] =
             self.store.launch(id)?.context("launch missing")?["pid"].clone();
+        if let Some(worker) = self.workers.get(session) {
+            operation.receipt["process_identity"] = worker.identity()?;
+        }
         operation.receipt["native_thread_id"] =
             self.store.session(session)?["native_thread_id"].clone();
         operation.effect("start", "confirmed");

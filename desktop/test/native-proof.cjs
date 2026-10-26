@@ -21,6 +21,7 @@ async function run(context) {
     conversation: '../src/conversation-proof.cjs',
     handoff: './voice-handoff-proof.cjs',
     resume: './resume-proof.cjs',
+    reconnect: './reconnect-proof.cjs',
     'panel-resume': './resume-proof.cjs',
     'panel-current': './panel-proof.cjs',
     creation: './creation-proof.cjs',

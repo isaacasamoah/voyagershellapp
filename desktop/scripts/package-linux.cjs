@@ -41,6 +41,7 @@ for (const file of [
   'recovery-position-proof.cjs',
   'voice-handoff-proof.cjs',
   'resume-proof.cjs',
+  'reconnect-proof.cjs',
   'panel-proof.cjs',
   'creation-proof.cjs',
   'panel-context-proof.cjs',
