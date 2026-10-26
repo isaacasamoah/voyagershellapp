@@ -11,7 +11,7 @@ Codex model and effort configuration. YOLO remains the permission default unless
 the user explicitly changes that launch default. Model and effort controls in
 Voyager are deferred. This revision records that decision and proposes its
 acceptance checks. It supersedes the earlier requirements to reproduce an old
-settings snapshot. C1–C3 have passed their bounded review and test run. The reconnection follow-up below is a new draft for review.
+settings snapshot. C1–C3 have passed their bounded review and test run. The reconnection follow-up below is approved; its implementation plan is ready for review.
 
 ## Proposed follow-up: reconnect a surviving Vessel
 
