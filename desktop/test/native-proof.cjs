@@ -20,6 +20,7 @@ async function run(context) {
   const journeys = {
     conversation: '../src/conversation-proof.cjs',
     handoff: './voice-handoff-proof.cjs',
+    resume: './resume-proof.cjs',
     'return-position': './recovery-position-proof.cjs',
   };
   if (!Object.hasOwn(journeys, journey)) throw Error('Select a supported native proof journey');

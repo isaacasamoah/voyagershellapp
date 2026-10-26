@@ -38,8 +38,10 @@ unknown process ownership. Managed starts retain a runtime generation and observ
 nonsecret settings for later recovery. A service restart preserves a confirmed
 stop and never restores ownership from a saved process number. The owner service
 API can explicitly resume an eligible saved Codex conversation without submitting
-work. It keeps the same identity and leaves its terminal closed. CLI and panel
-controls are subsequent slices; older records with unverified settings remain
+work. The owner CLI exposes `resume-instance` with the observed generation and a
+request ID. It keeps the same identity and leaves its terminal closed for a separate
+Open. The previous viewer must be closed first. Panel controls remain a subsequent
+slice; older records with unverified settings remain
 inspectable and cannot resume.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
