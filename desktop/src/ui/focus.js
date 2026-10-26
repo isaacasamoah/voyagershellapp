@@ -25,7 +25,7 @@ function createPanelFocus(panel) {
       let target =
         previous && !get('previous-agents').open
           ? get('previous-toggle')
-          : get(before.control) || get(`inspect-${before.vessel}`);
+          : get(before.control) || get(`menu-${before.vessel}`);
       if (!visible(target)) {
         if (previous) target = get('previous-toggle');
         else if (groups.attention.some((row) => row.id === before.vessel))

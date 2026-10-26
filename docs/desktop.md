@@ -589,3 +589,25 @@ a usable remedy in the creation form. The long-path trial failure was caused by
 its launch configuration, before any vessel started; the normal default state
 path fits. Separating persistent data from short runtime socket paths remains a
 broader architecture question, not a change in this wording correction.
+
+
+## Compact Vessel Resume
+
+Stopped Vessel names remain legible static text. The compact row shows its state,
+folder name and activity date, one Resume action and the existing secondary menu.
+The full path, precise timestamp, rank and saved history are available through
+Details in that menu. Viewer selection also lives there rather than in a form
+under every row. Runtime ownership, task submission and separate Open receipts
+retain their existing service contracts.
+
+Pending Resume uses the same operation identity, shows Resuming and prevents
+another submission. A stopped row becoming current retains its identity and useful
+keyboard focus. Closing Details returns to the row's menu, or the containing
+history disclosure when it is collapsed. Cached Details stays accessible offline;
+service actions and history reads remain unavailable until connected.
+
+The matching shared panel journey verifies actual Resume, idle state, saved-marker
+recall, fresh credentials and failed Open followed by successful same-runtime Open.
+The history journey opens Details through the row menu and retains keyboard and
+scrolling checks. History-view controls and per-Vessel error placement are the
+following increment, not part of this compact-row change.

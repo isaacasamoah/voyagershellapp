@@ -126,6 +126,18 @@ exports.run = async (
       await setExpanded(true, { x: 180, y: 100 });
       await refresh();
       await pageClick(panelWin, 'previous-toggle');
+      const compact = await panelWin.webContents.executeJavaScript(`(() => {
+        const row = document.getElementById('resume-${id}').closest('[data-vessel]');
+        return {
+          columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
+          metadata: getComputedStyle(row.querySelector('.vessel-metadata')).textOverflow
+        };
+      })()`);
+      assert.deepEqual(compact, { columns: 3, metadata: 'ellipsis' });
+      await fs.writeFile(
+        path.join(stateDir, 'compact-resume.png'),
+        (await panelWin.webContents.capturePage()).toPNG(),
+      );
       await panelWin.webContents.executeJavaScript(`
         window.resumeControl = document.getElementById('resume-${id}');
         window.resumeLabels = [];
@@ -149,6 +161,7 @@ exports.run = async (
         ),
       );
     } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    const readyMs = performance.now() - start;
     if (configProof) {
       const effective = await snapshot(id);
       assert.equal(effective.model, 'gpt-6-sol');
@@ -170,7 +183,6 @@ exports.run = async (
       assert.equal(freshSettings.sandbox.type, 'dangerFullAccess');
       await rpc('stop-instance', fresh.session_id);
     }
-    const readyMs = performance.now() - start;
     assert.equal(resumed.state, 'completed');
     assert.equal(resumed.runtime_generation, 2);
     assert.notEqual(resumed.runtime_pid, created.runtime_pid);

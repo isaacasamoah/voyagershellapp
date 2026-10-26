@@ -740,10 +740,12 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
 }
 .instance-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 .instance-row .session {
-  grid-column: 1 / -1;
+  grid-column: auto;
+  width: 100%;
+  color: inherit;
 }
 .instance-row .saved-metadata {
   min-width: 0;
@@ -759,14 +761,7 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   padding: 5px;
   color: inherit;
 }
-.resume-controls {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.resume-controls button,
-.resume-controls select,
+.resume-action,
 #previous-more {
   font: inherit;
   font-size: 11px;
@@ -775,4 +770,15 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   background: #ffffff45;
   padding: 6px;
   color: inherit;
+}
+
+.vessel-metadata {
+  color: #42566a;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resume-action {
+  white-space: nowrap;
 }
