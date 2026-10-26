@@ -45,7 +45,9 @@ default for both new launch and Resume. Honor a different launch default only
 when the user explicitly selects one. Do not replace this default with Codex's
 global approval or sandbox settings, or with the stopped thread's old permissions.
 Provider permissions and Voyager's authority to manage Vessels remain separate.
-This correction adds no permissions checkbox or per-Resume permissions form.
+For this increment, launch and Resume always select YOLO. The owner approved
+deferring permission-default controls during the C1 corrective pass. No permission
+mode environment variable, checkbox or per-Resume permissions form is included.
 
 For Resume, keeping history does not mean keeping the former model or effort.
 Use current model and effort settings even when Codex would otherwise restore an
@@ -64,9 +66,8 @@ record ineligible. Its thread identity, working directory and confirmed stop
 remain necessary. A recorded process ID alone is still insufficient evidence.
 Model and effort controls, Voyager-specific model defaults and a settings repair
 editor are deferred. No second model configuration store is part of this
-correction. Keep YOLO as the existing permission default; the plan must identify
-how any explicitly configured alternative is honored without inventing a new
-permissions editor.
+correction. Permission-default controls are also deferred; current model and
+effort selection must not become a permission-policy migration.
 
 ## Service contract
 
@@ -154,8 +155,8 @@ known-different comparison; that edit must not block Resume either.
 
 Use the existing disposable process fixtures to verify that new launch and Resume
 both default to YOLO, even when global Codex approval or sandbox settings differ.
-Also verify that an explicitly changed launch default is honored. Never silently
-replace a rejected explicit choice with another permission policy. Keep the original no-duplicate-runtime,
+Verify that an old read-only thread and current read-only Codex config do not
+replace this increment's explicit YOLO selection. Keep the original no-duplicate-runtime,
 disconnect, uncertain-outcome and same-viewer journeys. Simulated responses alone
 do not establish real Codex configuration behavior.
 

@@ -402,18 +402,18 @@ Current configuration lookup and provider I/O run in the existing startup thread
 not the service loop. Existing deadlines, receipt identity and failure cleanup
 remain unchanged.
 
-YOLO is the default for both new launch and Resume: never ask for approval and use
-full access. Set VOYAGER_CODEX_LAUNCH_MODE=config in the service environment to
-use the owner's Codex permission configuration instead. An invalid setting fails
-before starting the provider. This controls native tool permissions, not Voyager
-rank, assignment, process ownership or who may request Resume.
+YOLO is selected explicitly for both new launch and Resume: never ask for
+approval and use full access. The proposed permission-mode selector was removed
+at the owner's request; permission-default controls remain deferred. This policy
+controls native tool permissions, not Voyager rank, assignment, process ownership
+or who may request Resume.
 
 The adapter reads config/read for the saved directory and applies the selected
 model and effort explicitly to thread/start or thread/resume. If either is unset,
 it uses model/list to obtain the provider's current model defaults. It does not
-assume that bare thread/resume replaces old thread-specific values. Permissions
-come from the selected launch mode. A named permission profile is passed as a
-profile rather than combined with a legacy sandbox choice.
+assume that bare thread/resume replaces old thread-specific values. YOLO is passed as the native :danger-full-access permission profile, without a
+legacy sandbox parameter. The response profile is an object; verify its id and
+full-access sandbox rather than comparing that object with a string.
 
 Startup verifies the returned current model, effort, directory and explicit
 permission selection. It still checks the saved thread identity, idle state and
@@ -429,8 +429,8 @@ remain readable and are not rewritten as evidence of current process ownership.
 Capture updates can refresh or invalidate this observation without disabling a
 future explicit Resume after a confirmed stop.
 
-The ordinary fixtures verify current selection, default YOLO, an explicit config
-mode, absent historic settings and invalid launch-mode refusal. The shared native
+The ordinary fixtures verify current selection, explicit YOLO, absent historic settings, invalid current configuration and
+unrelated configuration edits. The shared native
 resume journey can use VOYAGER_PROOF_CURRENT_CONFIG=1. Its runner copies account
 authentication into a private disposable Codex home, writes its own model/effort
 configuration, changes those values after Stop and verifies the actual resumed

@@ -15,7 +15,6 @@ use std::{
 };
 
 mod settings;
-use settings::LaunchMode;
 pub use settings::Settings;
 
 pub struct Resume {
@@ -82,14 +81,12 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
-        let launch_mode = LaunchMode::read()?;
         let resume_identity = match &mode {
             ThreadStart::Resume(r) => Some((r.session.clone(), r.generation)),
             _ => None,
         };
         let child = Command::new(executable)
             .arg("app-server")
-            .args(launch_mode.arguments())
             .args(["--listen", &format!("unix://{}", socket.display())])
             .arg("-c")
             .arg(format!(
@@ -128,7 +125,7 @@ impl Worker {
                     thread::sleep(Duration::from_millis(20));
                 }
                 let mut connection = Codex::connect(&socket)?;
-                let settings = Settings::current(&mut connection, &cwd, launch_mode)?;
+                let settings = Settings::current(&mut connection, &cwd)?;
                 let mut params = settings.parameters();
                 let (reply, name) = match mode {
                     ThreadStart::New(name) => {

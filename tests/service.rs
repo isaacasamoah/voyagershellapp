@@ -226,11 +226,6 @@ impl Fixture {
             Command::new(binary)
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
-                    "VOYAGER_CODEX_LAUNCH_MODE",
-                    fs::read_to_string(self.dir.join("launch-mode"))
-                        .unwrap_or_else(|_| "yolo".into()),
-                )
-                .env(
                     "VOYAGER_CODEX_BIN",
                     std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").unwrap_or_else(|_| {
                         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py").into()

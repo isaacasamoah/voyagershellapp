@@ -1,40 +1,13 @@
 use crate::codex::Codex;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-
-#[derive(Clone, Copy, Debug)]
-pub(super) enum LaunchMode {
-    Yolo,
-    Config,
-}
-impl LaunchMode {
-    pub fn read() -> Result<Self> {
-        match std::env::var("VOYAGER_CODEX_LAUNCH_MODE") {
-            Err(std::env::VarError::NotPresent) => Ok(Self::Yolo),
-            Ok(value) if value == "yolo" => Ok(Self::Yolo),
-            Ok(value) if value == "config" => Ok(Self::Config),
-            _ => bail!("invalid_config: VOYAGER_CODEX_LAUNCH_MODE must be yolo or config"),
-        }
-    }
-    pub fn arguments(self) -> &'static [&'static str] {
-        match self {
-            Self::Yolo => &[
-                "-c",
-                "sandbox_mode=\"danger-full-access\"",
-                "-c",
-                "approval_policy=\"never\"",
-            ],
-            Self::Config => &[],
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Settings {
     parameters: Value,
 }
 impl Settings {
-    pub(super) fn current(connection: &mut Codex, cwd: &str, mode: LaunchMode) -> Result<Self> {
+    pub(super) fn current(connection: &mut Codex, cwd: &str) -> Result<Self> {
         let response = connection.rpc("config/read", json!({"cwd":cwd,"includeLayers":false}))?;
         let config = response["config"]
             .as_object()
@@ -47,47 +20,45 @@ impl Settings {
             .get("model_reasoning_effort")
             .and_then(Value::as_str)
             .map(str::to_owned);
-        if model.is_none() || effort.is_none() {
-            let catalog =
-                connection.rpc("model/list", json!({"includeHidden":true,"limit":100}))?;
+        let mut cursor = Value::Null;
+        let mut seen = std::collections::HashSet::new();
+        while model.is_none() || effort.is_none() {
+            let catalog = connection.rpc(
+                "model/list",
+                json!({"includeHidden":true,"limit":100,"cursor":cursor}),
+            )?;
             let models = catalog["data"]
                 .as_array()
                 .context("provider_failed: Codex did not return model defaults")?;
-            let selected = models
-                .iter()
-                .find(|entry| match &model {
-                    Some(name) => entry["model"] == *name || entry["id"] == *name,
-                    None => entry["isDefault"] == true,
-                })
+            if let Some(selected) = models.iter().find(|entry| match &model {
+                Some(name) => entry["model"] == *name || entry["id"] == *name,
+                None => entry["isDefault"] == true,
+            }) {
+                if model.is_none() {
+                    model = selected["model"].as_str().map(str::to_owned);
+                }
+                if effort.is_none() {
+                    effort = selected["defaultReasoningEffort"]
+                        .as_str()
+                        .map(str::to_owned);
+                }
+                break;
+            }
+            let next = catalog["nextCursor"]
+                .as_str()
                 .context("provider_failed: current model defaults are unavailable")?;
-            if model.is_none() {
-                model = selected["model"].as_str().map(str::to_owned);
-            }
-            if effort.is_none() {
-                effort = selected["defaultReasoningEffort"]
-                    .as_str()
-                    .map(str::to_owned);
-            }
+            ensure!(
+                seen.insert(next.to_owned()),
+                "provider_failed: Codex repeated its model cursor"
+            );
+            cursor = json!(next);
         }
-        let mut parameters = json!({"cwd":cwd,"model":model.context("provider_failed: current model is unavailable")?,"config":{"model_reasoning_effort":effort.context("provider_failed: current reasoning effort is unavailable")?}});
-        for (source, target) in [
-            ("model_provider", "modelProvider"),
-            ("approval_policy", "approvalPolicy"),
-            ("approvals_reviewer", "approvalsReviewer"),
-            ("sandbox_mode", "sandbox"),
-            ("default_permissions", "permissions"),
-        ] {
-            if let Some(value) = config.get(source).filter(|value| !value.is_null()) {
-                parameters[target] = value.clone();
-            }
-        }
-        if matches!(mode, LaunchMode::Yolo) {
-            parameters["approvalPolicy"] = json!("never");
-            parameters["sandbox"] = json!("danger-full-access");
-            parameters
-                .as_object_mut()
-                .context("invalid startup parameters")?
-                .remove("permissions");
+        let mut parameters = json!({"cwd":cwd,"model":model.context("provider_failed: current model is unavailable")?,"config":{"model_reasoning_effort":effort.context("provider_failed: current reasoning effort is unavailable")?},"approvalPolicy":"never","permissions":":danger-full-access"});
+        if let Some(provider) = config
+            .get("model_provider")
+            .filter(|value| !value.is_null())
+        {
+            parameters["modelProvider"] = provider.clone();
         }
         Ok(Self { parameters })
     }
@@ -113,24 +84,11 @@ impl Settings {
             reply["reasoningEffort"] == self.parameters["config"]["model_reasoning_effort"],
             "provider_failed: Codex did not apply current reasoning effort"
         );
-        if let Some(sandbox) = self.parameters["sandbox"].as_str() {
-            let kind = match sandbox {
-                "danger-full-access" => "dangerFullAccess",
-                "read-only" => "readOnly",
-                "workspace-write" => "workspaceWrite",
-                _ => bail!("provider_failed: unsupported current sandbox {sandbox}"),
-            };
-            ensure!(
-                reply["sandbox"]["type"] == kind,
-                "provider_failed: Codex did not apply current sandbox"
-            );
-        }
-        if let Some(permissions) = self.parameters.get("permissions") {
-            ensure!(
-                reply.get("activePermissionProfile") == Some(permissions),
-                "provider_failed: Codex did not apply current permissions profile"
-            );
-        }
+        ensure!(
+            reply["activePermissionProfile"]["id"] == ":danger-full-access"
+                && reply["sandbox"]["type"] == "dangerFullAccess",
+            "provider_failed: Codex did not apply YOLO permissions"
+        );
         Ok(())
     }
     pub fn capture(connection: &mut Codex, reply: &Value, executable: &str) -> Result<Value> {

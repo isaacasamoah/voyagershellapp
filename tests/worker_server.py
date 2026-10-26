@@ -98,21 +98,19 @@ def handle(stream):
             result = {}
             if method == 'initialize' and (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
                 result = {'userAgent': 'codex/0.164.0 fixture'}
-            elif method == 'fixture/exit-with-settings':
-                for push in subscribers:
-                    push({'method': 'fixture/buffered', 'params': {}})
-                    push({'method': 'thread/settings/updated', 'params': {'threadId': 'worker-thread', 'threadSettings': {'model': 'incomplete-update'}}})
-                os._exit(0)
             elif method == 'config/read':
+                if (Path(policy['VOYAGER_STATE']) / 'invalid-config').exists():
+                    send({'id': r['id'], 'error': {'code': -32602, 'message': 'invalid configuration'}})
+                    continue
                 changed = (Path(policy['VOYAGER_STATE']) / 'config-changed').exists()
                 result = {'config': {'model': 'changed-model' if changed else 'fixture-model',
                                     'model_reasoning_effort': 'low' if changed else 'medium',
                                     'approval_policy': 'on-request', 'sandbox_mode': 'read-only'},
-                          'layers': []}
+                          'layers': [{'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'unrelated-config').exists() else 'original'}]}
                 if (Path(policy['VOYAGER_STATE']) / 'default-model').exists():
                     result['config'].update(model=None, model_reasoning_effort=None)
             elif method == 'model/list':
-                result = {'data': [{'model': 'fixture-model', 'isDefault': True, 'defaultReasoningEffort': 'medium'}], 'nextCursor': None}
+                result = {'data': [{'model': 'fixture-model', 'isDefault': True, 'defaultReasoningEffort': 'medium'}] if r['params'].get('cursor') else [], 'nextCursor': None if r['params'].get('cursor') else 'second-page'}
             elif method == 'thread/goal/get':
                 if (Path(policy['VOYAGER_STATE']) / 'missing-thread').exists():
                     send({'id': r['id'], 'error': {'code': -32602, 'message': 'saved thread is unavailable'}})
@@ -125,8 +123,8 @@ def handle(stream):
                 assert r['params']['historyMode'] == 'legacy'
                 result = {'thread': metadata(), 'model': r['params']['model'], 'modelProvider': 'openai',
                           'cwd': str(Path(policy['VOYAGER_STATE'])), 'approvalPolicy': r['params']['approvalPolicy'], 'approvalsReviewer': 'user',
-                          'sandbox': {'type': 'dangerFullAccess'} if r['params']['sandbox'] == 'danger-full-access' else {'type': 'readOnly', 'networkAccess': False},
-                          'activePermissionProfile': None, 'runtimeWorkspaceRoots': [], 'instructionSources': [],
+                          'sandbox': {'type': 'dangerFullAccess'},
+                          'activePermissionProfile': {'id': r['params']['permissions'], 'extends': None}, 'runtimeWorkspaceRoots': [], 'instructionSources': [],
                           'reasoningEffort': r['params']['config']['model_reasoning_effort']}
                 result['thread']['cwd'] = str(Path(policy['VOYAGER_STATE']))
             elif method == 'thread/resume':
@@ -147,12 +145,10 @@ def handle(stream):
                     result['thread']['id'] = 'unexpected-thread'
                 if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                     result['model'] = 'different-model'
-                if (Path(policy['VOYAGER_STATE']) / 'restrictive-settings').exists():
-                    result.update(approvalPolicy='on-request', sandbox={'type': 'readOnly', 'networkAccess': False})
                 if resume_preflight:
                     result.update(model=r['params']['model'], reasoningEffort=r['params']['config']['model_reasoning_effort'],
                                   approvalPolicy=r['params']['approvalPolicy'],
-                                  sandbox={'type': 'dangerFullAccess'} if r['params']['sandbox'] == 'danger-full-access' else {'type': 'readOnly', 'networkAccess': False})
+                                  sandbox={'type': 'dangerFullAccess'}, activePermissionProfile={'id': r['params']['permissions'], 'extends': None})
                     if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                         result['model'] = 'different-model'
             elif method == 'thread/read':

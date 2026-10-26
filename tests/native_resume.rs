@@ -141,3 +141,13 @@ fn saved_thread_idle_gate() -> Result<()> {
     )?;
     Ok(())
 }
+
+#[test]
+#[ignore = "Used by the shared native journey against its own disposable thread"]
+fn narrow_proof_thread_permissions() -> Result<()> {
+    let server = std::env::var("VOYAGER_PROOF_SERVER")?;
+    let thread = std::env::var("VOYAGER_PROOF_THREAD")?;
+    let mut connection = voyager_shell::codex::Codex::connect(Path::new(&server))?;
+    connection.rpc("thread/settings/update", json!({"threadId":thread,"approvalPolicy":"on-request","sandboxPolicy":{"type":"readOnly","networkAccess":false}}))?;
+    Ok(())
+}

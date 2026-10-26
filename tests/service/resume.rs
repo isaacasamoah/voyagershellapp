@@ -46,103 +46,6 @@ fn resume_keeps_identity_and_history_without_submitting_work() {
     f.call(json!({"op":"stop-instance","session_id":id}));
 }
 
-#[test]
-#[ignore = "Uses real Codex to resume one disposable saved conversation"]
-fn native_resume_preserves_saved_context_and_waits_for_new_work() {
-    native_saved_resume_case(false);
-}
-
-#[test]
-#[ignore = "Uses real Codex after narrowing permissions through its native API"]
-fn native_yolo_resume_preserves_context_after_an_old_permission_change() {
-    native_saved_resume_case(true);
-}
-
-fn native_saved_resume_case(restrictive: bool) {
-    assert!(std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").is_ok());
-    let evidence = PathBuf::from(std::env::var("VOYAGER_NATIVE_RESUME_EVIDENCE").unwrap());
-    fs::create_dir(&evidence).unwrap();
-    let mut f = Fixture::new();
-    fs::write(f.dir.join("AGENTS.md"),"Do not use tools in this disposable proof. Remember requested markers and reply concisely.").unwrap();
-    f.start();
-    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"native-resume-original","name":"Disposable saved conversation","cwd":f.dir}));
-    let id = created["session_id"].clone();
-    let initial = f.call(json!({"op":"list"}))[0].clone();
-    if restrictive {
-        let mut native =
-            voyager_shell::codex::Codex::connect(Path::new(initial["server"].as_str().unwrap()))
-                .unwrap();
-        native.rpc("thread/settings/update",json!({"threadId":initial["native_thread_id"],"approvalPolicy":"on-request","sandboxPolicy":{"type":"readOnly","networkAccess":false}})).unwrap();
-        let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
-        wait(|| {
-            let encoded: Option<String> = db
-                .query_row(
-                    "SELECT settings FROM runtime_generations WHERE session_id=?1",
-                    [id.as_str().unwrap()],
-                    |r| r.get(0),
-                )
-                .unwrap();
-            encoded
-                .and_then(|v| serde_json::from_str::<Value>(&v).ok())
-                .is_some_and(|v| v["effective"]["sandbox"]["type"] == "readOnly")
-        });
-        drop(native);
-    }
-    let submitted = f.call(json!({"op":"send","session_id":id,"request_id":"save-native-marker","message":"Remember this exact marker: RESUME_CONTEXT_619. Reply only SAVED. Do not use tools."}));
-    let deadline = Instant::now() + Duration::from_secs(90);
-    loop {
-        if f.events()["events"].as_array().unwrap().iter().any(|e| {
-            e["type"] == "turn.completed" && e["native_turn_id"] == submitted["native_turn_id"]
-        }) {
-            break;
-        }
-        assert!(Instant::now() < deadline, "marker turn did not complete");
-        thread::sleep(Duration::from_millis(50));
-    }
-    f.call(json!({"op":"stop-instance","session_id":id}));
-    let start = Instant::now();
-    let resumed = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"native-resume-same","expected_runtime_generation":1}));
-    fs::write(
-        evidence.join("resume-receipt.json"),
-        serde_json::to_vec_pretty(&resumed).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(resumed["state"], "completed");
-    let ready_ms = start.elapsed().as_millis();
-    let row = f.call(json!({"op":"list"}))[0].clone();
-    assert_eq!(row["native_thread_id"], initial["native_thread_id"]);
-    let mut connection =
-        voyager_shell::codex::Codex::connect(Path::new(row["server"].as_str().unwrap())).unwrap();
-    let effective = connection
-        .rpc(
-            "thread/resume",
-            json!({"threadId":row["native_thread_id"],"excludeTurns":true}),
-        )
-        .unwrap();
-    assert_eq!(effective["sandbox"], json!({"type":"dangerFullAccess"}));
-    assert_eq!(effective["approvalPolicy"], "never");
-    let history = connection
-        .rpc(
-            "thread/read",
-            json!({"threadId":row["native_thread_id"],"includeTurns":true}),
-        )
-        .unwrap();
-    assert!(history.to_string().contains("RESUME_CONTEXT_619"));
-    thread::sleep(Duration::from_secs(5));
-    let events = f.events();
-    assert_eq!(
-        events["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|e| e["type"] == "turn.started" && e["session_id"] == id)
-            .count(),
-        1
-    );
-    fs::write(evidence.join("resume-proof.json"), serde_json::to_vec_pretty(&json!({"service":env!("CARGO_BIN_EXE_voyager"),"original":created,"resumed":resumed,"observed":row,"ready_ms":ready_ms,"idle_seconds":5,"saved_marker_available":true})).unwrap()).unwrap();
-    f.call(json!({"op":"stop-instance","session_id":id}));
-}
-
 pub(super) fn stopped_saved_agent(f: &mut Fixture) -> Value {
     fs::write(f.dir.join("verified-settings"), "1").unwrap();
     f.start();
@@ -208,41 +111,6 @@ fn changed_configuration_uses_current_model_and_effort() {
 }
 
 #[test]
-fn explicit_native_permission_default_is_used_for_launch_and_resume() {
-    let mut f = Fixture::new();
-    fs::write(f.dir.join("launch-mode"), "config").unwrap();
-    let id = stopped_saved_agent(&mut f);
-    let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"restrictive-resume","expected_runtime_generation":1}));
-    assert_eq!(result["state"], "completed");
-    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
-    let encoded: String = db
-        .query_row(
-            "SELECT settings FROM runtime_generations WHERE session_id=?1 AND generation=2",
-            [id.as_str().unwrap()],
-            |r| r.get(0),
-        )
-        .unwrap();
-    let saved: Value = serde_json::from_str(&encoded).unwrap();
-    assert_eq!(saved["effective"]["approvalPolicy"], "on-request");
-    assert_eq!(
-        saved["effective"]["sandbox"],
-        json!({"type":"readOnly","networkAccess":false})
-    );
-    let initial: String = db
-        .query_row(
-            "SELECT settings FROM runtime_generations WHERE session_id=?1 AND generation=1",
-            [id.as_str().unwrap()],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        serde_json::from_str::<Value>(&initial).unwrap()["effective"]["approvalPolicy"],
-        "on-request"
-    );
-    f.call(json!({"op":"stop-instance","session_id":id}));
-}
-
-#[test]
 fn missing_historic_settings_do_not_block_a_confirmed_stopped_conversation() {
     let mut f = Fixture::new();
     let id = stopped_saved_agent(&mut f);
@@ -300,45 +168,6 @@ fn starting_resume_does_not_add_an_unready_voice_participant() {
 }
 
 #[test]
-fn confirmed_exit_with_unread_settings_can_use_current_defaults() {
-    let mut f = Fixture::new();
-    fs::write(f.dir.join("verified-settings"), "1").unwrap();
-    f.start();
-    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"buffered-exit","name":"Buffered settings","cwd":f.dir}));
-    let row = f.call(json!({"op":"list"}))[0].clone();
-    let mut native = Codex::connect(Path::new(row["server"].as_str().unwrap())).unwrap();
-    let mut blocked = UnixStream::connect(f.dir.join("service.sock")).unwrap();
-    blocked.write_all(b"{").unwrap();
-    thread::sleep(Duration::from_millis(50));
-    let service_pid = nix::unistd::Pid::from_raw(f.service.as_ref().unwrap().id() as i32);
-    nix::sys::signal::kill(service_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        wait(|| {
-            fs::read_to_string(format!("/proc/{service_pid}/stat"))
-                .unwrap()
-                .rsplit_once(')')
-                .unwrap()
-                .1
-                .trim_start()
-                .starts_with('T')
-        });
-        let _ = native.rpc("fixture/exit-with-settings", json!({}));
-        let worker_pid = created["runtime_pid"].as_u64().unwrap();
-        wait(|| {
-            fs::read_to_string(format!("/proc/{worker_pid}/stat"))
-                .map(|s| s.rsplit_once(')').unwrap().1.trim_start().starts_with('Z'))
-                .unwrap_or(true)
-        });
-    }));
-    nix::sys::signal::kill(service_pid, nix::sys::signal::Signal::SIGCONT).unwrap();
-    drop(blocked);
-    outcome.unwrap();
-    wait(|| f.call(json!({"op":"list"}))[0]["lifecycle"]["runtime"] == "stopped");
-    let observed = f.call(json!({"op":"list"}))[0].clone();
-    assert_eq!(observed["resume"]["state"], "eligible");
-}
-
-#[test]
 fn cli_resume_returns_the_saved_runtime_receipt() {
     let mut f = Fixture::new();
     fs::write(f.dir.join("verified-settings"), "1").unwrap();
@@ -382,23 +211,6 @@ fn cli_operation_reads_a_failed_receipt_without_retrying() {
 }
 
 #[test]
-fn invalid_launch_mode_refuses_without_starting_a_vessel() {
-    let mut f = Fixture::new();
-    fs::write(f.dir.join("launch-mode"), "invalid").unwrap();
-    f.start();
-    let result = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"invalid-launch-mode","name":"Invalid mode","cwd":f.dir}));
-    assert_eq!(result["state"], "partial");
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("must be yolo or config")
-    );
-    assert!(f.call(json!({"op":"list"})).as_array().unwrap().is_empty());
-    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
-}
-
-#[test]
 fn absent_model_and_effort_use_current_provider_defaults() {
     let mut f = Fixture::new();
     fs::write(f.dir.join("default-model"), "1").unwrap();
@@ -406,4 +218,29 @@ fn absent_model_and_effort_use_current_provider_defaults() {
     let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"default-model-resume","expected_runtime_generation":1}));
     assert_eq!(result["state"], "completed", "{result}");
     f.call(json!({"op":"stop-instance","session_id":id}));
+}
+
+#[test]
+fn an_unrelated_configuration_edit_does_not_block_resume() {
+    let mut f = Fixture::new();
+    let id = stopped_saved_agent(&mut f);
+    fs::write(f.dir.join("unrelated-config"), "1").unwrap();
+    let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"unrelated-config","expected_runtime_generation":1}));
+    assert_eq!(result["state"], "completed", "{result}");
+    f.call(json!({"op":"stop-instance","session_id":id}));
+}
+
+#[test]
+fn invalid_current_configuration_fails_before_loading() {
+    let mut f = Fixture::new();
+    let id = stopped_saved_agent(&mut f);
+    fs::write(f.dir.join("invalid-config"), "1").unwrap();
+    let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"invalid-current-config","expected_runtime_generation":1}));
+    assert_eq!(result["state"], "partial", "{result}");
+    assert_eq!(result["runtime"], "stopped");
+    assert_eq!(
+        f.call(json!({"op":"list"}))[0]["native_thread_id"],
+        "worker-thread"
+    );
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
 }

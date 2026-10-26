@@ -27,8 +27,9 @@ if os.environ.get('VOYAGER_PROOF_CURRENT_CONFIG') == '1':
     isolated.mkdir(mode=0o700)
     shutil.copy2(provider_home / 'auth.json', isolated / 'auth.json')
     (isolated / 'auth.json').chmod(0o600)
-    (isolated / 'config.toml').write_text('model = "gpt-6.1-sol"\nmodel_reasoning_effort = "medium"\n')
+    (isolated / 'config.toml').write_text('model = "gpt-6.1-sol"\nmodel_reasoning_effort = "medium"\napproval_policy = "on-request"\ndefault_permissions = ":read-only"\n')
     env['CODEX_HOME'] = str(isolated)
+    env['VOYAGER_PROOF_SOURCE_ROOT'] = str(root)
 service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'service.log').open('w'), stderr=subprocess.STDOUT)
 app = None
 verdict = None

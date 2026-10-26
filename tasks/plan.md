@@ -24,17 +24,18 @@ and apply them explicitly to new and resumed threads. Do not compare previous
 configuration fingerprints. Validate the returned thread identity, effective
 startup selection and idle state. Retain the current schema and historical records.
 
-Keep YOLO for new launch and Resume. Use one explicit service launch setting,
-VOYAGER_CODEX_LAUNCH_MODE, default yolo; config selects the user's native permission
-defaults. Invalid values fail clearly. This is a configuration setting, not a new
-permissions editor or per-Vessel form. Native provider refusal remains a failure.
+Keep YOLO for new launch and Resume. The owner approved removing the proposed
+VOYAGER_CODEX_LAUNCH_MODE option during the C1 corrective pass. Permission-default
+controls are deferred. Select YOLO explicitly for each native thread, including
+when current Codex configuration or the stopped thread used narrower permissions.
+Do not infer native trust policy or add a permissions editor.
 
 Primary files: src/worker.rs, src/worker/settings.rs,
 src/service/lifecycle/resume.rs, tests/worker_server.py, tests/service/resume.rs.
 Read store/capture consumers before changing snapshot semantics. Update owning
 lifecycle docs and the existing shared resume journey as necessary.
 
-Prove current model/effort, default YOLO, explicit permission-default opt-out,
+Prove current model/effort, default YOLO overriding old/current native permission settings,
 known-different unrelated config edit, absent historic settings, preserved thread,
 idle load and unchanged disconnect/uncertain-operation refusals. The real Codex
 journey uses a private disposable configuration rather than editing the user's

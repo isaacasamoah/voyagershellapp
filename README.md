@@ -44,9 +44,8 @@ visible with closed viewers; Previous vessels reveals stopped conversations and
 saved events. Panel Resume checks current runtime identity before a separate Open. A worker names
 its hidden supervisor, and keyboard focus follows meaningful controls through
 state changes.
-New launch and Resume use current Codex model and effort settings. YOLO remains
-the default unless VOYAGER_CODEX_LAUNCH_MODE=config selects native permission
-configuration. Changed configuration or missing historic settings alone does not
+New launch and Resume use current Codex model and effort settings. Launch and Resume
+select YOLO; permission-default controls remain deferred. Changed configuration or missing historic settings alone does not
 block Resume. Confirmed stop, saved identity and an available directory remain
 required. The compact Resume presentation is the next planned increment.
 
