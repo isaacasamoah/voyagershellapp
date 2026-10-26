@@ -15,13 +15,20 @@ settings snapshot. C1–C3 have passed their bounded review and test run. The re
 
 ## Proposed follow-up: reconnect a surviving Vessel
 
-Draft for owner review, 26 October 2026. Isaac chose proactive recovery after the
-service-loss investigation. These proposed recovery rules supersede conflicting
+Approved by Isaac, 26 October 2026. Isaac chose proactive recovery after the
+service-loss investigation. These recovery rules supersede conflicting
 first-increment limits below. This section extends the completed Resume increment;
 it does not change the running application. It supersedes the earlier deferral of
 verified reconnection for the scope below. Resume still requires a confirmed stop.
 
 ### Desired experience
+
+Keep the existing minimal, subtle interface and normal native behavior. Recovery
+must not demand an idle agent, stop an active turn, alter native permissions,
+change model/effort settings or introduce a confirmation dialog for ordinary work.
+Voyager augments the terminal and agent; it does not impose an extra operating
+policy on them. Identity checks establish which saved runtime to reconnect, not
+whether the user's native work is acceptable.
 
 Voyager should recover its connection when the agent is still running. The owner
 should not need to diagnose a service restart or move an otherwise healthy Vessel

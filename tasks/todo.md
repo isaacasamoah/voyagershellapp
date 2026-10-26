@@ -1,50 +1,83 @@
-# Tasks: current configuration and compact Resume
+# Tasks: proactive recovery of existing Codex Vessels
 
-[Plan](plan.md). Specs: conversation-resume, then current-work-panel.
-Previous completed panel tasks remain in Git history.
+[Plan](plan.md). Owning spec: conversation-resume reconnect follow-up, with its
+panel consumer. Spec approved 26 October. Plan awaiting review. All items below
+are unstarted; earlier C1–C3 completion remains in Git history.
 
-## C1: current model and effort
+## K1: background Vessel recovers automatically
 
-- [x] Prove changed config and missing historic settings fail before the fix.
-- [x] Apply current model/effort and explicit YOLO without old fingerprint admission gates.
-- [x] Pass existing Rust checks, real Codex proof, negative control and independent Rust review.
+### R01: restore a verified managed-runtime connection
 
-C1 passed final re-review after one corrective pass. The selected C1 package
-passed the expanded real-Codex journey with confirmed clean exits. Complete size
-gate 9,055 / 9,070 passes. Its readyMs is an upper bound including the additional
-new-Vessel check, not pure Resume readiness latency. Permission controls deferred.
+- [ ] Add the child/checked-process alternative and automatic recovery of the current saved generation, without starting another runtime or requiring idle state.
+- [ ] Renew credentials at the current runtime's existing locator; restore capture and explicit managed controls under current policy.
+- [ ] Start with failing service regressions for service loss, connection loss and current-generation identity. Keep unrelated processes and native settings unchanged.
 
-## C2: compact Resume
+Likely owners: src/worker.rs, src/service.rs, src/authority.rs, tests/service.rs
+and the existing provider fixture if needed. Split a larger implementation into
+small tasks within this same vertical journey rather than shipping a scaffold.
 
-- [x] Prove the expected compact row fails before the UI change.
-- [x] Use one Resume action, secondary viewer/details and truthful pending state.
-- [x] Pass desktop checks, real panel journey and independent review.
+### R02: prove and review background recovery
 
-C2 passed final re-review after one corrective pass. Both selected-package native
-journeys pass with clean exits. Complete size gate: 9,172 / 9,183. Pending Resume
-focus and the persistent status announcement are checked in the actual panel.
+- [ ] Extend the maintained native runner with service restart ownership and a small reusable reconnect journey. Do not duplicate launcher or cleanup code.
+- [ ] Prove same process/thread/runtime generation, fresh bound CLI context, continued active work, ordinary Open/Stop, and known-different refusal in disposable state.
+- [ ] Pass relevant checks, size inventory, fresh Rust/general review and at most one corrective pass plus re-review.
 
-## C3: history and feedback
+Likely owners: desktop/test/run-native-proof.py, desktop/test/native-proof.cjs,
+one reconnect journey, and existing service tests. Depends on R01. This completes
+K1; no dependent product work starts with a Required review finding unresolved.
 
-- [x] Replace the checkbox with removed-view/back menu actions and exact membership checks.
-- [x] Keep readable operation errors with their Vessel across refresh.
-- [x] Pass desktop/history journeys, negative control and independent review.
+## K2: recover the terminal that survived
 
-C3 passed final independent review after one corrective pass. The history menu
-stays in its toolbar and Back matches existing secondary controls. Both exact-package
-native journeys pass, and the old package fails the new menu-bounds check.
-Complete size gate: 9,265 / 9,266, including all maintained and one-off acceptance.
+### R03: reconnect the original native viewer
+
+- [ ] Recover checked terminal/frontend/window identities from existing native discovery; reuse the current runtime handle rather than fabricating a Child.
+- [ ] Make ordinary Open/background and explicit Stop work without creating a duplicate viewer; leave position, focus and avatar arrangement unchanged.
+- [ ] Keep actual closed, visible and unverified window observations distinct, with a failure regression for lost in-memory viewer state.
+
+Likely owners: src/service.rs, src/service/lifecycle.rs, src/terminal.rs and existing
+lifecycle tests. Depends on K1.
+
+### R04: prove and review viewer recovery
+
+- [ ] Use the same reconnect journey with a surviving viewer and one closed during the outage. Verify exact native identities and no automatic viewer creation.
+- [ ] Drive background/Open, a new dock and voice attachment, then Stop on the real candidate; confirm the unrelated control process stays untouched.
+- [ ] Pass checks, size inventory and fresh review, with one corrective pass and re-review at most.
+
+Likely owners: the existing reconnect journey and shared native actions, plus the
+owning lifecycle documentation. Depends on R03; completes K2.
+
+## K3: usable retries and subtle status
+
+### R05: expose retry through the existing owner boundary
+
+- [ ] Add the named owner Retry connection operation and CLI path, using the automatic verification routine and current observed generation.
+- [ ] Join an active attempt, permit a new check after a known failure, and cancel admission for a changed or removed record. Never replay uncertain work.
+- [ ] Prove transient failure, eventual recovery and concurrent/stale requests with the existing service fixture.
+
+Likely owners: src/service.rs, src/bin/voyager.rs and existing service tests.
+Depends on K1 and K2.
+
+### R06: present recovery in the current interface
+
+- [ ] Add the thin named desktop call in the existing bridge and a menu Retry connection action. Keep progress subtle, keyboard accessible and local to the Vessel.
+- [ ] Keep recovering Vessels visible, preserve focus and avoid attention-only dead ends. Confirmed exits use Previous vessels and explicit Resume.
+- [ ] Keep normal native actions, current styling, free placement and the separate name-only-row request unchanged.
+
+Likely owners: desktop/src/instances.cjs, main.cjs, preload.cjs, ui/renderer.js and
+ui/hierarchy.js. UI/bridge regressions stay in their existing fixtures. Depends
+on R05. Keep bridge and rendering edits as small tasks inside this single PR.
+
+### R07: complete native fallback proof and final review
+
+- [ ] Drive transient loss and Retry connection in the actual panel. Check accurate reasons, no extra prompts, focus, and recovery while the native agent is active.
+- [ ] Preserve all accepted Resume/panel journeys. Record timings, executable identities, whole acceptance inventory and verified cleanup.
+- [ ] Complete fresh review, one corrective pass/re-review at most, readable PR body and the build/skills walkthrough before owner inspection.
+
+Likely owners: the shared reconnect journey, existing renderer tests, README and
+owning lifecycle document. Depends on R06; completes K3.
 
 ## Final checkpoint
 
-- [x] Record combined maintained/one-off test budget and PR sizes.
-- [x] Deliver the BeautifulRust skills report and record their use in project instructions.
-- [x] Restart only the verified idle test instance from the reviewed package, retaining closed-state backup.
-- [x] Record executable identities, ready state, skills used and known limits for owner inspection.
-
-Only the idle test instance was restarted from the reviewed package. Its app and
-bundled service match desktop/out/voyagershell-linux-x64-32a8ae906293. The stopped
-Trial check record is retained and eligible. One app root, two visible controls
-and a ready, idle private conversation were observed. Closed state is backed up
-under the account-local voyagershell-preserved folder. Main and The Climb were untouched.
-The owning Obsidian status links the walkthrough, private restart receipt and skills report.
+- [ ] All approved acceptance journeys pass on one selected package and bundled service.
+- [ ] All Required findings resolved within the approved correction limit; no check or constraint weakened.
+- [ ] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.

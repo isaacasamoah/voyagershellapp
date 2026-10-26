@@ -15,7 +15,7 @@ running app still uses the previous design.
 
 ## Proposed follow-up: proactive connection recovery
 
-Draft for owner review, 26 October 2026. The service behavior is owned by the
+Approved by Isaac, 26 October 2026. The service behavior is owned by the
 [reconnection section](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
 This section supersedes the earlier automatic Needs attention placement for a
 previously managed Codex Vessel whose service connection was lost.
@@ -36,7 +36,9 @@ previously managed Codex Vessel whose service connection was lost.
 - Show window state as unverified when the service has lost its viewer record.
   Do not report closed until the native observation establishes that result.
 
-Reuse the current row, secondary-menu, keyboard and error-feedback patterns. This
+Keep the existing minimal, subtle look. Reuse the current row, secondary-menu,
+keyboard and error-feedback patterns. Put fallback Retry connection in the existing
+Vessel menu; add no dashboard, permanent recovery banner or confirmation dialog. This
 follow-up changes recovery and its presentation, not the separate requested
 name-only collapsed-row refinement or the retained free-undocking behavior.
 

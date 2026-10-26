@@ -5,9 +5,9 @@ State: The owner approved the capability boundaries, dependency direction, first
 
 ## This build branch
 
-This branch contains a proposed extension to `conversation-resume` and its panel
+This branch contains the owner-approved extension to `conversation-resume` and its panel
 contract: proactively reconnect previously managed Codex Vessels after service
-loss. The owner selected proactive recovery on 26 October. The concrete draft is
+loss. The owner selected proactive recovery on 26 October. The approved revision is
 [here](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
 The panel consumes that service result through its
 [recovery presentation](SPEC-current-work-panel.md#proposed-follow-up-proactive-connection-recovery).
@@ -15,8 +15,8 @@ This is one recovery journey across the existing module boundary, not a new
 capability hierarchy or a wider rebuild.
 
 The preceding C1–C3 build completed review and native proving. Its completed plan
-and task list remain in `tasks/` until the reconnection specification is reviewed.
-No reconnection implementation plan or code is created by this draft. The running
+and task list remain in Git history. The owner approved the reconnection specification on 26 October.
+The reconnection plan is now prepared for review; no product code has changed. The running
 test package remains unchanged. Merge, installation and rollout are separate.
 
 ## Purpose and terminology
@@ -59,13 +59,13 @@ Each module specification defines its successful journey, a deliberately differe
 |---|---|---|
 | `docking-recovery` | [Truthful docking and avatar recovery](SPEC-docking-recovery.md) | Undock when the target becomes obscured; local timing targets. |
 | `voice-handoff` | [Voice acknowledgement and result handoff](SPEC-voice-handoff.md) | Private app conversation scope and local audible timing targets. |
-| `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Current model/effort and YOLO; confirmed-stop Resume. Proactive reconnection of a surviving runtime is a new review draft. |
-| `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Vessels, Previous vessels and bounded history. The proposed recovery revision replaces attention-only dead ends with automatic checks and usable recovery. |
+| `conversation-resume` | [Explicitly resume a saved conversation](SPEC-conversation-resume.md) | Current model/effort and YOLO; confirmed-stop Resume. Proactive reconnection of a surviving runtime is approved for planning. |
+| `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Vessels, Previous vessels and bounded history. The approved recovery revision replaces attention-only dead ends with automatic checks and usable recovery. |
 
-Each specification owns its behavior and acceptance cases. The completed
-C1–C3 plan is retained in [tasks/plan.md](tasks/plan.md) and its
-[task list](tasks/todo.md). The proactive-reconnection sections are proposed
-requirements for review, not evidence that this feature has been built.
+Each specification owns its behavior and acceptance cases. The approved
+proactive-reconnection requirements now have a [draft plan](tasks/plan.md) and
+[unstarted task list](tasks/todo.md) for review. Earlier C1–C3 completion remains
+in Git history. A specification or plan does not establish implemented behavior.
 
 ## Review and development workflow
 
@@ -73,7 +73,7 @@ The capability boundaries, build order and four module specifications are approv
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The retained `tasks/plan.md` and `tasks/todo.md` record the completed C1–C3 correction. Replace them with a reconnection plan only after the new specification is reviewed. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
+Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The current `tasks/plan.md` and `tasks/todo.md` cover reconnection after owner specification approval. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
