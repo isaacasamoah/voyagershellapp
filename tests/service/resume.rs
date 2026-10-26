@@ -54,7 +54,7 @@ fn native_resume_preserves_saved_context_and_waits_for_new_work() {
 
 #[test]
 #[ignore = "Uses real Codex after narrowing permissions through its native API"]
-fn native_read_only_resume_preserves_saved_context_without_work() {
+fn native_yolo_resume_preserves_context_after_an_old_permission_change() {
     native_saved_resume_case(true);
 }
 
@@ -119,18 +119,8 @@ fn native_saved_resume_case(restrictive: bool) {
             json!({"threadId":row["native_thread_id"],"excludeTurns":true}),
         )
         .unwrap();
-    assert_eq!(
-        effective["sandbox"],
-        if restrictive {
-            json!({"type":"readOnly","networkAccess":false})
-        } else {
-            json!({"type":"dangerFullAccess"})
-        }
-    );
-    assert_eq!(
-        effective["approvalPolicy"],
-        if restrictive { "on-request" } else { "never" }
-    );
+    assert_eq!(effective["sandbox"], json!({"type":"dangerFullAccess"}));
+    assert_eq!(effective["approvalPolicy"], "never");
     let history = connection
         .rpc(
             "thread/read",
@@ -157,6 +147,7 @@ pub(super) fn stopped_saved_agent(f: &mut Fixture) -> Value {
     fs::write(f.dir.join("verified-settings"), "1").unwrap();
     f.start();
     let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"saved-agent","name":"Saved agent","cwd":f.dir}));
+    assert_eq!(created["state"], "completed", "{created}");
     f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
     created["session_id"].clone()
 }
@@ -191,26 +182,35 @@ fn changed_settings_after_load_leave_an_uncertain_receipt_without_replay() {
 }
 
 #[test]
-fn changed_workflow_configuration_refuses_before_loading() {
+fn changed_configuration_uses_current_model_and_effort() {
     let mut f = Fixture::new();
     let id = stopped_saved_agent(&mut f);
     fs::write(f.dir.join("config-changed"), "1").unwrap();
     let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"changed-config","expected_runtime_generation":1}));
-    assert_eq!(result["state"], "partial");
-    assert_eq!(result["runtime"], "stopped");
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("configuration changed")
+    assert_eq!(result["state"], "completed", "{result}");
+    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
+    let encoded: String = db
+        .query_row(
+            "SELECT settings FROM runtime_generations WHERE session_id=?1 AND generation=2",
+            [id.as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let saved: Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(saved["effective"]["model"], "changed-model");
+    assert_eq!(saved["effective"]["reasoningEffort"], "low");
+    assert_eq!(saved["effective"]["approvalPolicy"], "never");
+    assert_eq!(
+        saved["effective"]["sandbox"],
+        json!({"type":"dangerFullAccess"})
     );
-    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+    f.call(json!({"op":"stop-instance","session_id":id}));
 }
 
 #[test]
-fn resume_preserves_observed_read_only_permissions_through_the_product_path() {
+fn explicit_native_permission_default_is_used_for_launch_and_resume() {
     let mut f = Fixture::new();
-    fs::write(f.dir.join("restrictive-settings"), "1").unwrap();
+    fs::write(f.dir.join("launch-mode"), "config").unwrap();
     let id = stopped_saved_agent(&mut f);
     let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"restrictive-resume","expected_runtime_generation":1}));
     assert_eq!(result["state"], "completed");
@@ -228,32 +228,37 @@ fn resume_preserves_observed_read_only_permissions_through_the_product_path() {
         saved["effective"]["sandbox"],
         json!({"type":"readOnly","networkAccess":false})
     );
+    let initial: String = db
+        .query_row(
+            "SELECT settings FROM runtime_generations WHERE session_id=?1 AND generation=1",
+            [id.as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&initial).unwrap()["effective"]["approvalPolicy"],
+        "on-request"
+    );
     f.call(json!({"op":"stop-instance","session_id":id}));
 }
 
 #[test]
-fn unsupported_or_missing_saved_sandbox_never_reaches_a_load() {
-    for marker in ["unsupported-sandbox", "missing-sandbox"] {
-        let mut f = Fixture::new();
-        fs::write(f.dir.join(marker), "1").unwrap();
-        let id = stopped_saved_agent(&mut f);
-        assert_eq!(
-            f.call(json!({"op":"list"}))[0]["resume"]["reason_code"],
-            "settings_unavailable"
-        );
-        assert!(client(&f.dir,json!({"op":"resume-instance","session_id":id,"request_id":"refused-sandbox","expected_runtime_generation":1})).is_err());
-        let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
-        assert_eq!(
-            db.query_row(
-                "SELECT count(*) FROM runtime_generations WHERE session_id=?1",
-                [id.as_str().unwrap()],
-                |r| r.get::<_, i64>(0)
-            )
-            .unwrap(),
-            1
-        );
-        assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
-    }
+fn missing_historic_settings_do_not_block_a_confirmed_stopped_conversation() {
+    let mut f = Fixture::new();
+    let id = stopped_saved_agent(&mut f);
+    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
+    db.execute(
+        "UPDATE runtime_generations SET settings=NULL WHERE session_id=?1",
+        [id.as_str().unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        f.call(json!({"op":"list"}))[0]["resume"]["state"],
+        "eligible"
+    );
+    let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"no-old-settings","expected_runtime_generation":1}));
+    assert_eq!(result["state"], "completed", "{result}");
+    f.call(json!({"op":"stop-instance","session_id":id}));
 }
 
 #[test]
@@ -275,8 +280,8 @@ fn incomplete_native_settings_update_makes_saved_settings_unavailable() {
     });
     f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
     assert_eq!(
-        f.call(json!({"op":"list"}))[0]["resume"]["reason_code"],
-        "settings_unavailable"
+        f.call(json!({"op":"list"}))[0]["resume"]["state"],
+        "eligible"
     );
 }
 
@@ -295,7 +300,7 @@ fn starting_resume_does_not_add_an_unready_voice_participant() {
 }
 
 #[test]
-fn unexpected_exit_with_unread_settings_disables_resume() {
+fn confirmed_exit_with_unread_settings_can_use_current_defaults() {
     let mut f = Fixture::new();
     fs::write(f.dir.join("verified-settings"), "1").unwrap();
     f.start();
@@ -330,7 +335,7 @@ fn unexpected_exit_with_unread_settings_disables_resume() {
     outcome.unwrap();
     wait(|| f.call(json!({"op":"list"}))[0]["lifecycle"]["runtime"] == "stopped");
     let observed = f.call(json!({"op":"list"}))[0].clone();
-    assert_eq!(observed["resume"]["reason_code"], "settings_unavailable");
+    assert_eq!(observed["resume"]["state"], "eligible");
 }
 
 #[test]
@@ -374,4 +379,31 @@ fn cli_operation_reads_a_failed_receipt_without_retrying() {
         serde_json::from_slice::<Value>(&output.stdout).unwrap(),
         expected
     );
+}
+
+#[test]
+fn invalid_launch_mode_refuses_without_starting_a_vessel() {
+    let mut f = Fixture::new();
+    fs::write(f.dir.join("launch-mode"), "invalid").unwrap();
+    f.start();
+    let result = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"invalid-launch-mode","name":"Invalid mode","cwd":f.dir}));
+    assert_eq!(result["state"], "partial");
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("must be yolo or config")
+    );
+    assert!(f.call(json!({"op":"list"})).as_array().unwrap().is_empty());
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+}
+
+#[test]
+fn absent_model_and_effort_use_current_provider_defaults() {
+    let mut f = Fixture::new();
+    fs::write(f.dir.join("default-model"), "1").unwrap();
+    let id = stopped_saved_agent(&mut f);
+    let result = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"default-model-resume","expected_runtime_generation":1}));
+    assert_eq!(result["state"], "completed", "{result}");
+    f.call(json!({"op":"stop-instance","session_id":id}));
 }

@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,15 @@ exe = str(packaged.parent / 'resources/bin/voyager') if packaged else str(root /
 def call(*args):
     return json.loads(subprocess.check_output([exe, '--state', str(state), *args], timeout=25))
 env = dict(os.environ, VOYAGER_STATE=str(state), VOYAGER_PROOF_JOURNEY=journey)
+if os.environ.get('VOYAGER_PROOF_CURRENT_CONFIG') == '1':
+    assert journey in ['resume', 'panel-resume']
+    provider_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+    isolated = state / 'codex-home'
+    isolated.mkdir(mode=0o700)
+    shutil.copy2(provider_home / 'auth.json', isolated / 'auth.json')
+    (isolated / 'auth.json').chmod(0o600)
+    (isolated / 'config.toml').write_text('model = "gpt-6.1-sol"\nmodel_reasoning_effort = "medium"\n')
+    env['CODEX_HOME'] = str(isolated)
 service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'service.log').open('w'), stderr=subprocess.STDOUT)
 app = None
 verdict = None

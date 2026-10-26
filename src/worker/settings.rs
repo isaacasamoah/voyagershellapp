@@ -1,41 +1,138 @@
 use crate::codex::Codex;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
-use std::{fs, os::unix::fs::MetadataExt, path::Path};
 
-pub struct Settings {
-    pub snapshot: Value,
+#[derive(Clone, Copy, Debug)]
+pub(super) enum LaunchMode {
+    Yolo,
+    Config,
 }
-fn files(sources: &Value) -> Result<Vec<Value>> {
-    sources.as_array().context("settings_unavailable: instruction sources are missing")?.iter().map(|source| {
-        let path = source.as_str().context("settings_unavailable: invalid instruction source")?;
-        ensure!(Path::new(path).is_absolute(), "settings_unavailable: instruction source is not absolute");
-        let m = fs::metadata(path).context("settings_unavailable: instruction source is unavailable")?;
-        Ok(json!({"path":path,"device":m.dev(),"inode":m.ino(),"size":m.len(),"modified":m.mtime(),"modified_ns":m.mtime_nsec(),"changed":m.ctime(),"changed_ns":m.ctime_nsec()}))
-    }).collect()
-}
-fn workflow(connection: &mut Codex, effective: &Value) -> Result<Value> {
-    let response = connection.rpc(
-        "config/read",
-        json!({"cwd":effective["cwd"],"includeLayers":true}),
-    )?;
-    let mut layers = Vec::new();
-    for layer in response["layers"]
-        .as_array()
-        .context("settings_unavailable: configuration provenance is missing")?
-    {
-        if layer["name"]["type"] == "sessionFlags" {
-            continue;
+impl LaunchMode {
+    pub fn read() -> Result<Self> {
+        match std::env::var("VOYAGER_CODEX_LAUNCH_MODE") {
+            Err(std::env::VarError::NotPresent) => Ok(Self::Yolo),
+            Ok(value) if value == "yolo" => Ok(Self::Yolo),
+            Ok(value) if value == "config" => Ok(Self::Config),
+            _ => bail!("invalid_config: VOYAGER_CODEX_LAUNCH_MODE must be yolo or config"),
         }
-        ensure!(
-            layer["name"].is_object() && layer["version"].is_string(),
-            "settings_unavailable: invalid configuration provenance"
-        );
-        layers.push(json!({"name":layer["name"],"version":layer["version"],"disabledReason":layer["disabledReason"]}));
     }
-    Ok(json!({"layers":layers,"instruction_files":files(&effective["instructionSources"])?}))
+    pub fn arguments(self) -> &'static [&'static str] {
+        match self {
+            Self::Yolo => &[
+                "-c",
+                "sandbox_mode=\"danger-full-access\"",
+                "-c",
+                "approval_policy=\"never\"",
+            ],
+            Self::Config => &[],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Settings {
+    parameters: Value,
 }
 impl Settings {
+    pub(super) fn current(connection: &mut Codex, cwd: &str, mode: LaunchMode) -> Result<Self> {
+        let response = connection.rpc("config/read", json!({"cwd":cwd,"includeLayers":false}))?;
+        let config = response["config"]
+            .as_object()
+            .context("provider_failed: Codex did not return current configuration")?;
+        let mut model = config
+            .get("model")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let mut effort = config
+            .get("model_reasoning_effort")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if model.is_none() || effort.is_none() {
+            let catalog =
+                connection.rpc("model/list", json!({"includeHidden":true,"limit":100}))?;
+            let models = catalog["data"]
+                .as_array()
+                .context("provider_failed: Codex did not return model defaults")?;
+            let selected = models
+                .iter()
+                .find(|entry| match &model {
+                    Some(name) => entry["model"] == *name || entry["id"] == *name,
+                    None => entry["isDefault"] == true,
+                })
+                .context("provider_failed: current model defaults are unavailable")?;
+            if model.is_none() {
+                model = selected["model"].as_str().map(str::to_owned);
+            }
+            if effort.is_none() {
+                effort = selected["defaultReasoningEffort"]
+                    .as_str()
+                    .map(str::to_owned);
+            }
+        }
+        let mut parameters = json!({"cwd":cwd,"model":model.context("provider_failed: current model is unavailable")?,"config":{"model_reasoning_effort":effort.context("provider_failed: current reasoning effort is unavailable")?}});
+        for (source, target) in [
+            ("model_provider", "modelProvider"),
+            ("approval_policy", "approvalPolicy"),
+            ("approvals_reviewer", "approvalsReviewer"),
+            ("sandbox_mode", "sandbox"),
+            ("default_permissions", "permissions"),
+        ] {
+            if let Some(value) = config.get(source).filter(|value| !value.is_null()) {
+                parameters[target] = value.clone();
+            }
+        }
+        if matches!(mode, LaunchMode::Yolo) {
+            parameters["approvalPolicy"] = json!("never");
+            parameters["sandbox"] = json!("danger-full-access");
+            parameters
+                .as_object_mut()
+                .context("invalid startup parameters")?
+                .remove("permissions");
+        }
+        Ok(Self { parameters })
+    }
+    pub(super) fn parameters(&self) -> Value {
+        self.parameters.clone()
+    }
+    pub(super) fn verify(&self, reply: &Value) -> Result<()> {
+        for key in [
+            "model",
+            "modelProvider",
+            "cwd",
+            "approvalPolicy",
+            "approvalsReviewer",
+        ] {
+            if let Some(expected) = self.parameters.get(key) {
+                ensure!(
+                    reply.get(key) == Some(expected),
+                    "provider_failed: Codex did not apply current {key}"
+                );
+            }
+        }
+        ensure!(
+            reply["reasoningEffort"] == self.parameters["config"]["model_reasoning_effort"],
+            "provider_failed: Codex did not apply current reasoning effort"
+        );
+        if let Some(sandbox) = self.parameters["sandbox"].as_str() {
+            let kind = match sandbox {
+                "danger-full-access" => "dangerFullAccess",
+                "read-only" => "readOnly",
+                "workspace-write" => "workspaceWrite",
+                _ => bail!("provider_failed: unsupported current sandbox {sandbox}"),
+            };
+            ensure!(
+                reply["sandbox"]["type"] == kind,
+                "provider_failed: Codex did not apply current sandbox"
+            );
+        }
+        if let Some(permissions) = self.parameters.get("permissions") {
+            ensure!(
+                reply.get("activePermissionProfile") == Some(permissions),
+                "provider_failed: Codex did not apply current permissions profile"
+            );
+        }
+        Ok(())
+    }
     pub fn capture(connection: &mut Codex, reply: &Value, executable: &str) -> Result<Value> {
         let mut effective = serde_json::Map::new();
         for key in [
@@ -54,92 +151,15 @@ impl Settings {
                 key.into(),
                 reply
                     .get(key)
-                    .context("settings_unavailable: missing effective setting")?
+                    .context("settings_unavailable: effective setting is missing")?
                     .clone(),
             );
         }
-        let effective = Value::Object(effective);
-        let snapshot = json!({"version":1,"provider_executable":executable,"provider_version":connection.user_agent,"effective":effective,"workflow":workflow(connection,&effective)?});
-        Self::parse(&snapshot, executable)?;
-        Ok(snapshot)
+        Ok(
+            json!({"version":2,"provider_executable":executable,"provider_version":connection.user_agent,"effective":effective}),
+        )
     }
-    pub fn parse(snapshot: &Value, executable: &str) -> Result<Self> {
-        ensure!(
-            snapshot["version"] == 1
-                && snapshot["provider_executable"] == executable
-                && snapshot["provider_version"]
-                    .as_str()
-                    .is_some_and(|s| !s.is_empty()),
-            "settings_unavailable: provider settings cannot be verified"
-        );
-        let effective = &snapshot["effective"];
-        let string = |key: &str| {
-            effective[key]
-                .as_str()
-                .filter(|v| !v.is_empty())
-                .context("settings_unavailable: a saved setting is missing")
-        };
-        let cwd = string("cwd")?.to_owned();
-        ensure!(
-            Path::new(&cwd).is_absolute() && Path::new(&cwd).is_dir(),
-            "directory_unavailable: saved working folder is unavailable"
-        );
-        string("model")?;
-        ensure!(
-            string("modelProvider")? == "openai",
-            "settings_unavailable: this provider is not supported for recovery yet"
-        );
-        let approval = string("approvalPolicy")?.to_owned();
-        ensure!(
-            ["never", "on-request", "untrusted"].contains(&approval.as_str())
-                && string("approvalsReviewer")? == "user",
-            "settings_unavailable: unsupported approval settings"
-        );
-        ensure!(
-            effective
-                .get("activePermissionProfile")
-                .is_some_and(Value::is_null),
-            "settings_unavailable: named permission profiles are not supported for recovery yet"
-        );
-        ensure!(
-            effective["sandbox"] == json!({"type":"dangerFullAccess"})
-                || effective["sandbox"] == json!({"type":"readOnly","networkAccess":false}),
-            "settings_unavailable: this sandbox policy cannot be reproduced safely yet"
-        );
-        ensure!(
-            effective["runtimeWorkspaceRoots"]
-                .as_array()
-                .is_some_and(|a| a
-                    .iter()
-                    .all(|v| v.as_str().is_some_and(|p| Path::new(p).is_absolute()))),
-            "settings_unavailable: workspace roots are missing"
-        );
-        ensure!(
-            snapshot["workflow"]["layers"].is_array()
-                && snapshot["workflow"]["instruction_files"]
-                    == json!(files(&effective["instructionSources"])?),
-            "settings_unavailable: instruction sources changed or cannot be verified"
-        );
-        let effort = effective
-            .get("reasoningEffort")
-            .context("settings_unavailable: reasoning settings are missing")?;
-        ensure!(
-            effort.is_null()
-                || effort.as_str().is_some_and(|s| [
-                    "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
-                ]
-                .contains(&s)),
-            "settings_unavailable: unsupported reasoning settings"
-        );
-        Ok(Self {
-            snapshot: snapshot.clone(),
-        })
-    }
-    pub fn refresh(snapshot: &Value, current: &Value, executable: &str) -> Result<Value> {
-        ensure!(
-            snapshot["effective"]["cwd"] == current["cwd"],
-            "settings_unavailable: working folder changed without a verified workflow snapshot"
-        );
+    pub fn refresh(snapshot: &Value, current: &Value, _executable: &str) -> Result<Value> {
         let mut updated = snapshot.clone();
         for (target, source) in [
             ("model", "model"),
@@ -156,31 +176,6 @@ impl Settings {
                 .context("settings_unavailable: incomplete settings update")?
                 .clone();
         }
-        Self::parse(&updated, executable)?;
         Ok(updated)
-    }
-
-    pub fn verify_before_load(&self, connection: &mut Codex) -> Result<()> {
-        ensure!(
-            json!(connection.user_agent) == self.snapshot["provider_version"],
-            "settings_unavailable: the provider version changed"
-        );
-        ensure!(
-            workflow(connection, &self.snapshot["effective"])? == self.snapshot["workflow"],
-            "settings_unavailable: workflow configuration changed"
-        );
-        Ok(())
-    }
-    pub fn verify_after_load(
-        &self,
-        connection: &mut Codex,
-        reply: &Value,
-        executable: &str,
-    ) -> Result<()> {
-        ensure!(
-            Self::capture(connection, reply, executable)? == self.snapshot,
-            "settings_unavailable: resumed settings differ from saved settings"
-        );
-        Ok(())
     }
 }

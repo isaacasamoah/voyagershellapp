@@ -376,7 +376,7 @@ impl Store {
             self.session(session)?["native_thread_id"] == metadata["id"],
             "thread_unavailable: saved conversation identity changed"
         );
-        ensure!(self.0.execute("UPDATE runtime_generations SET state='running',server=?4 WHERE session_id=?1 AND generation=?2 AND operation_id=?3 AND state='starting'",params![session,generation,operation,server])? == 1,"outcome_unknown: runtime admission changed");
+        ensure!(self.0.execute("UPDATE runtime_generations SET state='running',server=?4,settings=?5 WHERE session_id=?1 AND generation=?2 AND operation_id=?3 AND state='starting'",params![session,generation,operation,server,metadata.get("resume_settings").map(Value::to_string)])? == 1,"outcome_unknown: runtime admission changed");
         ensure!(self.0.execute("UPDATE sessions SET server=?2,capture_generation=capture_generation+1 WHERE id=?1 AND removed_ms IS NULL",params![session,server])? == 1,"registration_removed: conversation registration changed");
         self.local(session,"capture.gap",json!({"reason":"conversation_resumed","replay_available":false,"runtime_generation":generation}))?;
         tx.commit()?;

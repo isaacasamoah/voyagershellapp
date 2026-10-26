@@ -226,6 +226,11 @@ impl Fixture {
             Command::new(binary)
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
+                    "VOYAGER_CODEX_LAUNCH_MODE",
+                    fs::read_to_string(self.dir.join("launch-mode"))
+                        .unwrap_or_else(|_| "yolo".into()),
+                )
+                .env(
                     "VOYAGER_CODEX_BIN",
                     std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").unwrap_or_else(|_| {
                         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py").into()
@@ -1489,7 +1494,7 @@ fn owned_start_saves_observed_settings_without_copying_thread_history() {
         )
         .unwrap();
     let saved: Value = serde_json::from_str(&encoded).unwrap();
-    assert_eq!(saved["version"], 1);
+    assert_eq!(saved["version"], 2);
     assert_eq!(saved["provider_version"], "codex/0.164.0 fixture");
     assert_eq!(saved["effective"]["model"], "fixture-model");
     assert_eq!(saved["effective"]["sandbox"]["type"], "dangerFullAccess");

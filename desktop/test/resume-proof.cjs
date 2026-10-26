@@ -76,6 +76,12 @@ exports.run = async (
     paused = null;
     await rpc('background', id, '--request-id', 'resume-close-old');
     await wait(row, (r) => r.window === 'closed');
+    const configProof = process.env.VOYAGER_PROOF_CURRENT_CONFIG === '1';
+    if (configProof)
+      await fs.writeFile(
+        path.join(process.env.CODEX_HOME, 'config.toml'),
+        'model = "gpt-6-sol"\nmodel_reasoning_effort = "low"\n',
+      );
     const before = (await events()).filter((e) => e.type === 'turn.started').length;
     const start = performance.now();
     let resumed;
@@ -106,6 +112,19 @@ exports.run = async (
         ),
       );
     } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    if (configProof) {
+      const { stdout } = await exec('python3', [
+        '-c',
+        'import json,sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); print(c.execute("SELECT settings FROM runtime_generations WHERE session_id=? ORDER BY generation DESC LIMIT 1",[sys.argv[2]]).fetchone()[0])',
+        path.join(stateDir, 'events.sqlite'),
+        id,
+      ]);
+      const effective = JSON.parse(stdout).effective;
+      assert.equal(effective.model, 'gpt-6-sol');
+      assert.equal(effective.reasoningEffort, 'low');
+      assert.equal(effective.approvalPolicy, 'never');
+      assert.equal(effective.sandbox.type, 'dangerFullAccess');
+    }
     const readyMs = performance.now() - start;
     assert.equal(resumed.state, 'completed');
     assert.equal(resumed.runtime_generation, 2);
@@ -231,6 +250,7 @@ exports.run = async (
       bound: { actor: bound.actor, rank: bound.rank },
       idleSeconds: 5,
       savedMarkerRecalled: true,
+      currentConfigurationApplied: configProof,
       openFeedback,
       workerContext,
     };

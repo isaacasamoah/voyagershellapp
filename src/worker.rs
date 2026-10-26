@@ -15,13 +15,13 @@ use std::{
 };
 
 mod settings;
+use settings::LaunchMode;
 pub use settings::Settings;
 
 pub struct Resume {
     pub session: String,
     pub native: String,
     pub generation: i64,
-    pub settings: Settings,
 }
 pub enum ThreadStart {
     New(Option<String>),
@@ -82,24 +82,15 @@ impl Worker {
             socket.as_os_str().len() < 104,
             "worker socket path too long; use a shorter --state path"
         );
-        let (sandbox, approval) = match &mode {
-            ThreadStart::New(_) => ("danger-full-access", "never"),
-            ThreadStart::Resume(_) => ("read-only", "on-request"),
-        };
+        let launch_mode = LaunchMode::read()?;
         let resume_identity = match &mode {
             ThreadStart::Resume(r) => Some((r.session.clone(), r.generation)),
             _ => None,
         };
         let child = Command::new(executable)
-            .args([
-                "app-server",
-                "-c",
-                &format!("sandbox_mode={}", json!(sandbox)),
-                "-c",
-                &format!("approval_policy={}", json!(approval)),
-                "--listen",
-                &format!("unix://{}", socket.display()),
-            ])
+            .arg("app-server")
+            .args(launch_mode.arguments())
+            .args(["--listen", &format!("unix://{}", socket.display())])
             .arg("-c")
             .arg(format!(
                 "shell_environment_policy.set.VOYAGER_STATE={}",
@@ -137,22 +128,49 @@ impl Worker {
                     thread::sleep(Duration::from_millis(20));
                 }
                 let mut connection = Codex::connect(&socket)?;
+                let settings = Settings::current(&mut connection, &cwd, launch_mode)?;
+                let mut params = settings.parameters();
                 let (reply, name) = match mode {
-                    ThreadStart::New(name) => (connection.rpc("thread/start",json!({"cwd":cwd,"approvalPolicy":"never","sandbox":"danger-full-access","historyMode":"legacy","developerInstructions":include_str!("orchestration.md")}))?,name),
+                    ThreadStart::New(name) => {
+                        params["historyMode"] = json!("legacy");
+                        params["developerInstructions"] = json!(include_str!("orchestration.md"));
+                        let reply = connection.rpc("thread/start", params)?;
+                        settings.verify(&reply)?;
+                        (reply, name)
+                    }
                     ThreadStart::Resume(resume) => {
-                        resume.settings.verify_before_load(&mut connection)?;
                         let goal = connection.rpc("thread/goal/get",json!({"threadId":resume.native})).context("provider_failed: Codex could not inspect the saved conversation before resume")?;
-                        ensure!(goal.get("goal").is_some_and(Value::is_null),"settings_unavailable: this conversation has a goal or its goal state cannot be verified; it was not loaded");
-                        let params = json!({"threadId":resume.native,"excludeTurns":true});
+                        ensure!(
+                            goal.get("goal").is_some_and(Value::is_null),
+                            "settings_unavailable: this conversation has a goal or its goal state cannot be verified; it was not loaded"
+                        );
+                        params["threadId"] = json!(resume.native);
+                        params["excludeTurns"] = json!(true);
                         load_requested = true;
-                        let reply = connection.rpc("thread/resume",params).context("provider_failed: Codex could not reopen this conversation with its saved settings")?;
-                        ensure!(reply["thread"]["id"] == resume.native,"thread_unavailable: provider returned another conversation");
-                        ensure!(reply["thread"]["status"]["type"] == "idle","outcome_unknown: resumed conversation did not report idle");
-                        resume.settings.verify_after_load(&mut connection,&reply,&provider_executable)?;
-                        let current = connection.rpc("thread/read",json!({"threadId":resume.native,"includeTurns":false}))?;
-                        ensure!(current["thread"]["status"]["type"] == "idle" && !connection.pending.iter().any(|e| matches!(e["method"].as_str(),Some("turn/started"|"item/started"))),"outcome_unknown: unexpected work started during resume");
+                        let reply = connection.rpc("thread/resume",params).context("provider_failed: Codex could not reopen this conversation with current settings")?;
+                        ensure!(
+                            reply["thread"]["id"] == resume.native,
+                            "thread_unavailable: provider returned another conversation"
+                        );
+                        ensure!(
+                            reply["thread"]["status"]["type"] == "idle",
+                            "outcome_unknown: resumed conversation did not report idle"
+                        );
+                        settings.verify(&reply)?;
+                        let current = connection.rpc(
+                            "thread/read",
+                            json!({"threadId":resume.native,"includeTurns":false}),
+                        )?;
+                        ensure!(
+                            current["thread"]["status"]["type"] == "idle"
+                                && !connection.pending.iter().any(|e| matches!(
+                                    e["method"].as_str(),
+                                    Some("turn/started" | "item/started")
+                                )),
+                            "outcome_unknown: unexpected work started during resume"
+                        );
                         connection.pending.clear();
-                        (reply,None)
+                        (reply, None)
                     }
                 };
                 let mut metadata = reply["thread"].clone();

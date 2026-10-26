@@ -24,8 +24,8 @@ is our starting point, and we’d love to build toward it with other developers.
 The [tracer-bullet usability specifications](SPEC.md) cover conversation
 resume, current-work presentation, voice handoffs and docking recovery. The specifications are
 approved. Docking recovery is accepted and merged, including returning the floating
-controls to their pre-dock position. The active [implementation plan](tasks/plan.md) covers the current-work panel,
-after the reviewed saved-conversation service module. This branch groups running,
+controls to their pre-dock position. The active [implementation plan](tasks/plan.md) covers current startup settings and
+a compact Resume flow after the reviewed saved-conversation and panel modules. This branch groups running,
 uncertain and stopped records, reveals bounded saved history and offers an explicit
 Resume-and-open journey. Owner acceptance, merge and installation remain separate.
 The task list records each independent review and the input limits of native proof.
@@ -44,7 +44,11 @@ visible with closed viewers; Previous vessels reveals stopped conversations and
 saved events. Panel Resume checks current runtime identity before a separate Open. A worker names
 its hidden supervisor, and keyboard focus follows meaningful controls through
 state changes.
-Older records with unverified settings remain inspectable and cannot resume.
+New launch and Resume use current Codex model and effort settings. YOLO remains
+the default unless VOYAGER_CODEX_LAUNCH_MODE=config selects native permission
+configuration. Changed configuration or missing historic settings alone does not
+block Resume. Confirmed stop, saved identity and an available directory remain
+required. The compact Resume presentation is the next planned increment.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native
