@@ -1,23 +1,21 @@
 # Tracer-bullet usability specification index
 
-Project: VoyagerShellApp. Updated 26 October 2026.
+Project: VoyagerShellApp. Updated 27 October 2026.
 State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. The owner approved building resume and panel in dependency order on 25 October 2026, with independent review and bounded correction passes. Merge, installation and runtime rollout remain separate decisions.
 
 ## This build branch
 
-This branch contains the owner-approved extension to `conversation-resume` and its panel
-contract: proactively reconnect previously managed Codex Vessels after service
-loss. The owner selected proactive recovery on 26 October. The approved revision is
-[here](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
-The panel consumes that service result through its
-[recovery presentation](SPEC-current-work-panel.md#proposed-follow-up-proactive-connection-recovery).
-This is one recovery journey across the existing module boundary, not a new
-capability hierarchy or a wider rebuild.
+This branch drafts the [name-only Vessel row refinement](SPEC-current-work-panel.md#proposed-refinement-expand-a-vessel-to-see-its-details)
+requested on 27 October. It belongs to `current-work-panel`, not a new capability.
+Its proposed interaction and implementation plan await review. This branch adds
+no product code and changes no running app.
 
-The preceding C1–C3 build completed review and native proving. Its completed plan
-and task list remain in Git history. The owner approved the reconnection specification on 26 October.
-Isaac approved the reconnection plan on 26 October; no product code has changed. The running
-test package remains unchanged. Merge, installation and rollout are separate.
+The starting revision includes the reviewed background reconnect correction.
+The unfinished reconnect plan and task list remain intact at `tasks/plan.md` and
+`tasks/todo.md` pending confirmation of the new plan's location. They do not
+implement the row refinement. The original reconnect branch retains the approved
+surviving-terminal and retry work. Selecting panel planning does not complete or
+discard those tasks. Merge, installation and rollout are separate decisions.
 
 ## Purpose and terminology
 
