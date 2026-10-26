@@ -8,6 +8,7 @@ let lastRows;
 let creating = false;
 let currentSessions = [];
 const pendingActions = new Map();
+const resumeViewers = new Map();
 const expandedVessels = new Set();
 let fleetRequest;
 let lastState;
@@ -255,9 +256,10 @@ function renderState(value) {
           ['xterm', 'xterm'],
           ['ghostty', 'Ghostty'],
         ],
-        s.terminal || 'xterm',
+        resumeViewers.get(s.id) || s.terminal || 'xterm',
       );
       viewer.id = `resume-viewer-${s.id}`;
+      viewer.onchange = () => resumeViewers.set(s.id, viewer.value);
       let pending = s.resume.state === 'pending';
       const resume = element('button', pending ? 'Resuming…' : 'Resume', 'resume-action');
       resume.id = `resume-${s.id}`;

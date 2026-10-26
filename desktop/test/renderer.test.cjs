@@ -255,16 +255,18 @@ test('creation, Open and compact Resume retain the selected viewer', async () =>
   assert.equal(requests[0][1], 'xterm');
   assert.equal(typeof requests[0][2], 'string');
   ui.api.resumeInstance = async (input) => requests.push(input);
-  ui.update({
-    sessions: [
-      {
-        ...session,
-        lifecycle: { runtime: 'stopped', runtime_generation: 1 },
-        resume: { state: 'eligible' },
-      },
-    ],
-  });
-  const row = ui.nodes.get('previous-sessions').children[0];
+  const previous = {
+    ...session,
+    lifecycle: { runtime: 'stopped', runtime_generation: 1 },
+    resume: { state: 'eligible' },
+  };
+  ui.update({ sessions: [previous] });
+  let row = ui.nodes.get('previous-sessions').children[0];
+  const preference = row.querySelectorAll('select').find((node) => node.id === 'resume-viewer-one');
+  preference.value = 'ghostty';
+  preference.onchange?.();
+  ui.update({ sessions: [{ ...previous, last_activity_ms: 1 }] });
+  row = ui.nodes.get('previous-sessions').children[0];
   const resume = row.children.find(
     (node) => node.tagName === 'button' && node.textContent === 'Resume',
   );
@@ -273,7 +275,7 @@ test('creation, Open and compact Resume retain the selected viewer', async () =>
   assert.ok(!row.children.some((node) => node.tagName === 'select'));
   assert.ok(!row.children.some((node) => node.textContent === 'Inspect'));
   await resume.onclick();
-  assert.equal(requests[1].terminal, 'xterm');
+  assert.equal(requests[1].terminal, 'ghostty');
   assert.equal(requests[1].generation, 1);
 });
 
