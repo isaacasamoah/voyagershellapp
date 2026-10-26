@@ -16,7 +16,7 @@ capability hierarchy or a wider rebuild.
 
 The preceding C1–C3 build completed review and native proving. Its completed plan
 and task list remain in Git history. The owner approved the reconnection specification on 26 October.
-The reconnection plan is now prepared for review; no product code has changed. The running
+Isaac approved the reconnection plan on 26 October; no product code has changed. The running
 test package remains unchanged. Merge, installation and rollout are separate.
 
 ## Purpose and terminology
@@ -63,7 +63,7 @@ Each module specification defines its successful journey, a deliberately differe
 | `current-work-panel` | [A panel focused on current work](SPEC-current-work-panel.md) | Vessels, Previous vessels and bounded history. The approved recovery revision replaces attention-only dead ends with automatic checks and usable recovery. |
 
 Each specification owns its behavior and acceptance cases. The approved
-proactive-reconnection requirements now have a [draft plan](tasks/plan.md) and
+proactive-reconnection requirements now have an [approved plan](tasks/plan.md) and
 [unstarted task list](tasks/todo.md) for review. Earlier C1–C3 completion remains
 in Git history. A specification or plan does not establish implemented behavior.
 
@@ -73,7 +73,7 @@ The capability boundaries, build order and four module specifications are approv
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The current `tasks/plan.md` and `tasks/todo.md` cover reconnection after owner specification approval. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. Review and approve the active plan before implementation.
+Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The current `tasks/plan.md` and `tasks/todo.md` cover reconnection after owner specification approval. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. The owner approved the active reconnect plan. The later combined polish work remains queued for its review and specification cycle.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 

@@ -65,3 +65,18 @@ The existing owner-run `desktop/test/service-lifecycle-proof.cjs` is a starting 
 Keep later plans focused on complete behaviors. For resume, avoid a long sequence of database, adapter and API tasks that cannot demonstrate a usable path until the end. A bounded provider experiment may precede implementation because it resolves whether the approved behavior is possible. Then deliver the smallest supported resume journey before extending failure handling and compatibility.
 
 After all capabilities are complete, plan a combined packaged check across docking, voice, resume and panel behavior. That future integration review does not authorize installation, main-service restart or release.
+
+## Queued after proactive reconnect is accepted and merged
+
+Owner steering, 26 October 2026. The whole Rust service review is complete, but
+its wider improvements are not authorized for implementation. First complete the
+JavaScript/TypeScript review and examine ETC, DRY and orthogonality across service,
+Vessels, panel and avatar. Then combine both reviews into one polish/restructure
+proposal, or an approved capability map with module specs where appropriate.
+Preserve existing functionality, the minimal/subtle interface and ordinary native
+terminal/agent behavior. Put knowledge in one owning place and measure claimed
+performance improvements.
+
+This is not another active implementation plan. Specification and plan approval
+for the combined work come after those reviews. The active approved plan remains
+proactive reconnect. Only fixes necessary for that recovery journey belong in it.

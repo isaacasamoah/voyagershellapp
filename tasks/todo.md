@@ -1,7 +1,7 @@
 # Tasks: proactive recovery of existing Codex Vessels
 
 [Plan](plan.md). Owning spec: conversation-resume reconnect follow-up, with its
-panel consumer. Spec approved 26 October. Plan awaiting review. All items below
+panel consumer. Spec and plan approved by Isaac, 26 October. All items below
 are unstarted; earlier C1–C3 completion remains in Git history.
 
 ## K1: background Vessel recovers automatically

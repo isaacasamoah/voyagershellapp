@@ -3,7 +3,7 @@
 Module: conversation-resume, proactive-reconnection follow-up. The panel consumes
 its recovery result. Isaac approved the spec on 26 October and specified a minimal,
 subtle interface with no new restrictions on ordinary terminal or agent behavior.
-This plan is for review. [Tasks](todo.md). [Constraints](../CONSTRAINTS.md).
+Isaac approved this plan on 26 October 2026. [Tasks](todo.md). [Constraints](../CONSTRAINTS.md).
 The completed C1–C3 plan and tasks remain in Git history before this revision.
 
 ## Outcome
@@ -146,6 +146,17 @@ actually exercised production code. No suppression or threshold exception.
 The whole-service BeautifulRust review is a separate proposal. Its unrelated
 cleanup, input, receipt-storage and wider type changes do not silently expand this
 plan. The current-generation credential correction is relevant to recovery.
+
+## Later combined polish review
+
+After proactive reconnect is accepted and merged, complete the JavaScript and
+TypeScript review alongside the existing whole-service Rust findings. Review
+service, Vessel, panel and avatar responsibilities together, including ETC, DRY,
+orthogonality, performance, typed boundaries and preservation of native behavior.
+Do not implement the wider Rust proposals before that review. Propose one
+coordinated polish/restructure specification, with an approved capability map and
+module specifications if distinct end-to-end capabilities warrant them. This is
+queued reference work, not an extension of the active reconnect build.
 
 ## Completion and rollout
 
