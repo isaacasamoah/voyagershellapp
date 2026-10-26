@@ -1,7 +1,7 @@
 # Spec: explicitly resume a saved conversation
 
-Module id: `conversation-resume`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation is not yet authorized.
-The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). The owner approved this specification and requested planning. The implementation plan still requires review.
+Module id: `conversation-resume`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. Implementation authorized by the owner, 25 October 2026.
+The [capability map](SPEC.md) is approved. This document owns the resume contract consumed by [current-work-panel](SPEC-current-work-panel.md). The owner approved this specification and requested planning. The owner approved the implementation plan, 25 October 2026.
 
 ## Objective and scope
 

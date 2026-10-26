@@ -1,20 +1,27 @@
 # Tasks: return to a stopped conversation
 
-Status: planning draft, 25 October 2026. The owner requested this plan, not its
-implementation. The [plan](plan.md) owns design and commands; the
+Status: owner approved build, 25 October 2026. The [plan](plan.md) owns design and commands; the
 [specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
 remain in Git history. The still-open voice tasks remain in the voice branch.
 
 ## R00: prove safe idle loading
 
-- [ ] Show saved history and restrictive effective settings survive reopening the
+- [x] Show saved history and restrictive effective settings survive reopening the
   same real Codex thread, with no new turn until an explicit instruction.
-- [ ] Check saved-goal and missing-settings cases without changing their meaning.
+- [x] Check saved-goal and missing-settings cases without changing their meaning.
   Record the provider/version, setting map and known-different result.
-- [ ] Complete Gate A, the transactional schema design and focused file map, then
-  obtain owner review before product implementation. Stop if idle loading is unproved.
+- [x] Complete Gate A, the transactional schema design and focused file map, then
+  complete independent review before product implementation. Stop if idle loading is unproved.
 
-## R01: resume through the owner service API
+## R01a: reliable lifecycle observations and verified settings
+
+- [ ] Save verified effective settings and provider provenance when a managed
+  runtime starts, preserving original launch and event history.
+- [ ] Show live-owned, confirmed stopped and unknown states through list/detail,
+  including restart and legacy missing-settings cases. No Resume action yet.
+- [ ] Pass boundary checks and independent review within the five-file source map.
+
+## R01b: resume through the owner service API
 
 - [ ] Record/admit one immutable request and generation atomically before spawning.
   Start the same saved conversation idle and preserve history and verified settings.
