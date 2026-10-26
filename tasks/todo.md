@@ -9,12 +9,15 @@ in Git history; this does not overwrite or complete the voice task list.
 
 ## P01: show each agent in the right group
 
-- [ ] Show Current work, Needs attention and collapsed Previous agents according
+- [x] Show Current work, Needs attention and collapsed Previous agents according
   to the service observations. Preserve current actions and old-service warnings.
-- [ ] Exact-membership checks cover running with closed viewer, stopped, unknown,
+- [x] Exact-membership checks cover running with closed viewer, stopped, unknown,
   external and removed-but-running records. No assignment or Fleet write occurs.
-- [ ] Prove a relevant wrong classification fails, inspect the real labels and
+- [x] Prove a relevant wrong classification fails, inspect the real labels and
   complete independent review. Covers P1/P5 and basic P6/P7.
+
+P01 passed independent second review after one correction. All 94 desktop checks
+and the matching packaged journey pass. Reviewed budget: 8,222 / 8,258.
 
 ## P02: reveal readable history within the available space
 

@@ -41,6 +41,7 @@ for (const file of [
   'recovery-position-proof.cjs',
   'voice-handoff-proof.cjs',
   'resume-proof.cjs',
+  'panel-proof.cjs',
 ])
   fs.copyFileSync(path.join(desktop, 'test', file), path.join(app, 'test', file));
 const metadata = require('../package.json');

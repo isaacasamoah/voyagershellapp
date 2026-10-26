@@ -447,3 +447,32 @@ in a private trial. It uses real pointer drags and native window observations fo
 minimise and close with each supported viewer. Display-removal fallback and
 overlapping-event order are deterministic regressions; the focused native trial
 does not claim a physical monitor-removal test.
+
+## Current and previous work
+
+The panel groups service observations into Current work, Needs attention and
+Previous agents. A running owned runtime stays current when its viewer is closed.
+A removed registration with a running owned runtime stays visible as Unregistered.
+A confirmed stop moves into the initially collapsed Previous agents group. Unknown
+ownership and disconnected external capture remain visible under Needs attention.
+Each record appears once; selection does not change assignments or Fleet data.
+Fleet inheritance still uses all registered supervisors, including a supervisor
+outside the current visible rows.
+
+State labels use words as well as the connection dot. A disconnected service keeps
+cached rows as last-known information and disables their actions. Connection loss
+closes an open Actions popover before rebuilding the rows. A late action result
+cannot enable an offline control. The Previous agents control is excluded from
+panel dragging so its normal click and keyboard behavior remain available. An older service
+without lifecycle observations produces a service-update warning and unknown state,
+never an inferred stop. The desktop forwards the service's lifecycle and Resume
+objects without granting any new permission.
+
+The maintained `panel-current` journey uses actual disposable Bash runtimes and
+Chromium input in the real Electron panel to verify grouping and expansion without
+recording new work. The shared runner retains its separate OS input actions for
+native window journeys. Chromium input follows Electron's
+[sendInputEvent contract](https://www.electronjs.org/docs/latest/api/web-contents#contentssendinputeventinputevent),
+including focused-window and visible-control checks. It does not prove physical
+mouse, keyboard or trackpad delivery. A GNOME pointer attempt did not reach the
+expected window during this build; its delivery or coordinate cause remains open.
