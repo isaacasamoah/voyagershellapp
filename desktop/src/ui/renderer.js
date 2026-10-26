@@ -9,6 +9,7 @@ let creating = false;
 let currentSessions = [];
 const pendingActions = new Map();
 const resumeViewers = new Map();
+const vesselMessages = new Map();
 const expandedVessels = new Set();
 let fleetRequest;
 let lastState;
@@ -54,10 +55,22 @@ function runtimeLabel(session) {
 }
 function disableServiceActions(container) {
   for (const button of container.querySelectorAll('button'))
-    if (!/^(menu|inspect|expand)-/.test(button.id || '')) button.disabled = true;
+    if (!/^(menu|inspect|expand|dismiss)-/.test(button.id || '')) button.disabled = true;
 }
 function announceVessel(message) {
   $('vessel-status').textContent = message;
+}
+function vesselFeedback(id, message, request) {
+  if (message) vesselMessages.set(id, { full: message, request });
+  else vesselMessages.delete(id);
+  const dismiss = $(`dismiss-${id}`);
+  if (dismiss) dismiss.hidden = !message;
+  const node = $(`feedback-${id}`);
+  if (node) {
+    node.textContent = (message || '').replace(/^[a-z_]+:\s*/, '').slice(0, 180);
+    node.hidden = !message;
+  }
+  if (message) announceVessel(message.replace(/^[a-z_]+:\s*/, '').slice(0, 180));
 }
 function renderState(value) {
   const disconnected = Boolean(value.serviceError && !lastState?.serviceError);
@@ -155,15 +168,16 @@ function renderState(value) {
     b.append(identity, dot);
     b.dataset.connected = String(s.capture === 'connected' && !value.serviceError);
     b.disabled = Boolean(value.serviceError);
+    const feedback = (message, request) => vesselFeedback(s.id, message, request);
     if (live)
       b.onclick = async () => {
         document.body.dataset.arranging = 'true';
         b.disabled = true;
         try {
           const result = await api.surfaceInstance(s.id);
-          showError(result?.error);
+          feedback(result?.error);
         } catch (error) {
-          showError(error.message);
+          feedback(error.message);
         } finally {
           document.body.dataset.arranging = 'false';
           b.disabled = Boolean(lastState?.serviceError);
@@ -172,17 +186,29 @@ function renderState(value) {
     const row = element('div', '', 'instance-row');
     row.dataset.vessel = s.id;
     row.append(b);
-    const { menu, actions, addAction } = actionMenu(name, s.id);
+    const { menu, actions, addAction } = actionMenu(name, s.id, feedback);
     const inspect = element('button', 'Details');
     inspect.id = `inspect-${s.id}`;
     inspect.setAttribute('aria-label', `Details for ${name}`);
     inspect.onclick = () => {
       actions.hidePopover();
-      history.inspect(s);
+      history.inspect(s, vesselMessages.get(s.id));
     };
     actions.append(inspect);
-    const rename = nameEditor(actions, name, (next, request) =>
-      api.renameInstance(s.id, next, request),
+    const dismiss = element('button', 'Dismiss message');
+    dismiss.id = `dismiss-${s.id}`;
+    dismiss.hidden = !vesselMessages.has(s.id);
+    dismiss.onclick = () => {
+      feedback('');
+      actions.hidePopover();
+      $(`menu-${s.id}`)?.focus();
+    };
+    actions.append(dismiss);
+    const rename = nameEditor(
+      actions,
+      name,
+      (next, request) => api.renameInstance(s.id, next, request),
+      feedback,
     );
     addAction(
       'Rename',
@@ -281,6 +307,7 @@ function renderState(value) {
           pendingActions.set(key, s.resume.request_id || crypto.randomUUID());
         resume.disabled = true;
         resume.dataset.request = pendingActions.get(key);
+        feedback('');
         announceVessel(`Resuming ${name}.`);
         try {
           const result = await api.resumeInstance({
@@ -299,21 +326,25 @@ function renderState(value) {
           announceVessel(pending ? `Still resuming ${name}.` : `Opened ${name}.`);
           if (!pending) {
             pendingActions.delete(key);
-            showError('');
+            feedback('');
           }
         } catch (error) {
           announceVessel(`Could not finish opening ${name}.`);
-          showError(error.message);
+          feedback(error.message, pendingActions.get(key));
         } finally {
           resume.disabled = Boolean(lastState?.serviceError) || pending;
           resume.textContent = pending ? 'Resuming…' : 'Resume';
         }
       };
       row.append(resume);
-    } else if (s.resume?.reason)
-      row.append(element('p', s.resume.reason.replace(/^[a-z_]+:\s*/, ''), 'agent-reason'));
+    }
     history.decorate(identity, s);
-    row.append(menu);
+    const notice = element('p', '', 'vessel-feedback');
+    notice.id = `feedback-${s.id}`;
+    const message = vesselMessages.get(s.id);
+    notice.textContent = (message?.full || '').replace(/^[a-z_]+:\s*/, '').slice(0, 180);
+    notice.hidden = !message;
+    row.append(menu, notice);
     if (value.serviceError) disableServiceActions(row);
     return row;
   }
@@ -399,7 +430,7 @@ function renderState(value) {
   history.render(groups, rowFor, value);
   panelFocus.restore(focused, groups);
 }
-function actionMenu(name, key) {
+function actionMenu(name, key, feedback = showError) {
   const menu = element('div', '', 'instance-menu');
   const summary = element('button', '⋯');
   summary.setAttribute('aria-label', `Actions for ${name}`);
@@ -455,13 +486,13 @@ function actionMenu(name, key) {
         }
         pendingActions.delete(id);
         if (close && actions.isConnected) actions.hidePopover();
-        showError(result?.warning || '');
+        feedback(result?.warning || '', button.dataset.request);
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, button.dataset.request);
       } finally {
         button.textContent = label;
-        for (const node of actions.querySelectorAll('button'))
-          node.disabled = Boolean(lastState?.serviceError);
+        for (const node of actions.querySelectorAll('button')) node.disabled = false;
+        if (lastState?.serviceError) disableServiceActions(actions);
       }
     };
     actions.append(button);
@@ -470,7 +501,7 @@ function actionMenu(name, key) {
   menu.append(summary, actions);
   return { menu, actions, addAction };
 }
-function nameEditor(actions, current, save) {
+function nameEditor(actions, current, save, feedback = showError) {
   const form = element('form', '', 'rename-form');
   form.hidden = true;
   const label = element('label', 'Name');
@@ -502,10 +533,10 @@ function nameEditor(actions, current, save) {
     try {
       const result = await save(input.value, request);
       if (result?.error) throw Error(result.error);
-      showError('');
+      feedback('');
       if (actions.isConnected) actions.hidePopover();
     } catch (error) {
-      showError(error.message);
+      feedback(error.message, request);
     } finally {
       submit.disabled = Boolean(lastState?.serviceError);
       cancel.disabled = false;

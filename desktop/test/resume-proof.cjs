@@ -250,13 +250,34 @@ exports.run = async (
       await pageClick(panelWin, `open-${id}`);
       await wait(() =>
         panelWin.webContents.executeJavaScript(
-          "document.getElementById('instance-error').textContent",
+          `document.getElementById('feedback-${id}').textContent`,
         ),
       );
       failedRequest = await panelWin.webContents.executeJavaScript(
         'window.openControl.dataset.request',
       );
     } else await assert.rejects(rpc('open', id, 'xterm', '--request-id', failedRequest));
+    if (panel) {
+      await pageKey(panelWin, 'Escape');
+      await refresh();
+      const feedback = await panelWin.webContents.executeJavaScript(
+        `({local:document.getElementById('feedback-${id}').textContent,global:document.getElementById('instance-error').textContent})`,
+      );
+      assert.ok(feedback.local);
+      assert.equal(feedback.global, '');
+      await pageClick(panelWin, `menu-${id}`);
+      await pageClick(panelWin, `inspect-${id}`);
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          `document.getElementById('agent-details').textContent.includes(${JSON.stringify(failedRequest)})`,
+        ),
+      );
+      await pageClick(panelWin, 'history-close');
+      await pageClick(panelWin, `menu-${id}`);
+      await panelWin.webContents.executeJavaScript(
+        `window.openControl = document.getElementById('open-${id}')`,
+      );
+    }
     const failedOpen = await rpc('operation', failedRequest);
     assert.equal(failedOpen.state, 'partial');
     assert.equal(failedOpen.runtime, 'running');
@@ -285,7 +306,7 @@ exports.run = async (
         (disabled) => !disabled,
       );
       openFeedback = await panelWin.webContents.executeJavaScript(
-        "document.getElementById('instance-error').textContent",
+        `document.getElementById('feedback-${id}').textContent`,
       );
       assert.ok(!openFeedback || openFeedback.startsWith('Terminal opened, but'), openFeedback);
     } else opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');

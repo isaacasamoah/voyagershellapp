@@ -163,11 +163,11 @@
             </section>
             <details id="previous-agents" class="history-group">
               <summary id="previous-toggle">Previous vessels (0)</summary>
-              <label class="removed-choice"
-                ><input id="show-removed" type="checkbox" /><span id="removed-label"
-                  >Show removed records (0)</span
-                ></label
-              >
+              <div class="history-toolbar">
+                <span id="history-view" hidden></span>
+                <button id="previous-back" type="button" hidden>Back to previous vessels</button>
+                <div id="history-options"></div>
+              </div>
               <div
                 id="previous-sessions"
                 tabindex="0"

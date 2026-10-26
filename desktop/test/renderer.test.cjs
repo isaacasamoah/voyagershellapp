@@ -58,7 +58,11 @@ function renderer() {
     .matchAll(/id="([^"]+)"/g))
     nodes.set(match[1], new Node());
   document.createElement = (tag) => new Node(tag);
-  document.getElementById = (id) => nodes.get(id);
+  document.getElementById = (id) =>
+    nodes.get(id) ||
+    [...nodes.values()]
+      .flatMap((node) => node.querySelectorAll('*'))
+      .find((node) => node.id === id);
   document.querySelectorAll = () => [];
   nodes.get('instance-kind').value = 'codex';
   nodes.get('instance-rank').value = 'crew';
@@ -148,13 +152,30 @@ test('a rejected rank change keeps the same request on an explicit retry', async
   const select = row.querySelectorAll('select')[0];
   select.value = 'captain';
   await change.onclick();
-  assert.equal(ui.nodes.get('instance-error').textContent, 'Assignments would be invalid.');
-  assert.equal(ui.nodes.get('instance-error').hidden, false);
+  assert.equal(ui.nodes.get('instance-error').textContent, '');
+  assert.equal(
+    row.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
+    'Assignments would be invalid.',
+  );
   await change.onclick();
   assert.equal(requests[0][2], requests[1][2]);
   select.value = 'admiral';
   await change.onclick();
   assert.notEqual(requests[1][2], requests[2][2]);
+  vm.runInContext('lastRows = null; renderState(lastState)', ui.context);
+  const refreshed = ui.nodes.get('previous-sessions').children[0];
+  assert.equal(
+    refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
+    'Assignments would be invalid.',
+  );
+  refreshed
+    .querySelectorAll('button')
+    .find((node) => node.id === 'dismiss-one')
+    .onclick();
+  assert.equal(
+    refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').hidden,
+    true,
+  );
 });
 
 test('rank rows start collapsed and expand without a duplicate group header', async () => {
@@ -302,6 +323,7 @@ test('the panel separates stopped and unknown records', () => {
   const sessions = [
     row('live', 'running'),
     row('old', 'stopped'),
+    { ...row('removed', 'stopped'), removed_ms: 1 },
     { ...row('legacy', 'unknown'), lifecycle: undefined },
   ];
   ui.update({ sessions });
@@ -314,6 +336,13 @@ test('the panel separates stopped and unknown records', () => {
   assert.deepEqual(ids('needs-attention-sessions'), ['legacy']);
   assert.deepEqual(ids('previous-sessions'), ['old']);
   assert.equal(ui.nodes.get('previous-toggle').textContent, 'Previous vessels (1)');
+  const snapshot = JSON.stringify(sessions);
+  vm.runInContext("document.getElementById('show-removed').onclick()", ui.context);
+  assert.deepEqual(ids('previous-sessions'), ['removed']);
+  assert.equal(ui.nodes.get('previous-back').hidden, false);
+  ui.nodes.get('previous-back').onclick();
+  assert.deepEqual(ids('previous-sessions'), ['old']);
+  assert.equal(JSON.stringify(sessions), snapshot);
   assert.match(ui.nodes.get('connection').textContent, /update/i);
 });
 

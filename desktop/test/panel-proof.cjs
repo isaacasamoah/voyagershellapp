@@ -20,6 +20,8 @@ exports.run = async (
     unregistered: [...document.querySelectorAll('#unregistered-sessions [data-key]')].map(n => n.dataset.key),
     previous: [...document.querySelectorAll('#previous-sessions [data-key]')].map(n => n.dataset.key),
     previousOpen: document.getElementById('previous-agents').open,
+    historyMenu: document.getElementById('menu-history').getBoundingClientRect().toJSON(),
+    historyToolbar: document.querySelector('.history-toolbar').getBoundingClientRect().toJSON(),
     count: document.getElementById('previous-toggle').textContent,
     text: document.getElementById('panel').textContent
   })`);
@@ -61,6 +63,9 @@ exports.run = async (
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.wait(snapshot, (s) => s.previousOpen);
+  const visibleHistory = await snapshot();
+  assert.ok(visibleHistory.historyMenu.top >= visibleHistory.historyToolbar.top);
+  assert.ok(visibleHistory.historyMenu.bottom <= visibleHistory.historyToolbar.bottom);
   await proof.pageClick(panelWin, `menu-${live.session_id}`);
   await proof.wait(
     () =>
@@ -98,7 +103,7 @@ exports.run = async (
   const after = await rpc('events');
   assert.equal(after.cursor, before.cursor);
   const previous = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 20; i++) {
     const agent = await make(`History ${i}`);
     await rpc('stop-instance', agent.session_id);
     previous.push(agent.session_id);
@@ -118,7 +123,7 @@ exports.run = async (
   })`);
   await proof.wait(
     historyState,
-    (s) => s.count > 0 && s.count < 13 && s.more && s.total > s.height,
+    (s) => s.count > 0 && s.count < 21 && s.more && s.total > s.height,
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.pageKey(panelWin, 'Space');
@@ -150,7 +155,27 @@ exports.run = async (
   })`);
   await fs.writeFile(path.join(stateDir, 'final-batch-focus.json'), JSON.stringify(finalFocus));
   assert.ok(finalFocus.withinList || finalFocus.list, 'Final Load more lost keyboard focus');
-  await proof.pageClick(panelWin, 'show-removed');
+  const normal = await snapshot();
+  const savedPosition = await historyState();
+  const registrations = await rpc('list');
+  assert.equal(
+    await panelWin.webContents.executeJavaScript(
+      "document.querySelectorAll('#previous-agents input[type=checkbox]').length",
+    ),
+    0,
+  );
+  await proof.pageClick(panelWin, 'menu-history');
+  await proof.pageKey(panelWin, 'Tab');
+  assert.equal((await historyState()).focus, 'show-removed');
+  await proof.pageKey(panelWin, 'Return');
+  assert.deepEqual((await snapshot()).previous, [removed.session_id]);
+  await proof.pageClick(panelWin, 'previous-back');
+  assert.deepEqual((await snapshot()).previous, normal.previous);
+  assert.equal((await historyState()).scroll, savedPosition.scroll);
+  assert.deepEqual(await rpc('list'), registrations);
+  await proof.pageClick(panelWin, 'menu-history');
+  await proof.pageKey(panelWin, 'Tab');
+  await proof.pageKey(panelWin, 'Return');
   const removedId = removed.session_id;
   await proof.wait(() =>
     panelWin.webContents.executeJavaScript(

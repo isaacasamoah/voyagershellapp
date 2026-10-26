@@ -721,11 +721,24 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   font-size: 0.8rem;
   color: #42566a;
 }
-.removed-choice {
+.history-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.history-toolbar .instance-menu {
+  position: relative;
+  inset: auto;
+  margin: 0;
+}
+.vessel-feedback {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 #agent-details {
   max-height: 30vh;
@@ -762,7 +775,8 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   color: inherit;
 }
 .resume-action,
-#previous-more {
+#previous-more,
+#previous-back {
   font: inherit;
   font-size: 11px;
   border: 1px solid #7a9bac35;

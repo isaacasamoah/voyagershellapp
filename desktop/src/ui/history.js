@@ -1,7 +1,14 @@
 function createHistory(api, element, hierarchy) {
   const get = (id) => document.getElementById(id);
   const list = get('previous-sessions');
-  const removed = get('show-removed');
+  let view = 'previous';
+  const positions = new Map();
+  let restoreScroll;
+  const { menu, actions } = actionMenu('Previous vessels', 'history');
+  const removed = element('button', 'Show removed vessels');
+  removed.id = 'show-removed';
+  actions.append(removed);
+  get('history-options').append(menu);
   const more = get('previous-more');
   const details = get('agent-details');
   let current;
@@ -20,13 +27,19 @@ function createHistory(api, element, hierarchy) {
   }
   function render(groups, rowFor, state) {
     current = { groups, rowFor, state };
-    const all = hierarchy.historyOrder([
-      ...groups.previous,
-      ...(removed.checked ? groups.removed : []),
-    ]);
+    const all = hierarchy.historyOrder(groups[view]);
     get('previous-toggle').textContent = `Previous vessels (${groups.previous.length})`;
-    get('removed-label').textContent = `Show removed records (${groups.removed.length})`;
-    const scroll = list.scrollTop;
+    removed.textContent = `Show removed vessels (${groups.removed.length})`;
+    get('history-view').textContent = `Removed vessels (${groups.removed.length})`;
+    get('history-view').hidden = view !== 'removed';
+    get('previous-back').hidden = view !== 'removed';
+    get('history-options').hidden = view === 'removed';
+    list.setAttribute(
+      'aria-label',
+      view === 'removed' ? 'Removed vessels list' : 'Previous vessels list',
+    );
+    const scroll = restoreScroll ?? list.scrollTop;
+    restoreScroll = undefined;
     const focus = document.activeElement?.id;
     list.replaceChildren(...all.slice(0, shown).map(rowFor));
     const flow = get('panel-flow').getBoundingClientRect?.().height || 0;
@@ -50,11 +63,22 @@ function createHistory(api, element, hierarchy) {
   function redraw() {
     if (current) render(current.groups, current.rowFor, current.state);
   }
-  removed.onchange = () => {
-    shown = batch;
-    list.scrollTop = 0;
+  function switchView(next) {
+    positions.set(view, { shown, scroll: list.scrollTop });
+    view = next;
+    shown = positions.get(view)?.shown || batch;
+    restoreScroll = positions.get(view)?.scroll || 0;
+    token++;
+    selected = null;
+    details.hidden = true;
     redraw();
+    get(view === 'removed' ? 'previous-back' : 'menu-history').focus();
+  }
+  removed.onclick = () => {
+    actions.hidePopover();
+    switchView('removed');
   };
+  get('previous-back').onclick = () => switchView('previous');
   more.onclick = () => {
     shown += batch;
     redraw();
@@ -100,7 +124,7 @@ function createHistory(api, element, hierarchy) {
       }
     }
   }
-  function inspect(session) {
+  function inspect(session, message) {
     selected = session;
     cursor = 0;
     loading = false;
@@ -115,6 +139,9 @@ function createHistory(api, element, hierarchy) {
       'p',
       'History contains only events Voyager saved. Capture gaps and unavailable periods are shown in the saved events. An external process has no verified runtime ownership.',
     );
+    if (message)
+      metadata.textContent += `\n${message.full}${message.request ? `\nRequest: ${message.request}` : ''}`;
+    if (session.resume?.reason) metadata.textContent += `\n${session.resume.reason}`;
     const status = element('p', 'Choose Read saved history to load a limited portion.');
     status.id = 'history-status';
     const events = element('div', '');

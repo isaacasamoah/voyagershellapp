@@ -26,13 +26,25 @@ focus and the persistent status announcement are checked in the actual panel.
 
 ## C3: history and feedback
 
-- [ ] Replace the checkbox with removed-view/back menu actions and exact membership checks.
-- [ ] Keep readable operation errors with their Vessel across refresh.
-- [ ] Pass desktop/history journeys, negative control and independent review.
+- [x] Replace the checkbox with removed-view/back menu actions and exact membership checks.
+- [x] Keep readable operation errors with their Vessel across refresh.
+- [x] Pass desktop/history journeys, negative control and independent review.
+
+C3 passed final independent review after one corrective pass. The history menu
+stays in its toolbar and Back matches existing secondary controls. Both exact-package
+native journeys pass, and the old package fails the new menu-bounds check.
+Complete size gate: 9,265 / 9,266, including all maintained and one-off acceptance.
 
 ## Final checkpoint
 
-- [ ] Record combined maintained/one-off test budget and PR sizes.
-- [ ] Deliver the BeautifulRust skills report and record their use in project instructions.
-- [ ] Restart only the verified idle test instance from the reviewed package, retaining closed-state backup.
-- [ ] Record executable identities, ready state, skills used and known limits for owner inspection.
+- [x] Record combined maintained/one-off test budget and PR sizes.
+- [x] Deliver the BeautifulRust skills report and record their use in project instructions.
+- [x] Restart only the verified idle test instance from the reviewed package, retaining closed-state backup.
+- [x] Record executable identities, ready state, skills used and known limits for owner inspection.
+
+Only the idle test instance was restarted from the reviewed package. Its app and
+bundled service match desktop/out/voyagershell-linux-x64-32a8ae906293. The stopped
+Trial check record is retained and eligible. One app root, two visible controls
+and a ready, idle private conversation were observed. Closed state is backed up
+under the account-local voyagershell-preserved folder. Main and The Climb were untouched.
+The owning Obsidian status links the walkthrough, private restart receipt and skills report.

@@ -87,3 +87,15 @@ is defined in [Vessels and fleets](fleets.md).
 The isolated service and both test terminals were explicitly stopped afterward.
 The current voice-test service was not restarted or upgraded. Formatting, the
 12 service tests, 8 process cases, strict Clippy and 8 Electron tests pass.
+
+## History views and action feedback
+
+The Previous vessels menu opens a separate Removed vessels view. Back to previous
+vessels restores the prior list position and loaded batch. Each view keeps its
+own position. Switching views never changes registration or starts a runtime.
+
+A Vessel action failure stays beside its row across service refreshes. The row
+shows a short message; Details includes the full diagnostic and request ID.
+Dismiss message clears the local notice. A completed later action supersedes it.
+These notices last for the desktop session; service operation receipts remain
+the durable evidence. Connection failures remain at panel level.
