@@ -216,7 +216,10 @@ impl Fixture {
         self.start_with_voice("0");
     }
     fn start_with_voice(&mut self, voice: &str) {
-        self.start_with_binary(voice, Path::new(env!("CARGO_BIN_EXE_voyager")));
+        let binary = std::env::var_os("VOYAGER_SERVICE_TEST_BIN")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_voyager")));
+        self.start_with_binary(voice, &binary);
     }
     fn start_with_binary(&mut self, voice: &str, binary: &Path) {
         self.service = Some(
@@ -240,6 +243,16 @@ impl Fixture {
                 .unwrap(),
         );
         wait(|| client(&self.dir, json!({"op":"status"})).is_ok());
+    }
+    fn cli(&self, args: &[&str]) -> std::process::Output {
+        Command::new(
+            std::env::var_os("VOYAGER_SERVICE_TEST_BIN")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_voyager").into()),
+        )
+        .args(["--state", self.dir.to_str().unwrap()])
+        .args(args)
+        .output()
+        .unwrap()
     }
     fn call(&self, mut v: Value) -> Value {
         if [
@@ -1606,3 +1619,6 @@ fn legacy_runtime_baselines_require_confirmed_stops_without_uncertain_work() {
 
 #[path = "service/resume.rs"]
 mod resume;
+
+#[path = "service/resume_failures.rs"]
+mod resume_failures;

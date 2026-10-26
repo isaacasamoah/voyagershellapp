@@ -153,7 +153,7 @@ fn native_saved_resume_case(restrictive: bool) {
     f.call(json!({"op":"stop-instance","session_id":id}));
 }
 
-fn stopped_saved_agent(f: &mut Fixture) -> Value {
+pub(super) fn stopped_saved_agent(f: &mut Fixture) -> Value {
     fs::write(f.dir.join("verified-settings"), "1").unwrap();
     f.start();
     let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"saved-agent","name":"Saved agent","cwd":f.dir}));
@@ -341,17 +341,7 @@ fn cli_resume_returns_the_saved_runtime_receipt() {
     let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"cli-resume-original","name":"CLI resume","cwd":f.dir}));
     let id = created["session_id"].as_str().unwrap();
     f.call(json!({"op":"stop-instance","session_id":id}));
-    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
-        .args([
-            "--state",
-            f.dir.to_str().unwrap(),
-            "resume-instance",
-            id,
-            "cli-resume",
-            "1",
-        ])
-        .output()
-        .unwrap();
+    let output = f.cli(&["resume-instance", id, "cli-resume", "1"]);
     assert!(
         output.status.success(),
         "{}",
@@ -374,15 +364,7 @@ fn cli_operation_reads_a_failed_receipt_without_retrying() {
     let id = stopped_saved_agent(&mut f);
     fs::write(f.dir.join("active-goal"), "1").unwrap();
     let expected = f.call(json!({"op":"resume-instance","session_id":id,"request_id":"failed-for-inspection","expected_runtime_generation":1}));
-    let output = Command::new(env!("CARGO_BIN_EXE_voyager"))
-        .args([
-            "--state",
-            f.dir.to_str().unwrap(),
-            "operation",
-            "failed-for-inspection",
-        ])
-        .output()
-        .unwrap();
+    let output = f.cli(&["operation", "failed-for-inspection"]);
     assert!(
         output.status.success(),
         "{}",
