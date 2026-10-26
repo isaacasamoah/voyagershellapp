@@ -98,7 +98,7 @@ exports.run = async (
   const after = await rpc('events');
   assert.equal(after.cursor, before.cursor);
   const previous = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 20; i++) {
     const agent = await make(`History ${i}`);
     await rpc('stop-instance', agent.session_id);
     previous.push(agent.session_id);
@@ -118,7 +118,7 @@ exports.run = async (
   })`);
   await proof.wait(
     historyState,
-    (s) => s.count > 0 && s.count < 13 && s.more && s.total > s.height,
+    (s) => s.count > 0 && s.count < 21 && s.more && s.total > s.height,
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.pageKey(panelWin, 'Space');
