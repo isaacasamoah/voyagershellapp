@@ -274,6 +274,9 @@ exports.run = async (
       );
       await pageClick(panelWin, 'history-close');
       await pageClick(panelWin, `menu-${id}`);
+      await panelWin.webContents.executeJavaScript(
+        `window.openControl = document.getElementById('open-${id}')`,
+      );
     }
     const failedOpen = await rpc('operation', failedRequest);
     assert.equal(failedOpen.state, 'partial');
