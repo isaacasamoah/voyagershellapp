@@ -16,9 +16,13 @@ new-Vessel check, not pure Resume readiness latency. Permission controls deferre
 
 ## C2: compact Resume
 
-- [ ] Prove the expected compact row fails before the UI change.
-- [ ] Use one Resume action, secondary viewer/details and truthful pending state.
-- [ ] Pass desktop checks, real panel journey and independent review.
+- [x] Prove the expected compact row fails before the UI change.
+- [x] Use one Resume action, secondary viewer/details and truthful pending state.
+- [x] Pass desktop checks, real panel journey and independent review.
+
+C2 passed final re-review after one corrective pass. Both selected-package native
+journeys pass with clean exits. Complete size gate: 9,172 / 9,183. Pending Resume
+focus and the persistent status announcement are checked in the actual panel.
 
 ## C3: history and feedback
 
