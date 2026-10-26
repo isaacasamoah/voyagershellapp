@@ -76,3 +76,10 @@ private voice ownership, provider failure and lifecycle behavior. The opt-in
 switches to app audio and back, and observes native microphone streams. It also
 checks native soundwave stop/start and refusal of private audio while docked.
 Results stay outside the repository. See [desktop checks](../desktop/README.md#polish-and-voice-check).
+
+
+Managed participants require the current service's live owned worker, connected
+capture and matching native endpoint. A pending resume, lost ownership or older
+endpoint cannot join the voice handoff. This prevents a resume's starting record
+from interrupting app voice by attempting to connect to the stopped runtime.
+A successfully resumed worker joins only after the new endpoint is verified.
