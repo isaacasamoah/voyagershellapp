@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use nix::{
     fcntl::{Flock, FlockArg},
+    poll::{PollFd, PollFlags, poll},
     sys::{
         socket::{getsockopt, sockopt},
         stat::{Mode, umask},
@@ -23,6 +24,7 @@ use std::{
     collections::HashMap,
     fs::{self, DirBuilder, OpenOptions},
     io::{self, BufRead, BufReader, Read, Write},
+    os::fd::AsFd,
     os::unix::process::CommandExt,
     os::unix::{
         fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt},
@@ -411,7 +413,16 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         }
         runtime.observe()?;
         if idle && runtime.codex.is_none() {
-            std::thread::sleep(Duration::from_millis(50));
+            let mut sockets = [
+                PollFd::new(listener.as_fd(), PollFlags::POLLIN),
+                PollFd::new(instance_listener.as_fd(), PollFlags::POLLIN),
+            ];
+            if let Err(error) = poll(&mut sockets, 50u16) {
+                ensure!(
+                    error == nix::errno::Errno::EINTR,
+                    "service socket wait failed: {error}"
+                );
+            }
         }
     }
     runtime
