@@ -11,7 +11,119 @@ Codex model and effort configuration. YOLO remains the permission default unless
 the user explicitly changes that launch default. Model and effort controls in
 Voyager are deferred. This revision records that decision and proposes its
 acceptance checks. It supersedes the earlier requirements to reproduce an old
-settings snapshot. Implementation of this revision has not started.
+settings snapshot. C1–C3 have passed their bounded review and test run. The reconnection follow-up below is a new draft for review.
+
+## Proposed follow-up: reconnect a surviving Vessel
+
+Draft for owner review, 26 October 2026. Isaac chose proactive recovery after the
+service-loss investigation. These proposed recovery rules supersede conflicting
+first-increment limits below. This section extends the completed Resume increment;
+it does not change the running application. It supersedes the earlier deferral of
+verified reconnection for the scope below. Resume still requires a confirmed stop.
+
+### Desired experience
+
+Voyager should recover its connection when the agent is still running. The owner
+should not need to diagnose a service restart or move an otherwise healthy Vessel
+out of Needs attention. Check eligible saved Vessels automatically when the service
+starts, and recheck when a known native connection is lost. Keep the service and
+panel responsive while these checks run.
+
+The first scope is registered Codex Vessels that Voyager previously launched or
+resumed. Include existing saved records where the service can verify the required
+identity. Do not restrict recovery to Vessels created after this change merely
+because the older record uses a different storage shape.
+
+1. Keep the Vessel visible in Vessels while checking its connection. Show
+   Reconnecting, not a demand for user attention. Preserve its name and placement.
+2. Check the saved native endpoint and conversation against the current runtime
+   generation. Verify the actual peer process and user, not a title or saved PID
+   alone. Recheck that the registration and generation still match before applying
+   the result. One Vessel has at most one recovery attempt in progress.
+3. When the existing runtime is verified, reconnect it. Keep its Vessel ID, native
+   conversation and runtime generation. Do not start a process or replace the live
+   conversation with a newly loaded copy. Provider calls used to reattach must
+   preserve the existing thread and submit no work. Preserve the runtime's current
+   model, effort and permissions.
+4. Restore capture and supported managed-Vessel controls under current service
+   policy. This includes Open/background, explicit Stop, and eligibility for a new
+   dock and voice attachment. Establish a valid way to observe and control this
+   existing managed runtime; do not fabricate a child handle or treat a new
+   registration as process ownership. Renew credentials rather than reviving old
+   tokens or temporary grants. Assignments and Fleet placement do not change.
+5. Mark the capture discontinuity, then accept new events through a new capture
+   connection. Old turns remain history. Reconnection must not repeat a task or
+   make a historical result appear newly completed.
+6. Leave the avatar and existing windows where they are. Reconnection makes a new
+   dock possible; it does not restore an expired dock, start voice, open a viewer
+   or change the owner's current focus automatically.
+
+### When a connection cannot yet be restored
+
+Use the existing service deadlines. Try transient failures again with a bounded
+retry policy, without a tight loop or several concurrent attempts. Explain a
+failed check once its deadline expires; do not leave Reconnecting indefinitely.
+Offer Retry connection beside that Vessel. The button runs the same verification
+path, not a replacement launch. A manual retry cannot duplicate an active attempt.
+
+If the original runtime's exit is confirmed, stop retrying that runtime. Present
+it in Previous vessels and let the owner explicitly Resume the saved conversation
+through the existing operation. Failure to contact a socket is not proof of exit.
+A changed process, mismatched conversation or insufficient identity evidence must
+leave unrelated processes untouched and explain which check failed.
+
+Do not put a Vessel in Needs attention merely because the service lost its own
+connection. Reserve that group for a specific problem with an available user
+remedy. If the system still cannot determine what happened, explain that directly
+and retain Retry connection and readable details. Do not imply that inspecting,
+renaming or removing a Vessel repairs its connection.
+
+### Service and panel contract
+
+Keep process observation, management connection, capture and window observation
+separate. Expose a small additive recovery result with checking, connected or
+disconnected state, a readable reason when needed, and whether retry is available.
+The service owns eligibility and recovery; Electron and the CLI present the same
+result. Exact field names and storage changes belong in the reviewed plan.
+
+An empty in-memory viewer list means the new service has not verified a viewer.
+It must not report a closed window on that basis. Resolve a surviving viewer from
+its native identity. Otherwise report its window state as unverified. Finding a
+window alone does not establish ownership of its runtime.
+
+This extends the earlier rule that running requires a child of the current
+service. A verified reconnection can restore management of a runtime Voyager
+already created. A stored PID alone still cannot establish that authority.
+Uncertain task and operation receipts remain uncertain unless their own outcome
+is established. Verifying a live runtime does not retroactively prove that an
+interrupted instruction completed.
+
+### Acceptance journeys
+
+Use the maintained service fixtures and native app runner. Keep one shared setup;
+do not add another standalone recovery test system. Count all acceptance helpers
+under CONSTRAINTS.md and retain its test-size and review limits.
+
+| Case | Required result |
+|---|---|
+| The service ends while a managed Codex Vessel and its terminal remain alive | Restart the selected service. It automatically verifies and reconnects the same runtime. The same conversation, process identity and runtime generation remain. Capture and supported controls work, with no new turn or replacement process. Check both an idle runtime and one doing a controlled task; reconnection must not interrupt or resend that task. The panel needs no user intervention. |
+| The surviving runtime has no viewer, or its viewer closes during the outage | Reconnection does not open a window. A later explicit Open attaches to that runtime. Window state follows actual observation. |
+| A native endpoint is temporarily unavailable | Checks stay bounded and responsive. Failure has a readable reason and working Retry connection. A later successful check reconnects once. |
+| The prior runtime has genuinely exited | Confirm exit, show Previous vessels, and allow explicit Resume. Reconnection itself starts nothing. |
+| A saved endpoint, peer or thread no longer matches, or a registration changes during the check | Do not attach, signal an unrelated process, overwrite a newer generation or revive a removed registration. Explain the failed check. |
+| Service loss interrupts an instruction or lifecycle operation | Keep its recorded evidence and unresolved outcome. Reconnecting the runtime never resends that work or invents completion. |
+
+Prove the first case with the actual candidate app, bundled service and native
+Codex, including an existing eligible saved Vessel. Verify a new dock and voice
+attachment, Open/background and explicit Stop against the reconnected runtime.
+Keep a separately owned process unchanged as the known-different case. Record the
+outage, verification, reconnection and user-ready timings, executable identities
+and cleanup. Native conversation reads alone do not prove restored management.
+
+No product decision remains open for this bounded scope. Before implementation,
+the plan must explain how the current and legacy records establish runtime
+identity, how the recovered runtime is monitored and controlled without its old
+child handle, and how retry/credential changes stay inside current service policy.
 
 ## Objective and scope
 
@@ -31,7 +143,7 @@ First scope is active registrations for previously managed Codex conversations, 
 6. Capture new events after the successful resume boundary and record the gap. Historic turns loaded by the provider remain history; they cannot appear as freshly completed work.
 7. After runtime success, the panel may issue the existing Open operation as a distinct explicit step of the requested Resume-and-open journey. A viewer failure leaves the resumed agent running and offers Open again. It never starts another runtime.
 
-The service can establish ownership only for its actual new child. Persisted PID values are not ownership. A prior confirmed stop/exit and no conflicting current managed operation are required. Lost ownership, a pending earlier start or uncertainty about the old runtime blocks resume. A service restart preserves a previously confirmed stop but must not convert previously running or uncertain work into eligible stopped work. An unresolved legacy record offers Inspect with the recorded state and reason; this increment does not add an automatic ownership-recovery action. This increment does not detect every independently opened copy of a saved thread outside Voyager; retain provider conflicts and do not claim global uniqueness.
+The original Resume operation establishes ownership for its actual new child. Verified reconnection is the separate proposed extension described above. Persisted PID values are not ownership. A prior confirmed stop/exit and no conflicting current managed operation are required. Lost ownership, a pending earlier start or uncertainty about the old runtime blocks resume. A service restart preserves a previously confirmed stop but must not convert previously running or uncertain work into eligible stopped work. An unresolved legacy record offers Inspect with the recorded state and reason; the original increment did not add automatic ownership recovery. The proposed reconnection follow-up above extends that limit only for a verified surviving runtime. This increment does not detect every independently opened copy of a saved thread outside Voyager; retain provider conflicts and do not claim global uniqueness.
 
 ## Current configuration at startup
 
@@ -89,7 +201,7 @@ Validate caller, request ID, types, identity, generation and saved metadata at t
 
 Receipts retain existing `pending`, `completed`, `partial` and `uncertain` meanings. Completed means the same saved thread is loaded idle, the owned runtime is live, fresh credentials are established and capture is connected. Known failed effects use the existing partial/error representation.
 
-A client disconnect or missed reply does not itself make the service's operation uncertain. Once the service has accepted and recorded the request, it continues within existing deadlines and saves the outcome independently of the client connection. The client retrieves the receipt by the same request ID after reconnecting; retrieval never starts another runtime. Mark an operation uncertain when the service cannot establish its outcome after a possible effect, including an unresolved provider timeout or interruption by service termination. After restart, preserve known receipt evidence and mark unresolved interrupted operations uncertain; do not overwrite a recorded final outcome merely because its reply was lost. A new request ID cannot bypass unresolved state. An old completed receipt describes that earlier outcome, not current liveness; callers must refresh lifecycle observations before opening or labelling the agent running. Restart never automatically resumes a thread or restores ownership.
+A client disconnect or missed reply does not itself make the service's operation uncertain. Once the service has accepted and recorded the request, it continues within existing deadlines and saves the outcome independently of the client connection. The client retrieves the receipt by the same request ID after reconnecting; retrieval never starts another runtime. Mark an operation uncertain when the service cannot establish its outcome after a possible effect, including an unresolved provider timeout or interruption by service termination. After restart, preserve known receipt evidence and mark unresolved interrupted operations uncertain; do not overwrite a recorded final outcome merely because its reply was lost. A new request ID cannot bypass unresolved state. An old completed receipt describes that earlier outcome, not current liveness; callers must refresh lifecycle observations before opening or labelling the agent running. Restart never automatically resumes a thread or restores ownership from a saved PID. The proposed follow-up above may reconnect a verified surviving runtime without starting another process.
 
 Resume itself leaves the viewer closed. A successful runtime receipt and failed Open receipt must remain distinguishable to every caller. Suggested UI messages are "Conversation resumed; opening terminal" and "Conversation resumed, but the terminal could not open."
 
