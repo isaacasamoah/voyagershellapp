@@ -58,7 +58,7 @@ function createHistory(api, element, hierarchy) {
   more.onclick = () => {
     shown += batch;
     redraw();
-    if (more.hidden) list.lastElementChild?.querySelector('[id^="inspect-"]')?.focus();
+    if (more.hidden) list.lastElementChild?.querySelector('[id^="menu-"]')?.focus();
     else more.focus({ preventScroll: true });
   };
   get('previous-agents').ontoggle = redraw;

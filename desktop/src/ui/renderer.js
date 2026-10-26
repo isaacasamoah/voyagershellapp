@@ -125,6 +125,7 @@ function renderState(value) {
   function rowFor(s) {
     const runtime = s.lifecycle?.runtime;
     const live = s.ownership === 'managed' && runtime === 'running';
+    if (live) resumeViewers.delete(s.id);
     const b = element(live ? 'button' : 'div', '', 'session');
     b.dataset.key = s.id;
     b.draggable = true;

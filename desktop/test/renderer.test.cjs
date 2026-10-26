@@ -278,6 +278,13 @@ test('creation, Open and compact Resume retain the selected viewer', async () =>
   await resume.onclick();
   assert.equal(requests[1].terminal, 'ghostty');
   assert.equal(requests[1].generation, 1);
+  ui.update({ sessions: [session] });
+  ui.update({ sessions: [previous] });
+  await ui.nodes
+    .get('previous-sessions')
+    .children[0].children.find((node) => node.textContent === 'Resume')
+    .onclick();
+  assert.equal(requests[2].terminal, 'xterm');
 });
 
 test('the panel separates stopped and unknown records', () => {
