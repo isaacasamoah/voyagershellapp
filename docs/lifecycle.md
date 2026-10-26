@@ -408,6 +408,10 @@ Supported `thread/settings/updated` observations refresh the verified snapshot f
 the current capture generation. An incomplete, unsupported or incompatible change
 makes the snapshot unavailable. Unexpected capture loss and registration removal
 also discard that derived snapshot. Old capture generations cannot update it.
+An unexpected owned-process exit invalidates the snapshot before closing capture,
+even when a preceding ordinary message hides a later settings update. History and
+the confirmed exit remain inspectable. Explicit owner Stop retains the existing
+saved-settings path; reopening still verifies the settings returned by Codex.
 
 The controlled provider experiment showed why permission overrides were unsafe:
 settings changed through the native interface may be newer than startup metadata.

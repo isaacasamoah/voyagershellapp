@@ -293,3 +293,42 @@ fn starting_resume_does_not_add_an_unready_voice_participant() {
     assert_ne!(f.call(json!({"op":"status"}))["voice"]["state"], "failed");
     f.call(json!({"op":"stop-instance","session_id":id}));
 }
+
+#[test]
+fn unexpected_exit_with_unread_settings_disables_resume() {
+    let mut f = Fixture::new();
+    fs::write(f.dir.join("verified-settings"), "1").unwrap();
+    f.start();
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"buffered-exit","name":"Buffered settings","cwd":f.dir}));
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    let mut native = Codex::connect(Path::new(row["server"].as_str().unwrap())).unwrap();
+    let mut blocked = UnixStream::connect(f.dir.join("service.sock")).unwrap();
+    blocked.write_all(b"{").unwrap();
+    thread::sleep(Duration::from_millis(50));
+    let service_pid = nix::unistd::Pid::from_raw(f.service.as_ref().unwrap().id() as i32);
+    nix::sys::signal::kill(service_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        wait(|| {
+            fs::read_to_string(format!("/proc/{service_pid}/stat"))
+                .unwrap()
+                .rsplit_once(')')
+                .unwrap()
+                .1
+                .trim_start()
+                .starts_with('T')
+        });
+        let _ = native.rpc("fixture/exit-with-settings", json!({}));
+        let worker_pid = created["runtime_pid"].as_u64().unwrap();
+        wait(|| {
+            fs::read_to_string(format!("/proc/{worker_pid}/stat"))
+                .map(|s| s.rsplit_once(')').unwrap().1.trim_start().starts_with('Z'))
+                .unwrap_or(true)
+        });
+    }));
+    nix::sys::signal::kill(service_pid, nix::sys::signal::Signal::SIGCONT).unwrap();
+    drop(blocked);
+    outcome.unwrap();
+    wait(|| f.call(json!({"op":"list"}))[0]["lifecycle"]["runtime"] == "stopped");
+    let observed = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(observed["resume"]["reason_code"], "settings_unavailable");
+}

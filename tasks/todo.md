@@ -4,13 +4,10 @@ Status: owner approved build, 25 October 2026. The [plan](plan.md) owns design a
 [specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
 remain in Git history. The still-open voice tasks remain in the voice branch.
 
-Build stopped after R01b's second review. Its one corrective pass resolved the
-initial restrictive-permission test gap. The final review confirmed that an
-unexpected process exit can discard an unread settings update while leaving
-Resume available with older settings. R01b is not accepted. R02, R03 and the
-dependent panel build have not started. Another corrective pass requires a new
-owner decision under CONSTRAINTS.md. Production source remains the reviewed
-candidate; this note records the outcome only.
+The owner approved an additional R01b corrective pass after the earlier review
+stop. Its independent re-review passed. The unexpected-exit regression now catches
+the former stale-settings behavior. R02 is next; no merge or installation is
+included in this build authorization.
 
 ## R00: prove safe idle loading
 
@@ -31,11 +28,11 @@ candidate; this note records the outcome only.
 
 ## R01b: resume through the owner service API
 
-- [ ] Record/admit one immutable request and generation atomically before spawning.
+- [x] Record/admit one immutable request and generation atomically before spawning.
   Start the same saved conversation idle and preserve history and verified settings.
-- [ ] Confirm new owned runtime/capture/credentials while rejecting unsupported
+- [x] Confirm new owned runtime/capture/credentials while rejecting unsupported
   records, stale generations and non-owner callers. Keep the viewer separate.
-- [ ] Run focused boundary tests, real-provider corroboration and independent review.
+- [x] Run focused boundary tests, real-provider corroboration and independent review.
   Covers core R1/R5/R7/R9. Keep each test's purpose and file scope explicit.
 
 ## R02: resume and open through the CLI
