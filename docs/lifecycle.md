@@ -379,9 +379,11 @@ or panel controls.
 Recovery currently supports OpenAI-provider threads with a user approval reviewer,
 ordinary `never`, `on-request` or `untrusted` approval policies, and an exact saved
 full-access or read-only-without-network sandbox. Named profiles and other sandbox
-forms remain unavailable until they have their own proof. Resume passes the saved
-model, provider, folder, workspace roots and reasoning setting explicitly. It does
-not substitute permissive launcher defaults for missing values.
+forms remain unavailable until they have their own proof. Resume starts the provider with a read-only, user-reviewed bootstrap and sends
+only the saved thread ID. Codex restores its persisted settings. Voyager verifies
+the returned model, provider, folder, workspace roots, reasoning and permissions
+against its last verified snapshot before reporting success. It does not force a
+cached broader policy over newer native settings or substitute launcher defaults.
 
 The snapshot also retains nonsecret config-layer names and versions, excluding
 per-runtime session flags, plus the loaded instruction files' filesystem identity,
@@ -400,3 +402,18 @@ partial receipt with a stopped runtime. If loading may have happened, the result
 is uncertain and cannot be retried through a different request ID. Interrupted
 service operations remain uncertain after restart. No process is recovered from
 a saved PID or restored automatically.
+
+
+Supported `thread/settings/updated` observations refresh the verified snapshot for
+the current capture generation. An incomplete, unsupported or incompatible change
+makes the snapshot unavailable. Unexpected capture loss and registration removal
+also discard that derived snapshot. Old capture generations cannot update it.
+
+The controlled provider experiment showed why permission overrides were unsafe:
+settings changed through the native interface may be newer than startup metadata.
+It also produced mixed shutdown/persistence observations. Those remain private
+evidence; they do not justify assuming that every acknowledged native change is
+durable. The complete service proof verifies both ordinary saved permissions and
+a read-only change observed by Voyager. Unsupported or mismatched restoration
+fails before the agent accepts new work. It never claims a universal native
+persistence guarantee.
