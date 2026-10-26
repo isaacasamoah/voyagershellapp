@@ -1,151 +1,98 @@
-# Plan: show current work and reveal older conversations on demand
+# Plan: current model settings and a compact Resume flow
 
-Status: built and independently reviewed for owner inspection, 26 October 2026.
-P01-P03 passed one corrective pass and re-review each; P04 passed first review.
-All required findings are resolved. The task list records evidence and unproved
-physical input. Merge and installation remain separate decisions. Governing
-[specification](../SPEC-current-work-panel.md).
-The [task list](todo.md) owns completion. Apply [CONSTRAINTS.md](../CONSTRAINTS.md)
-and the installed application-proof reference.
+Module order: conversation-resume, then current-work-panel. The owner approved
+both revised specifications and the build/review/restart sequence on 26 October.
+The owner approved the concrete C1–C3 breakdown on 26 October. The previous completed panel plan
+remains in Git history. [Task list](todo.md). [Constraints](../CONSTRAINTS.md).
 
-## What the owner will see
+## What changes
 
-Running work stays in the main panel even when its terminal is closed. Confirmed
-stopped conversations appear under Previous vessels. Uncertain records remain
-visible under Needs attention. The owner can inspect saved history and, when
-the service permits it, resume a conversation and open its terminal.
+New launch and Resume use current Codex model and effort settings. Changed config
+fingerprints no longer block startup. YOLO remains the default. A previous Vessel
+has one primary Resume action, with viewer choice and details in its secondary
+menu. Removed vessels have a separate menu-selected view without a checkbox.
 
-Keep the existing panel, captain/worker groups and Fleets. Filtering never deletes
-records, changes assignments or moves work. The service owns runtime truth and
-permissions. The desktop presents them. No new dashboard or server search/paging
-system is included.
+Keep identity, history, ownership checks, fresh credentials, immutable receipts,
+idle Resume and separate Open operations. Do not change service authority,
+restore uncertain processes, add a model-settings UI or install/merge this work.
 
-This separate planning branch preserves the active voice tasks. Integrate the
-accepted shared runner before building. The full Resume journey depends on the
-conversation-resume module, especially its eligibility and receipt contracts.
-P01-P02 can be designed and checked independently; P03 cannot be accepted first.
+## C1: resume with current model and effort
 
-## Design decisions
+Start with a failing service regression for changed configuration and missing
+historic settings. Read current project-aware model and effort at runtime startup
+and apply them explicitly to new and resumed threads. Do not compare previous
+configuration fingerprints. Validate the returned thread identity, effective
+startup selection and idle state. Retain the current schema and historical records.
 
-Apply the specification's classification order exactly. In particular, a removed
-registration whose owned process still runs remains Vessels as Unregistered.
-A disconnected service makes rows last-known information; it does not make agents
-stopped. An older service without lifecycle fields leaves state unknown and Resume
-unavailable. Each Vessel has one actionable row.
+Keep YOLO for new launch and Resume. Use one explicit service launch setting,
+VOYAGER_CODEX_LAUNCH_MODE, default yolo; config selects the user's native permission
+defaults. Invalid values fail clearly. This is a configuration setting, not a new
+permissions editor or per-Vessel form. Native provider refusal remains a failure.
 
-Previous vessels starts collapsed. Order by last known activity, then stable Vessel
-ID, and say when activity time is unavailable. Use recorded activity supplied
-by the service or bounded history reads; never substitute registration time. Let its history area grow within
-the measured available panel space, then scroll inside it. Use small local batches
-appropriate to that space and preserve focus/scroll when loading more. Do not use
-50 as a fixed visible-row target or estimate height from total record count.
+Primary files: src/worker.rs, src/worker/settings.rs,
+src/service/lifecycle/resume.rs, tests/worker_server.py, tests/service/resume.rs.
+Read store/capture consumers before changing snapshot semantics. Update owning
+lifecycle docs and the existing shared resume journey as necessary.
 
-Use a small named desktop/preload history method calling the existing permitted,
-bounded event reads. Keep the service cursor and gap/truncation markers. Render
-saved names, paths and messages as text. Do not reconstruct a full native transcript
-or expose an arbitrary service-request bridge.
+Prove current model/effort, default YOLO, explicit permission-default opt-out,
+known-different unrelated config edit, absent historic settings, preserved thread,
+idle load and unchanged disconnect/uncertain-operation refusals. The real Codex
+journey uses a private disposable configuration rather than editing the user's
+global configuration. Independent Rust review follows the general review and new
+BeautifulRust skills. One correction pass and re-review are allowed.
 
-A running worker remains visible when its captain is absent from the selected
-rows. Show a small Reports to label without inventing another captain row or
-changing assignments. Group selection and Fleet locations remain independent.
+## C2: resume from one compact row
 
-Resume uses one request ID and the generation observed when the user chose it.
-Poll that request's result without resubmitting. Refresh live state after a saved
-success before issuing Open with its own ID. A window failure offers Open again;
-it never starts a second runtime. Uncertain operations stay under Needs attention.
+Depends on C1. Start with a failing renderer expectation. Keep the Vessel name
+legible, show compact secondary metadata, put one Resume action in the row and
+reuse its viewer choice. Move optional viewer selection and details into the
+existing menu. Pending state announces Resuming, prevents duplicate submission,
+and checks the original receipt. Preserve current operation identities and focus.
 
-## Ordered work
+Primary files: desktop/src/ui/renderer.js, history.js, style.css,
+desktop/test/renderer.test.cjs, desktop/test/resume-proof.cjs. Update owning docs.
+Drive Resume and secondary choices through the actual candidate panel. Prove same
+thread, no automatic task, single runtime, viewer failure recovery and keyboard
+access. Review once, allow one correction pass, then re-review if required.
 
-### P01: distinguish current, stopped and uncertain work
+## C3: quiet history controls and local feedback
 
-Introduce a presentation selector for the service observations and show the three
-groups. Keep existing supported actions on current rows. Previous vessels initially
-shows only its count. Keep old-service and disconnected-service warnings visible.
+Depends on C2. Replace the history checkbox with a secondary menu action opening
+Removed vessels and a Back to previous vessels action. Preserve normal ordering,
+scrolling, batches and the caller's place. Switching views changes no registration.
+Keep failures beside their Vessel across refresh, with full error/receipt details
+available on demand. Keep service-connection warnings at panel level.
 
-Acceptance: every record is in exactly the specified group; a closed viewer does
-not hide a running agent; filtering changes no stored assignments or Fleet location.
-Verification: a focused exact-membership renderer test, including a deliberately
-reversed classification that must fail. Use a real candidate to inspect labels.
-Likely files: desktop/src/ui/renderer.js, desktop/src/ui/hierarchy.js,
-desktop/src/ui/style.css, desktop/test/renderer.test.cjs and docs/desktop.md.
-The stylesheet path was verified during planning. Scope: medium.
-Dependency: service lifecycle observations from conversation-resume R01; an
-explicit unsupported-old-service case may be tested before that integration.
-Covers P1, P5 and the basic P6/P7 states.
+Primary files: desktop/src/ui/history.js, renderer.js, index.html,
+desktop/test/renderer.test.cjs, desktop/test/panel-proof.cjs. Keep CSS changes in
+its owner if needed. Prove exact included/excluded history membership, no checkbox,
+keyboard operation, scrolling, failure refresh and unchanged service records.
+Review once, allow one corrective pass, then re-review if required.
 
-### P02: inspect older records without growing the window beyond the display
+## Checks and restart
 
-Expand Previous vessels, inspect saved details/history and request more records.
-Show removed records only after an explicit choice. Keep a long list in its own
-scroll area and leave the other panel controls usable.
+For Rust run cargo fmt --check, cargo test --locked and
+cargo clippy --locked --all-targets -- -D warnings. For desktop run
+npm --prefix desktop run format:check and npm --prefix desktop test. Build with
+npm --prefix desktop run package:linux and use its exact app and bundled service
+for the shared real-Codex panel/history journeys. Record native input limits.
 
-Acceptance: short and long lists stay usable; Load more preserves the owner's
-place; history shows saved text and gaps without launching or registering anything.
-Verification: focused history/batching tests plus a shared real-panel journey
-using wheel/trackpad and keyboard actions. Do not create another launcher.
-Likely files: desktop/src/ui/renderer.js, desktop/src/preload.cjs,
-desktop/src/instances.cjs, the existing panel stylesheet and
-desktop/test/renderer.test.cjs. Keep any helper extraction justified by reuse.
-Scope: medium. Dependency: P01. Covers P2, history portions of P8 and P9.
+Reuse maintained fixtures. Count all acceptance tests, shared helpers and one-off
+proving code against the production code actually exercised. Keep each PR focused
+and in the native GitHub stack if needed; use the existing five-part plain-language
+PR description. Do not suppress checks or remove unrelated acceptance coverage.
 
-### P03: resume the selected conversation and open its window
+After all slices pass review, inspect the live test service and active operations.
+If idle with no owned work, close only the verified test app/service, retain its
+closed-state backup and restart the exact reviewed package with the same short
+persistent state path. If owner work is active, preserve it and arrange a handoff
+before restarting. Leave one test app with visible controls and ready conversation.
+The main app and The Climb preservation remain untouched.
 
-Connect the existing row to the service-owned Resume request and saved receipt.
-Show Resuming on the same logical row, then confirm running before Open. Preserve
-readable failure reasons and the distinction between runtime and window state.
+## Parallel skills review
 
-Acceptance: double clicks or reconnects do not create another request; uncertain
-outcomes remain visible; failed window opening leaves the running agent available
-to Open again. Verification: the shared panel journey calls real Resume from the
-completed resume module and compares an intentionally failed Open.
-Likely files: desktop/src/instances.cjs, desktop/src/preload.cjs,
-desktop/src/ui/renderer.js, desktop/test/instances.test.cjs and the maintained
-panel journey. Scope: medium. Dependencies: P02 and accepted resume R01-R03.
-Covers P3/P4. No permission decision belongs in the renderer.
-
-### P04: keep workers, focus and results usable through state changes
-
-Finish the hidden-supervisor labels, reconnect behaviour and keyboard focus rules.
-Use one real packaged panel journey to exercise grouping, history and Resume
-without duplicating their setup. Retain separate focused regressions where they
-catch different failures.
-
-Acceptance: workers remain accessible without a visible captain; loss/recovery of
-service connection never invents stop or repeats effects; keyboard users can reach
-groups, older rows, details and supported actions after state changes.
-Verification: exact-membership and focus assertions, followed by actual candidate
-keyboard and pointer actions. Record the real UI and service identities.
-Likely files: desktop/src/ui/hierarchy.js, desktop/src/ui/renderer.js,
-desktop/test/hierarchy.test.cjs, desktop/test/renderer.test.cjs and the shared
-panel journey. Scope: medium. Dependency: P03. Completes P6-P9.
-
-## Checkpoints and proof
-
-After P01-P02, review classification and long-history interaction before connecting
-Resume. After P03-P04, run the specification's P1-P9 cases against the packaged app
-and matching service. Implementation is approved; installation is not.
-
-The planned command, once the panel journey exists, is:
-
-```sh
-VOYAGER_PROOF_APP=/absolute/candidate/voyagershell \
-  python3 desktop/test/run-native-proof.py /tmp/NEW_PANEL_STATE panel-current
-```
-
-The shared runner will gain that named journey during the panel build. Extend its existing
-entry point and packaging helper list within a relevant slice, rather than adding
-an unreviewed extra task or a second test framework. Keep each final file map
-around five files; reslice before coding if a complete behaviour grows beyond that.
-
-Each test has one clear purpose and a reason tied to the change. Several assertions
-may prove one user journey; duplicate checks need a distinct purpose. Count all
-fixture and temporary code, including older regression tests used for acceptance.
-Shared helpers count once. Do not hide code by moving or compressing it.
-
-Use the repository's Node 24 desktop tests and format check. Service changes also
-require Rust formatting, tests and Clippy. A fake renderer can verify classification;
-only an actual app/service run can establish the Resume and scrolling experience.
-Keep screenshots and private evidence outside source control. Record pointer,
-keyboard, wheel and trackpad coverage separately; unavailable physical input stays
-unproved. Use an independent review for each behaviour and propose the same
-one-correction-and-re-review limit as the voice trial. The owner has approved this plan for implementation.
+A separate reviewer audits the installed BeautifulRust wrappers, pinned originals,
+references and project fit. Record the report in the canonical Obsidian home.
+Add project instructions requiring rust-best-practices during Rust implementation
+and rust-review alongside general review for current and future Rust builds.
+Project rules and unchanged checks take precedence over upstream sample presets.
