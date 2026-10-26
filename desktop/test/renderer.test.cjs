@@ -19,6 +19,7 @@ function renderer() {
       this.value = '';
       this.textContent = '';
       this.hidden = false;
+      this.disabled = false;
       this.isConnected = true;
     }
     append(...children) {
