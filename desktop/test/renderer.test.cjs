@@ -19,6 +19,7 @@ function renderer() {
       this.value = '';
       this.textContent = '';
       this.hidden = false;
+      this.disabled = false;
       this.isConnected = true;
     }
     append(...children) {
@@ -224,7 +225,7 @@ test('the panel exposes explicit service stop and preserves a refused shutdown',
   assert.equal(stopped, 1);
 });
 
-test('creation and explicit reopen use the selected viewer', async () => {
+test('creation, Open and compact Resume retain the selected viewer', async () => {
   const ui = renderer();
   ui.update();
   ui.nodes.get('add').onclick();
@@ -234,21 +235,18 @@ test('creation and explicit reopen use the selected viewer', async () => {
   assert.equal(ui.calls[0].terminal, 'xterm');
   const requests = [];
   ui.api.openInstance = async (...args) => requests.push(args);
-  ui.update({
-    sessions: [
-      {
-        id: 'one',
-        name: 'Viewer',
-        kind: 'codex',
-        rank: 'crew',
-        ownership: 'managed',
-        worker_state: 'running',
-        lifecycle: { runtime: 'running' },
-        window: 'closed',
-        terminal: 'xterm',
-      },
-    ],
-  });
+  const session = {
+    id: 'one',
+    name: 'Viewer',
+    kind: 'codex',
+    rank: 'crew',
+    ownership: 'managed',
+    worker_state: 'running',
+    lifecycle: { runtime: 'running' },
+    window: 'closed',
+    terminal: 'xterm',
+  };
+  ui.update({ sessions: [session] });
   const items = ui.nodes.get('sessions').querySelectorAll('*');
   const viewer = items.find((n) => n.tagName === 'select' && n.value === 'xterm');
   assert.ok(viewer);
@@ -257,6 +255,36 @@ test('creation and explicit reopen use the selected viewer', async () => {
   assert.equal(requests[0][0], 'one');
   assert.equal(requests[0][1], 'xterm');
   assert.equal(typeof requests[0][2], 'string');
+  ui.api.resumeInstance = async (input) => requests.push(input);
+  const previous = {
+    ...session,
+    lifecycle: { runtime: 'stopped', runtime_generation: 1 },
+    resume: { state: 'eligible' },
+  };
+  ui.update({ sessions: [previous] });
+  let row = ui.nodes.get('previous-sessions').children[0];
+  const preference = row.querySelectorAll('select').find((node) => node.id === 'resume-viewer-one');
+  preference.value = 'ghostty';
+  preference.onchange?.();
+  ui.update({ sessions: [{ ...previous, last_activity_ms: 1 }] });
+  row = ui.nodes.get('previous-sessions').children[0];
+  const resume = row.children.find(
+    (node) => node.tagName === 'button' && node.textContent === 'Resume',
+  );
+  assert.ok(resume, 'One Resume action belongs directly to the compact row');
+  assert.equal(row.children[0].tagName, 'div', 'A stopped name stays legible');
+  assert.ok(!row.children.some((node) => node.tagName === 'select'));
+  assert.ok(!row.children.some((node) => node.textContent === 'Inspect'));
+  await resume.onclick();
+  assert.equal(requests[1].terminal, 'ghostty');
+  assert.equal(requests[1].generation, 1);
+  ui.update({ sessions: [session] });
+  ui.update({ sessions: [previous] });
+  await ui.nodes
+    .get('previous-sessions')
+    .children[0].children.find((node) => node.textContent === 'Resume')
+    .onclick();
+  assert.equal(requests[2].terminal, 'xterm');
 });
 
 test('the panel separates stopped and unknown records', () => {
@@ -314,6 +342,19 @@ test('service loss closes an open menu and marks its existing rows last-known', 
   assert.equal(ui.nodes.get('create-fleet').disabled, true);
   assert.match(live.attributes['aria-label'], /Last known/);
   assert.equal(vm.runInContext('openMenus.size', ui.context), 0);
+  ui.update({ sessions, serviceError: 'Disconnected' });
+  const cached = ui.nodes.get('sessions').querySelectorAll('button');
+  assert.equal(cached.find((node) => node.id === 'inspect-live').disabled, false);
+  assert.equal(cached.find((node) => node.id === 'menu-live').disabled, false);
+  ui.update({
+    sessions,
+    serviceError: 'Disconnected',
+    fleetData: { fleets: [{ id: 'work', name: 'Work' }], assignments: { live: 'work' } },
+  });
+  const fleet = ui.nodes.get('fleets').querySelectorAll('button');
+  assert.equal(fleet.find((node) => node.id === 'inspect-live').disabled, false);
+  assert.equal(fleet.find((node) => node.id === 'menu-live').disabled, false);
+  assert.equal(fleet.find((node) => node.id === 'fleet-work').disabled, true);
   ui.update({ sessions });
   const restored = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
   assert.equal(restored.disabled, false);

@@ -157,7 +157,8 @@ exports.run = async (
       `Boolean(document.getElementById('inspect-${removedId}'))`,
     ),
   );
-  for (let step = 0; step < 3; step++) await proof.pageKey(panelWin, 'Tab');
+  await proof.pageClick(panelWin, `menu-${removedId}`);
+  await proof.pageKey(panelWin, 'Tab');
   assert.equal((await historyState()).focus, `inspect-${removedId}`);
   await proof.pageKey(panelWin, 'Return');
   const beforeRead = await rpc('events');

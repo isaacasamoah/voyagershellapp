@@ -8,6 +8,7 @@ let lastRows;
 let creating = false;
 let currentSessions = [];
 const pendingActions = new Map();
+const resumeViewers = new Map();
 const expandedVessels = new Set();
 let fleetRequest;
 let lastState;
@@ -51,7 +52,15 @@ function runtimeLabel(session) {
   if (runtime === 'stopped') return 'Stopped';
   return 'Runtime unverified';
 }
+function disableServiceActions(container) {
+  for (const button of container.querySelectorAll('button'))
+    if (!/^(menu|inspect|expand)-/.test(button.id || '')) button.disabled = true;
+}
+function announceVessel(message) {
+  $('vessel-status').textContent = message;
+}
 function renderState(value) {
+  const disconnected = Boolean(value.serviceError && !lastState?.serviceError);
   lastState = value;
   const focused = panelFocus.capture();
   $('panel').hidden = view !== 'panel';
@@ -102,10 +111,12 @@ function renderState(value) {
       'needs-attention-sessions',
       'previous-sessions',
     ])
-      for (const button of $(id).querySelectorAll('button')) button.disabled = true;
-    for (const menu of openMenus)
-      if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
-    openMenus.clear();
+      disableServiceActions($(id));
+    if (disconnected) {
+      for (const menu of openMenus)
+        if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
+      openMenus.clear();
+    }
   }
   if (openMenus.size || rows === lastRows) return;
   lastRows = rows;
@@ -117,16 +128,19 @@ function renderState(value) {
   $('fleet-error').textContent = value.fleetError || '';
   $('fleet-error').hidden = !value.fleetError;
   function rowFor(s) {
-    const b = element('button', '', 'session');
+    const runtime = s.lifecycle?.runtime;
+    const live = s.ownership === 'managed' && runtime === 'running';
+    if (live) resumeViewers.delete(s.id);
+    const b = element(live ? 'button' : 'div', '', 'session');
     b.dataset.key = s.id;
     b.draggable = true;
     b.ondragstart = (event) => {
       event.dataTransfer.setData('application/x-voyager-vessel', s.id);
       event.dataTransfer.effectAllowed = 'move';
     };
-    b.setAttribute('aria-pressed', String(s.id === value.selected));
+    if (live) b.setAttribute('aria-pressed', String(s.id === value.selected));
+    else b.setAttribute('role', 'group');
     const name = s.name || s.cwd.split('/').filter(Boolean).at(-1) || 'This computer';
-    const runtime = s.lifecycle?.runtime;
     let status = runtimeLabel(s);
     if (value.serviceError) status = `Last known: ${status}`;
     const dot = element('span', '', 'connection-dot');
@@ -135,28 +149,38 @@ function renderState(value) {
     b.title = `${name}. ${status}`;
     const identity = element('span', '', 'session-identity');
     identity.append(element('span', name, 'session-name'));
-    if (s.rank) identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
+    if (s.rank && runtime !== 'stopped')
+      identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
     identity.append(element('span', status, 'session-state'));
     b.append(identity, dot);
     b.dataset.connected = String(s.capture === 'connected' && !value.serviceError);
-    b.disabled = Boolean(value.serviceError) || s.ownership !== 'managed' || runtime !== 'running';
-    b.onclick = async () => {
-      document.body.dataset.arranging = 'true';
-      b.disabled = true;
-      try {
-        const result = await api.surfaceInstance(s.id);
-        showError(result?.error);
-      } catch (error) {
-        showError(error.message);
-      } finally {
-        document.body.dataset.arranging = 'false';
-        b.disabled = Boolean(lastState?.serviceError);
-      }
-    };
+    b.disabled = Boolean(value.serviceError);
+    if (live)
+      b.onclick = async () => {
+        document.body.dataset.arranging = 'true';
+        b.disabled = true;
+        try {
+          const result = await api.surfaceInstance(s.id);
+          showError(result?.error);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          document.body.dataset.arranging = 'false';
+          b.disabled = Boolean(lastState?.serviceError);
+        }
+      };
     const row = element('div', '', 'instance-row');
     row.dataset.vessel = s.id;
     row.append(b);
     const { menu, actions, addAction } = actionMenu(name, s.id);
+    const inspect = element('button', 'Details');
+    inspect.id = `inspect-${s.id}`;
+    inspect.setAttribute('aria-label', `Details for ${name}`);
+    inspect.onclick = () => {
+      actions.hidePopover();
+      history.inspect(s);
+    };
+    actions.append(inspect);
     const rename = nameEditor(actions, name, (next, request) =>
       api.renameInstance(s.id, next, request),
     );
@@ -228,7 +252,6 @@ function renderState(value) {
       if (s.ownership === 'managed')
         addAction('Stop and remove', (request) => api.removeInstance(s.id, request, true));
     } else addAction('Register again', (request) => api.registerInstance(s.id, request));
-    row.append(menu);
     if (groups.attention.includes(s)) {
       const reason =
         typeof s.resume?.reason === 'string'
@@ -236,34 +259,29 @@ function renderState(value) {
           : 'The service cannot confirm this runtime. Inspect its saved details.';
       row.append(element('p', reason, 'agent-reason'));
     }
-    if (value.serviceError)
-      for (const button of row.querySelectorAll('button')) button.disabled = true;
     if (s.resume?.state === 'eligible' || s.resume?.state === 'pending') {
-      const controls = element('div', '', 'resume-controls');
-      const viewer = element('select', '');
-      viewer.id = `resume-viewer-${s.id}`;
-      viewer.setAttribute('aria-label', 'Terminal viewer after Resume');
-      for (const [value, label] of [
-        ['xterm', 'xterm'],
-        ['ghostty', 'Ghostty'],
-      ]) {
-        const option = element('option', label);
-        option.value = value;
-        viewer.append(option);
-      }
-      viewer.value = s.terminal || 'xterm';
-      const resume = element(
-        'button',
-        s.resume.state === 'pending' ? 'Check Resume' : 'Resume conversation',
+      const viewer = choiceField(
+        actions,
+        'Terminal viewer',
+        [
+          ['xterm', 'xterm'],
+          ['ghostty', 'Ghostty'],
+        ],
+        resumeViewers.get(s.id) || s.terminal || 'xterm',
       );
+      viewer.id = `resume-viewer-${s.id}`;
+      viewer.onchange = () => resumeViewers.set(s.id, viewer.value);
+      let pending = s.resume.state === 'pending';
+      const resume = element('button', pending ? 'Resuming…' : 'Resume', 'resume-action');
       resume.id = `resume-${s.id}`;
-      resume.disabled = Boolean(value.serviceError);
+      resume.disabled = Boolean(value.serviceError) || pending;
       resume.onclick = async () => {
         const key = JSON.stringify([s.id, 'Resume', s.lifecycle.runtime_generation]);
         if (!pendingActions.has(key))
           pendingActions.set(key, s.resume.request_id || crypto.randomUUID());
         resume.disabled = true;
         resume.dataset.request = pendingActions.get(key);
+        announceVessel(`Resuming ${name}.`);
         try {
           const result = await api.resumeInstance({
             id: s.id,
@@ -277,25 +295,26 @@ function renderState(value) {
               result.open_request_id,
             );
           if (result?.error) throw Error(result.error);
-          if (result?.pending)
-            showError(
-              'Resume is still in progress. Check its status without starting another request.',
-            );
-          else {
+          pending = Boolean(result?.pending);
+          announceVessel(pending ? `Still resuming ${name}.` : `Opened ${name}.`);
+          if (!pending) {
             pendingActions.delete(key);
             showError('');
           }
         } catch (error) {
+          announceVessel(`Could not finish opening ${name}.`);
           showError(error.message);
         } finally {
-          resume.disabled = Boolean(lastState?.serviceError);
+          resume.disabled = Boolean(lastState?.serviceError) || pending;
+          resume.textContent = pending ? 'Resuming…' : 'Resume';
         }
       };
-      controls.append(viewer, resume);
-      row.append(controls);
+      row.append(resume);
     } else if (s.resume?.reason)
       row.append(element('p', s.resume.reason.replace(/^[a-z_]+:\s*/, ''), 'agent-reason'));
-    history.decorate(row, s);
+    history.decorate(identity, s);
+    row.append(menu);
+    if (value.serviceError) disableServiceActions(row);
     return row;
   }
   function ranked(s, visibleRows) {
@@ -368,8 +387,7 @@ function renderState(value) {
     const canvas = element('div', '', 'fleet-canvas');
     renderTree(canvas, fleet.id);
     section.append(heading, canvas);
-    if (value.serviceError)
-      for (const button of section.querySelectorAll('button')) button.disabled = true;
+    if (value.serviceError) disableServiceActions(section);
     dropTarget(section, fleet.id);
     return section;
   });

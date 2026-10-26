@@ -126,12 +126,29 @@ exports.run = async (
       await setExpanded(true, { x: 180, y: 100 });
       await refresh();
       await pageClick(panelWin, 'previous-toggle');
+      const compact = await panelWin.webContents.executeJavaScript(`(() => {
+        const row = document.getElementById('resume-${id}').closest('[data-vessel]');
+        return {
+          columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
+          metadata: getComputedStyle(row.querySelector('.vessel-metadata')).textOverflow
+        };
+      })()`);
+      assert.deepEqual(compact, { columns: 3, metadata: 'ellipsis' });
+      await fs.writeFile(
+        path.join(stateDir, 'compact-resume.png'),
+        (await panelWin.webContents.capturePage()).toPNG(),
+      );
       await panelWin.webContents.executeJavaScript(`
         window.resumeControl = document.getElementById('resume-${id}');
         window.resumeLabels = [];
+        window.resumeFocus = [];
         new MutationObserver(() => {
           const row = document.querySelector('#sessions [data-key="${id}"]');
-          if (row) window.resumeLabels.push(row.getAttribute('aria-label'));
+          if (row) {
+            const state = row.getAttribute('aria-label');
+            window.resumeLabels.push(state);
+            window.resumeFocus.push({state,control:document.activeElement.id,announcement:document.getElementById('vessel-status')?.textContent});
+          }
         }).observe(document.getElementById('sessions'), {childList:true,subtree:true});
       `);
       await pageClick(panelWin, `resume-${id}`);
@@ -148,7 +165,21 @@ exports.run = async (
           "window.resumeLabels.some(label => label.includes('Resuming'))",
         ),
       );
+
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          `window.resumeFocus.some(entry => entry.state.includes('Resuming') && entry.control === 'menu-${id}')`,
+        ),
+        'Pending Resume keeps focus on its Vessel menu',
+      );
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          "document.getElementById('vessel-status')?.getAttribute('role') === 'status' && document.getElementById('vessel-status')?.getAttribute('aria-live') === 'polite' && window.resumeFocus.some(entry => entry.announcement === 'Resuming Resume proof.')",
+        ),
+        'Resume is announced through the persistent live status',
+      );
     } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
+    const readyMs = performance.now() - start;
     if (configProof) {
       const effective = await snapshot(id);
       assert.equal(effective.model, 'gpt-6-sol');
@@ -170,7 +201,6 @@ exports.run = async (
       assert.equal(freshSettings.sandbox.type, 'dangerFullAccess');
       await rpc('stop-instance', fresh.session_id);
     }
-    const readyMs = performance.now() - start;
     assert.equal(resumed.state, 'completed');
     assert.equal(resumed.runtime_generation, 2);
     assert.notEqual(resumed.runtime_pid, created.runtime_pid);
