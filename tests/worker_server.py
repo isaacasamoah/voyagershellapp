@@ -91,6 +91,12 @@ def handle(stream):
             result = {}
             if method == 'initialize' and (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
                 result = {'userAgent': 'codex/0.164.0 fixture'}
+            elif method == 'config/read':
+                result = {'layers': [{'name': {'type': 'user', 'file': '/fixture/config.toml', 'profile': None},
+                                      'version': 'changed' if (Path(policy['VOYAGER_STATE']) / 'config-changed').exists() else 'original',
+                                      'disabledReason': None}]}
+            elif method == 'thread/goal/get':
+                result = {'goal': {'status': 'active'} if (Path(policy['VOYAGER_STATE']) / 'active-goal').exists() else None}
             elif method == 'thread/start':
                 assert set(r['params']) == {'cwd', 'approvalPolicy', 'sandbox', 'historyMode', 'developerInstructions'}
                 assert r['params']['approvalPolicy'] == 'never'
@@ -98,10 +104,18 @@ def handle(stream):
                 assert r['params']['historyMode'] == 'legacy'
                 result = {'thread': metadata()}
                 if (Path(policy['VOYAGER_STATE']) / 'verified-settings').exists():
+                    result['thread']['cwd'] = str(Path(policy['VOYAGER_STATE']))
                     result.update(model='fixture-model', modelProvider='openai', cwd=str(Path(policy['VOYAGER_STATE'])),
                                   approvalPolicy='never', approvalsReviewer='user', sandbox={'type': 'dangerFullAccess'},
                                   activePermissionProfile=None, runtimeWorkspaceRoots=[], instructionSources=[], reasoningEffort=None)
-            elif method in ['thread/read', 'thread/resume']:
+            elif method == 'thread/resume':
+                result = {'thread': metadata(), 'model': 'fixture-model', 'modelProvider': 'openai',
+                          'cwd': str(Path(policy['VOYAGER_STATE'])), 'approvalPolicy': 'never', 'approvalsReviewer': 'user',
+                          'sandbox': {'type': 'dangerFullAccess'}, 'activePermissionProfile': None,
+                          'runtimeWorkspaceRoots': [], 'instructionSources': [], 'reasoningEffort': None}
+                if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
+                    result['model'] = 'different-model'
+            elif method == 'thread/read':
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':
                 result = {'data': ['worker-thread'], 'nextCursor': None}

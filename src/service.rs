@@ -552,6 +552,7 @@ impl Runtime {
             "capabilities" => self.capabilities(&request)?,
             "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
+            "resume-instance" => self.resume_instance(&request)?,
             "operation" => {
                 let id = string(&request, "request_id")?;
                 let (inputs, mut receipt) = if let Some(operation) = self.store.operation(id)? {
@@ -614,6 +615,11 @@ impl Runtime {
                         live,
                         session["ownership"] == "external",
                     )?;
+                    session["resume"] = if authority::is_owner(&request["actor"]) {
+                        self.resume_availability(session)?
+                    } else {
+                        json!({"state":"unavailable","request_id":null,"reason_code":"forbidden","reason":"Only the app owner can resume a conversation."})
+                    };
                     session["terminal"] = json!(
                         self.viewer_choices
                             .get(session["id"].as_str().unwrap_or(""))
@@ -669,6 +675,7 @@ impl Runtime {
                                     "supervisor_id",
                                     "worker_state",
                                     "lifecycle",
+                                    "resume",
                                     "capture",
                                     "ownership",
                                     "window",

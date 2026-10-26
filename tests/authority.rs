@@ -1059,3 +1059,19 @@ fn fleet_service_owns_membership_and_preserves_existing_files_and_authority() {
         "{broken"
     );
 }
+
+#[test]
+fn ordinary_instance_cannot_resume_a_saved_conversation() {
+    let s = Service::start();
+    let id = s.create("resume-rights", "codex", Some("crew"));
+    let credential = s.context("resume-rights");
+    let response = s.raw(Some(&credential), json!({"op":"resume-instance","session_id":id,"request_id":"resume-without-owner","expected_runtime_generation":1}));
+    assert_eq!(response["code"], "forbidden");
+    assert_eq!(
+        s.raw(
+            None,
+            json!({"op":"operation","request_id":"resume-without-owner"})
+        )["code"],
+        "not_found"
+    );
+}

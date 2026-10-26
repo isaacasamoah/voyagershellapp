@@ -36,8 +36,11 @@ remain separate decisions.
 Owner `list` responses distinguish a live owned runtime, a confirmed stop and
 unknown process ownership. Managed starts retain a runtime generation and observed
 nonsecret settings for later recovery. A service restart preserves a confirmed
-stop and never restores ownership from a saved process number. Conversation Resume
-is not implemented yet; these observations prepare its service boundary.
+stop and never restores ownership from a saved process number. The owner service
+API can explicitly resume an eligible saved Codex conversation without submitting
+work. It keeps the same identity and leaves its terminal closed. CLI and panel
+controls are subsequent slices; older records with unverified settings remain
+inspectable and cannot resume.
 
 - **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
   Creation registers it and starts capture. Choose a Fleet when one exists. Native
