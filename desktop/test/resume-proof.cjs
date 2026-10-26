@@ -141,9 +141,14 @@ exports.run = async (
       await panelWin.webContents.executeJavaScript(`
         window.resumeControl = document.getElementById('resume-${id}');
         window.resumeLabels = [];
+        window.resumeFocus = [];
         new MutationObserver(() => {
           const row = document.querySelector('#sessions [data-key="${id}"]');
-          if (row) window.resumeLabels.push(row.getAttribute('aria-label'));
+          if (row) {
+            const state = row.getAttribute('aria-label');
+            window.resumeLabels.push(state);
+            window.resumeFocus.push({state,control:document.activeElement.id,announcement:document.getElementById('vessel-status')?.textContent});
+          }
         }).observe(document.getElementById('sessions'), {childList:true,subtree:true});
       `);
       await pageClick(panelWin, `resume-${id}`);
@@ -159,6 +164,19 @@ exports.run = async (
         await panelWin.webContents.executeJavaScript(
           "window.resumeLabels.some(label => label.includes('Resuming'))",
         ),
+      );
+
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          `window.resumeFocus.some(entry => entry.state.includes('Resuming') && entry.control === 'menu-${id}')`,
+        ),
+        'Pending Resume keeps focus on its Vessel menu',
+      );
+      assert.ok(
+        await panelWin.webContents.executeJavaScript(
+          "document.getElementById('vessel-status')?.getAttribute('role') === 'status' && document.getElementById('vessel-status')?.getAttribute('aria-live') === 'polite' && window.resumeFocus.some(entry => entry.announcement === 'Resuming Resume proof.')",
+        ),
+        'Resume is announced through the persistent live status',
       );
     } else resumed = await rpc('resume-instance', id, 'resume-idle', '1');
     const readyMs = performance.now() - start;

@@ -346,6 +346,15 @@ test('service loss closes an open menu and marks its existing rows last-known', 
   const cached = ui.nodes.get('sessions').querySelectorAll('button');
   assert.equal(cached.find((node) => node.id === 'inspect-live').disabled, false);
   assert.equal(cached.find((node) => node.id === 'menu-live').disabled, false);
+  ui.update({
+    sessions,
+    serviceError: 'Disconnected',
+    fleetData: { fleets: [{ id: 'work', name: 'Work' }], assignments: { live: 'work' } },
+  });
+  const fleet = ui.nodes.get('fleets').querySelectorAll('button');
+  assert.equal(fleet.find((node) => node.id === 'inspect-live').disabled, false);
+  assert.equal(fleet.find((node) => node.id === 'menu-live').disabled, false);
+  assert.equal(fleet.find((node) => node.id === 'fleet-work').disabled, true);
   ui.update({ sessions });
   const restored = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
   assert.equal(restored.disabled, false);

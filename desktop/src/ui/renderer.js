@@ -52,6 +52,13 @@ function runtimeLabel(session) {
   if (runtime === 'stopped') return 'Stopped';
   return 'Runtime unverified';
 }
+function disableServiceActions(container) {
+  for (const button of container.querySelectorAll('button'))
+    if (!/^(menu|inspect|expand)-/.test(button.id || '')) button.disabled = true;
+}
+function announceVessel(message) {
+  $('vessel-status').textContent = message;
+}
 function renderState(value) {
   const disconnected = Boolean(value.serviceError && !lastState?.serviceError);
   lastState = value;
@@ -104,9 +111,7 @@ function renderState(value) {
       'needs-attention-sessions',
       'previous-sessions',
     ])
-      for (const button of $(id).querySelectorAll('button'))
-        if (!button.id?.startsWith('menu-') && !button.id?.startsWith('inspect-'))
-          button.disabled = true;
+      disableServiceActions($(id));
     if (disconnected) {
       for (const menu of openMenus)
         if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
@@ -276,6 +281,7 @@ function renderState(value) {
           pendingActions.set(key, s.resume.request_id || crypto.randomUUID());
         resume.disabled = true;
         resume.dataset.request = pendingActions.get(key);
+        announceVessel(`Resuming ${name}.`);
         try {
           const result = await api.resumeInstance({
             id: s.id,
@@ -290,11 +296,13 @@ function renderState(value) {
             );
           if (result?.error) throw Error(result.error);
           pending = Boolean(result?.pending);
+          announceVessel(pending ? `Still resuming ${name}.` : `Opened ${name}.`);
           if (!pending) {
             pendingActions.delete(key);
             showError('');
           }
         } catch (error) {
+          announceVessel(`Could not finish opening ${name}.`);
           showError(error.message);
         } finally {
           resume.disabled = Boolean(lastState?.serviceError) || pending;
@@ -306,9 +314,7 @@ function renderState(value) {
       row.append(element('p', s.resume.reason.replace(/^[a-z_]+:\s*/, ''), 'agent-reason'));
     history.decorate(identity, s);
     row.append(menu);
-    if (value.serviceError)
-      for (const button of row.querySelectorAll('button'))
-        if (button !== inspect && button !== menu.children[0]) button.disabled = true;
+    if (value.serviceError) disableServiceActions(row);
     return row;
   }
   function ranked(s, visibleRows) {
@@ -381,8 +387,7 @@ function renderState(value) {
     const canvas = element('div', '', 'fleet-canvas');
     renderTree(canvas, fleet.id);
     section.append(heading, canvas);
-    if (value.serviceError)
-      for (const button of section.querySelectorAll('button')) button.disabled = true;
+    if (value.serviceError) disableServiceActions(section);
     dropTarget(section, fleet.id);
     return section;
   });

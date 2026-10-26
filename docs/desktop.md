@@ -611,3 +611,12 @@ recall, fresh credentials and failed Open followed by successful same-runtime Op
 The history journey opens Details through the row menu and retains keyboard and
 scrolling checks. History-view controls and per-Vessel error placement are the
 following increment, not part of this compact-row change.
+
+
+Offline action disabling uses one helper for standalone rows, Fleet rows and
+repeated cached refreshes. Menu, Details and local expand controls stay available;
+service mutations remain disabled. Resume announces its start and result through
+a persistent visually hidden polite status region. When its pending button is
+disabled or replaced, focus tries the same Vessel's menu before a group heading.
+The native journey checks that pending focus and status announcement explicitly;
+this checks Chromium semantics, not delivery by an installed screen reader.
