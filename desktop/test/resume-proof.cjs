@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { completedTurn } = require('./native-proof.cjs');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const exec = promisify(execFile);
@@ -36,18 +37,7 @@ exports.run = async (
   const row = async () => (await rpc('list')).find((r) => r.id === id);
   const ask = async (request, message) => {
     const sent = await rpc('send', id, request, message);
-    const observed = await wait(
-      events,
-      (items) =>
-        items.some((e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id),
-      'Explicit proof turn did not finish',
-      90000,
-    );
-    const completion = observed.find(
-      (e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id,
-    );
-    assert.equal(completion.payload.status, 'completed');
-    assert.equal(completion.payload.has_error, false);
+    const observed = await completedTurn(events, sent);
     return observed.filter((e) => e.native_turn_id === sent.native_turn_id);
   };
   const attached = async (opened, server) =>

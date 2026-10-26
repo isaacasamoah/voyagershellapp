@@ -8,9 +8,10 @@ are unstarted. Earlier C1–C3 completion remains in Git history.
 
 The frozen K1 build is available in [service-restart recovery](https://github.com/isaacasamoah/voyagershellapp/pull/55)
 and [native connection-loss recovery](https://github.com/isaacasamoah/voyagershellapp/pull/56).
-Both remain drafts. The final review's two Required findings stop this build
-sequence. Do not start another corrective build or a dependent slice without
-Isaac approving a further pass. The native legacy-runtime journey and ordinary
+Both remain drafts. Isaac approved one additional corrective pass on 26 October,
+including reduction of acceptance code. That pass is in progress: initial socket
+connection and handshake deadlines, cancellation, and shared native completion
+checks. It must pass the full budget and fresh review before K2 or K3 begins. The native legacy-runtime journey and ordinary
 checks passed, but they do not clear either outstanding gate.
 
 ## K1: background Vessel recovers automatically

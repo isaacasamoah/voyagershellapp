@@ -1,3 +1,4 @@
+const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
@@ -13,6 +14,30 @@ async function wait(read, accept = Boolean, message = 'Native proof timed out', 
     await delay(50);
   }
   throw Error(message);
+}
+
+async function completedTurn(events, sent, expectedText) {
+  const observed = await wait(
+    events,
+    (items) =>
+      items.some((e) => e.type === 'turn.completed' && e.native_turn_id === sent.native_turn_id),
+    'Requested proof turn did not finish',
+    90000,
+  );
+  const turn = observed.filter((e) => e.native_turn_id === sent.native_turn_id);
+  const completion = turn.find((e) => e.type === 'turn.completed');
+  assert.equal(completion.payload.status, 'completed');
+  assert.equal(completion.payload.has_error, false);
+  if (expectedText !== undefined)
+    assert(
+      turn.some(
+        (e) =>
+          e.type === 'message' &&
+          e.payload.role === 'assistant' &&
+          e.payload.text.includes(expectedText),
+      ),
+    );
+  return observed;
 }
 
 async function run(context) {
@@ -165,4 +190,4 @@ async function run(context) {
   if (failure) throw failure;
   return result;
 }
-module.exports = { run };
+module.exports = { run, completedTurn };

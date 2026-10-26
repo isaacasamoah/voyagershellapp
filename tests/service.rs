@@ -29,6 +29,8 @@ struct Fixture {
 
 #[path = "service/reconnect.rs"]
 mod reconnect;
+#[path = "service/reconnect_backlog.rs"]
+mod reconnect_backlog;
 
 #[test]
 fn codex_found_on_path_has_a_canonical_viewer_executable() {
