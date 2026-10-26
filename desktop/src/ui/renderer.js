@@ -53,6 +53,7 @@ function runtimeLabel(session) {
   return 'Runtime unverified';
 }
 function renderState(value) {
+  const disconnected = Boolean(value.serviceError && !lastState?.serviceError);
   lastState = value;
   const focused = panelFocus.capture();
   $('panel').hidden = view !== 'panel';
@@ -103,10 +104,14 @@ function renderState(value) {
       'needs-attention-sessions',
       'previous-sessions',
     ])
-      for (const button of $(id).querySelectorAll('button')) button.disabled = true;
-    for (const menu of openMenus)
-      if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
-    openMenus.clear();
+      for (const button of $(id).querySelectorAll('button'))
+        if (!button.id?.startsWith('menu-') && !button.id?.startsWith('inspect-'))
+          button.disabled = true;
+    if (disconnected) {
+      for (const menu of openMenus)
+        if (menu.isConnected && menu.matches(':popover-open')) menu.hidePopover();
+      openMenus.clear();
+    }
   }
   if (openMenus.size || rows === lastRows) return;
   lastRows = rows;

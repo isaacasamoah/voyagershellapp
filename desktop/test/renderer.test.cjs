@@ -334,6 +334,10 @@ test('service loss closes an open menu and marks its existing rows last-known', 
   assert.equal(ui.nodes.get('create-fleet').disabled, true);
   assert.match(live.attributes['aria-label'], /Last known/);
   assert.equal(vm.runInContext('openMenus.size', ui.context), 0);
+  ui.update({ sessions, serviceError: 'Disconnected' });
+  const cached = ui.nodes.get('sessions').querySelectorAll('button');
+  assert.equal(cached.find((node) => node.id === 'inspect-live').disabled, false);
+  assert.equal(cached.find((node) => node.id === 'menu-live').disabled, false);
   ui.update({ sessions });
   const restored = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
   assert.equal(restored.disabled, false);
