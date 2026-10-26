@@ -93,6 +93,9 @@ async function run(context) {
       );
     }
     await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
+    await window.webContents.executeJavaScript(
+      `document.getElementById(${JSON.stringify(id)}).scrollIntoView({block:'nearest',inline:'nearest'})`,
+    );
     const point = await window.webContents.executeJavaScript(
       `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) throw Error('Control is outside the visible page'); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`,
     );
