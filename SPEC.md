@@ -6,10 +6,11 @@ State: The owner approved the capability boundaries, dependency direction, first
 ## This build branch
 
 On 25 October, the owner accepted the current voice acknowledgement change and
-requested draft plans for resume and the panel. This branch owns the approved saved-conversation resume plan in tasks/plan.md
-and tasks/todo.md. Its R00-R03 increments passed independent review and selected
-package verification. It awaits owner acceptance; merge and installation are not
-authorized by build approval. Remaining voice interruption, reconnect, failure and timing
+requested draft plans for resume and the panel. The resume module passed R00-R03 review and selected-package verification.
+This branch owns the approved current-work panel plan in tasks/plan.md and
+tasks/todo.md, built after that dependency. The owner approved implementation
+with independent review and bounded correction passes. Merge and installation
+remain separate decisions. Remaining voice interruption, reconnect, failure and timing
 work stays in the existing voice plan; accepting the acknowledgement increment
 does not complete the full voice specification. The copied docking task list
 was complete before this branch replaced it, and remains in Git history.

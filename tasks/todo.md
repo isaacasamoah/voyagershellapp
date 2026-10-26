@@ -1,68 +1,58 @@
-# Tasks: return to a stopped conversation
+# Tasks: a panel focused on current work
 
-Status: owner approved build, 25 October 2026. The [plan](plan.md) owns design and commands; the
-[specification](../SPEC-conversation-resume.md) owns R1-R9. Completed docking tasks
-remain in Git history. The still-open voice tasks remain in the voice branch.
+Status: owner approved build, 25 October 2026. Resume R00-R03 passed review.
+Use one independent review, at most one corrective pass and another review per
+increment. Merge and installation remain separate decisions.
+The [plan](plan.md) owns design and commands; the
+[specification](../SPEC-current-work-panel.md) owns P1-P9. Old docking tasks remain
+in Git history; this does not overwrite or complete the voice task list.
 
-The owner approved an additional R01b corrective pass after the earlier review
-stop. Its independent re-review passed. The unexpected-exit regression now catches
-the former stale-settings behavior. R02 is next; no merge or installation is
-included in this build authorization.
+## P01: show each agent in the right group
 
-## R00: prove safe idle loading
+- [ ] Show Current work, Needs attention and collapsed Previous agents according
+  to the service observations. Preserve current actions and old-service warnings.
+- [ ] Exact-membership checks cover running with closed viewer, stopped, unknown,
+  external and removed-but-running records. No assignment or Fleet write occurs.
+- [ ] Prove a relevant wrong classification fails, inspect the real labels and
+  complete independent review. Covers P1/P5 and basic P6/P7.
 
-- [x] Show saved history and restrictive effective settings survive reopening the
-  same real Codex thread, with no new turn until an explicit instruction.
-- [x] Check saved-goal and missing-settings cases without changing their meaning.
-  Record the provider/version, setting map and known-different result.
-- [x] Complete Gate A, the transactional schema design and focused file map, then
-  complete independent review before product implementation. Stop if idle loading is unproved.
+## P02: reveal readable history within the available space
 
-## R01a: reliable lifecycle observations and verified settings
+- [ ] Expand Previous agents and removed records explicitly; show missing times,
+  saved details, event gaps and bounded history without starting anything.
+- [ ] Short and long lists fit the display. Local batches and Load more preserve
+  scroll/focus. Check keyboard, wheel and trackpad separately. Covers P2/P8/P9.
+- [ ] Reuse the maintained runner and existing event cursor. Keep safe text
+  rendering and a narrow desktop/preload call. Complete independent review.
 
-- [x] Save verified effective settings and provider provenance when a managed
-  runtime starts, preserving original launch and event history.
-- [x] Show live-owned, confirmed stopped and unknown states through list/detail,
-  including restart and legacy missing-settings cases. No Resume action yet.
-- [x] Pass boundary checks and independent review within the five-file source map.
+## Checkpoint P-A
 
-## R01b: resume through the owner service API
+- [ ] Classification and history behaviour pass the real-panel checks. Review
+  before connecting Resume; do not infer real process state from fake data.
 
-- [x] Record/admit one immutable request and generation atomically before spawning.
-  Start the same saved conversation idle and preserve history and verified settings.
-- [x] Confirm new owned runtime/capture/credentials while rejecting unsupported
-  records, stale generations and non-owner callers. Keep the viewer separate.
-- [x] Run focused boundary tests, real-provider corroboration and independent review.
-  Covers core R1/R5/R7/R9. Keep each test's purpose and file scope explicit.
+## P03: resume and open the same conversation
 
-## R02: resume and open through the CLI
+- [ ] After accepted conversation-resume integration, use one Resume ID and the
+  observed generation. Keep the same row through pending and completed states.
+- [ ] Refresh runtime observation before a separate Open. Double clicks, lost
+  replies and failed Open cannot start a second runtime or replay work. Covers P3/P4.
+- [ ] Use the shared real-provider/panel journey and focused action regression;
+  preserve the service's permission decision and complete independent review.
 
-- [x] Provide the owner command and same-request receipt lookup. Open only after
-  a fresh running observation. Verify the saved marker with a new explicit query.
-- [x] Demonstrate a failed Open and successful later Open on the same process.
-  Reopening a viewer must not create work or a second runtime. Covers R1/R6.
-- [x] Extend the maintained native runner, record actual app/service identities and
-  complete independent review. No separate feature-specific launcher.
+## P04: preserve useful context and keyboard focus
 
-## Checkpoint R-A
-
-- [x] Gate A and the complete owner resume/open journey pass without permission
-  increases, task replay or substitute conversations. Review before R03.
-
-## R03: preserve outcomes through races and disconnects
-
-- [x] Separate focused cases cover same-ID reuse/conflict, competing requests and
-  client disconnect with a continuing service. Covers R3/R4.
-- [x] Verify confirmed-stop restart, interrupted-service uncertainty, old-credential
-  refusal and old-event rejection without affecting unrelated processes. Covers
-  R2/R4/R7-R9. Historical completed receipts do not establish current liveness.
-- [x] Required checks, all R1-R9 package journeys and independent review pass.
+- [ ] Keep a worker visible with an accurate supervisor label when its captain is
+  absent. Never add another actionable captain row or change Fleet placement.
+- [ ] Disconnect/reconnect marks last-known rows and refreshes by identity without
+  duplicate actions. Keyboard focus remains useful after group/row changes.
+- [ ] Run P1-P9 in the selected package and record actual input coverage, exact
+  build identities, required checks and independent review. Covers remaining P6-P9.
 
 ## Final checkpoint
 
-- [x] Preserve schema migration/legacy-read evidence and the pre-migration backup
-  procedure. Missing legacy settings remain inspectable and cannot resume.
-- [x] Record complete test/helper inventory, disjoint exercised production ranges
-  and a relevant deliberately broken case that fails its check.
-- [x] Present results and remaining limits for owner acceptance. Do not install,
-  restart the main service, or build another capability from this planning request.
+- [ ] Every focused test has a single stated purpose and a failure it catches.
+  Remove overlap without weakening the real-panel journey.
+- [ ] Complete test/helper counts and disjoint exercised production ranges pass
+  the project's limit; record an appropriate deliberately broken comparison.
+- [ ] Present the result and remaining limits for owner acceptance. No new
+  dashboard, automatic record cleanup, permission changes or runtime rollout.
