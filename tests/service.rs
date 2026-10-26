@@ -224,7 +224,9 @@ impl Fixture {
                 .env("VOYAGER_VOICE_FOLLOWS_DOCK", voice)
                 .env(
                     "VOYAGER_CODEX_BIN",
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py"),
+                    std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").unwrap_or_else(|_| {
+                        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/worker_server.py").into()
+                    }),
                 )
                 .args([
                     "--state",
@@ -1210,7 +1212,7 @@ fn migration_version_boundary_preserves_data_after_failure_and_refuses_future_sc
     store
         .local(&session, "before", json!({"marker":"PRESERVED"}))
         .unwrap();
-    store.0.execute_batch("PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN name; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
+    store.0.execute_batch("DROP TABLE runtime_generations; PRAGMA user_version=0; ALTER TABLE sessions DROP COLUMN name; ALTER TABLE sessions DROP COLUMN removed_ms; ALTER TABLE sessions DROP COLUMN capture_generation;").unwrap();
     drop(store);
     assert!(Store::open(&path).is_err());
     let db = rusqlite::Connection::open(&path).unwrap();
@@ -1345,7 +1347,7 @@ fn version_two_names_move_to_sessions_without_changing_launch_inputs() {
         .unwrap();
     store
         .0
-        .execute_batch("ALTER TABLE sessions DROP COLUMN name; PRAGMA user_version=2;")
+        .execute_batch("DROP TABLE runtime_generations; ALTER TABLE sessions DROP COLUMN name; PRAGMA user_version=2;")
         .unwrap();
     let before = store.events(0).unwrap();
     drop(store);
@@ -1417,4 +1419,187 @@ fn viewer_choice_does_not_start_or_replace_a_background_runtime() {
     );
     f.call(json!({"op":"stop-instance","session_id":session}));
     f.halt();
+}
+
+#[test]
+fn lifecycle_observations_preserve_a_confirmed_stop_after_restart() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"runtime-evidence","name":"Saved agent","cwd":f.dir}));
+    let id = created["session_id"].clone();
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(
+        row["lifecycle"],
+        json!({"runtime":"running","runtime_generation":1})
+    );
+    f.call(json!({"op":"stop-instance","session_id":id}));
+    f.halt();
+    f.start();
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(
+        row["lifecycle"],
+        json!({"runtime":"stopped","runtime_generation":1})
+    );
+    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
+    let state: String = db
+        .query_row(
+            "SELECT state FROM runtime_generations WHERE session_id=?1",
+            [id.as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(state, "stopped");
+}
+
+#[test]
+fn external_registration_makes_no_runtime_ownership_claim() {
+    let mut f = Fixture::new();
+    f.start();
+    f.call(json!({"op":"register","thread_id":"live-thread"}));
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(row["lifecycle"]["runtime"], "external");
+    assert_eq!(row["lifecycle"]["runtime_generation"], Value::Null);
+}
+
+#[test]
+fn owned_start_saves_observed_settings_without_copying_thread_history() {
+    let mut f = Fixture::new();
+    fs::write(f.dir.join("verified-settings"), "1").unwrap();
+    f.start();
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"settings-evidence","name":"Settings agent","cwd":f.dir}));
+    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
+    let encoded: String = db
+        .query_row(
+            "SELECT settings FROM runtime_generations WHERE session_id=?1",
+            [created["session_id"].as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let saved: Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(saved["version"], 1);
+    assert_eq!(saved["provider_version"], "codex/0.164.0 fixture");
+    assert_eq!(saved["effective"]["model"], "fixture-model");
+    assert_eq!(saved["effective"]["sandbox"]["type"], "dangerFullAccess");
+    assert!(saved["effective"].get("thread").is_none());
+    f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
+}
+
+#[test]
+#[ignore = "Uses real Codex with a disposable background agent, no terminal input"]
+fn native_runtime_observations_retain_settings_after_confirmed_stop() {
+    assert!(std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").is_ok());
+    let evidence = PathBuf::from(std::env::var("VOYAGER_NATIVE_RESUME_EVIDENCE").unwrap());
+    fs::create_dir(&evidence).unwrap();
+    let mut f = Fixture::new();
+    f.start();
+    let start = Instant::now();
+    let created = f.call(json!({"op":"create","open":false,"kind":"codex","request_id":"native-observation","name":"Disposable native agent","cwd":f.dir}));
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(row["lifecycle"]["runtime"], "running");
+    assert_eq!(row["window"], "closed");
+    let db = rusqlite::Connection::open(f.dir.join("events.sqlite")).unwrap();
+    let encoded: String = db
+        .query_row(
+            "SELECT settings FROM runtime_generations WHERE session_id=?1",
+            [created["session_id"].as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let saved: Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(saved["effective"]["cwd"], f.dir.to_str().unwrap());
+    assert_eq!(saved["effective"]["approvalPolicy"], "never");
+    assert_eq!(saved["effective"]["sandbox"]["type"], "dangerFullAccess");
+    assert!(
+        saved["provider_version"]
+            .as_str()
+            .is_some_and(|s| s.contains("0.164.0"))
+    );
+    let ready_ms = start.elapsed().as_millis();
+    let stopped = f.call(json!({"op":"stop-instance","session_id":created["session_id"]}));
+    f.halt();
+    f.start();
+    let after = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(
+        after["lifecycle"],
+        json!({"runtime":"stopped","runtime_generation":1})
+    );
+    assert_eq!(after["id"], created["session_id"]);
+    fs::write(evidence.join("runtime-proof.json"), serde_json::to_vec_pretty(&json!({"service":env!("CARGO_BIN_EXE_voyager"),"provider":std::env::var("VOYAGER_NATIVE_RESUME_PROVIDER").unwrap(),"created":created,"settings":saved,"stopped":stopped,"after_restart":after,"ready_ms":ready_ms})).unwrap()).unwrap();
+}
+
+#[test]
+fn recorded_live_runtime_without_a_child_stays_unknown_after_restart() {
+    let mut f = Fixture::new();
+    let path = f.dir.join("events.sqlite");
+    let mut store = Store::open(&path).unwrap();
+    store
+        .begin_launch("lost-runtime", None, "/synthetic", None, None)
+        .unwrap();
+    let session = store
+        .register_worker("lost-runtime", "fixture", &metadata("old"), 1234)
+        .unwrap();
+    drop(store);
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    f.start();
+    let row = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(row["id"], session);
+    assert_eq!(
+        row["lifecycle"],
+        json!({"runtime":"unknown","runtime_generation":1})
+    );
+    assert_eq!(f.call(json!({"op":"status"}))["owns_agents"], false);
+}
+
+#[test]
+fn legacy_runtime_baselines_require_confirmed_stops_without_uncertain_work() {
+    let f = Fixture::new();
+    let path = f.dir.join("legacy-runtime.sqlite");
+    let mut store = Store::open(&path).unwrap();
+    let mut original = Vec::new();
+    for (launch, state, pending) in [
+        ("safe-stop", "stopped", None),
+        ("safe-exit", "exited", None),
+        ("pending-stop", "stopped", Some("pending")),
+        ("uncertain-exit", "exited", Some("uncertain")),
+        ("unverified-live", "running", None),
+    ] {
+        store
+            .begin_launch(launch, None, "/synthetic", None, None)
+            .unwrap();
+        let session = store
+            .register_worker(launch, "fixture", &metadata(launch), 1234)
+            .unwrap();
+        store.worker_state(launch, state).unwrap();
+        let receipt = json!({"session_id":session,"state":pending.unwrap_or("completed")});
+        store
+            .begin_operation(launch, &json!({"op":"create","original":true}), &receipt)
+            .unwrap();
+        original.push((
+            launch,
+            store.launch(launch).unwrap(),
+            store.operation(launch).unwrap(),
+        ));
+    }
+    let events = store.events(0).unwrap();
+    store
+        .0
+        .execute_batch("DROP TABLE runtime_generations; PRAGMA user_version=3;")
+        .unwrap();
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    let mut query = store.0.prepare("SELECT operation_id,generation,settings FROM runtime_generations ORDER BY operation_id").unwrap();
+    let rows: Vec<(String, i64, Option<String>)> = query
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![("safe-exit".into(), 0, None), ("safe-stop".into(), 0, None)]
+    );
+    for (launch, worker, operation) in original {
+        assert_eq!(store.launch(launch).unwrap(), worker);
+        assert_eq!(store.operation(launch).unwrap(), operation);
+    }
+    assert_eq!(store.events(0).unwrap(), events);
 }

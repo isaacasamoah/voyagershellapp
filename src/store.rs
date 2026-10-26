@@ -21,7 +21,7 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         let db = Connection::open(path)?;
         let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        ensure!(version <= 3, "unsupported database schema version");
+        ensure!(version <= 4, "unsupported database schema version");
         db.execute_batch(
             "PRAGMA foreign_keys=ON;
             PRAGMA journal_mode=DELETE;
@@ -129,6 +129,25 @@ impl Store {
         }
         let invalid: i64 = db.query_row("SELECT count(*) FROM sessions WHERE kind NOT IN ('codex','shell') OR (kind='codex' AND (rank IS NULL OR rank NOT IN ('admiral','commodore','captain','crew'))) OR (kind='shell' AND rank IS NOT NULL)", [], |r| r.get(0))?;
         ensure!(invalid == 0, "invalid instance kind or rank in database");
+        if version < 4 {
+            db.execute_batch(
+                "BEGIN IMMEDIATE;
+                CREATE TABLE runtime_generations (
+                    session_id TEXT NOT NULL REFERENCES sessions(id), generation INTEGER NOT NULL,
+                    operation_id TEXT NOT NULL UNIQUE, server TEXT NOT NULL,
+                    state TEXT NOT NULL, settings TEXT,
+                    PRIMARY KEY(session_id,generation));
+                CREATE UNIQUE INDEX runtime_exclusive ON runtime_generations(session_id)
+                    WHERE state IN ('starting','running','unknown','uncertain');
+                INSERT INTO runtime_generations
+                    SELECT session_id,0,launch_id,s.server,w.state,NULL FROM workers w
+                    JOIN sessions s ON s.id=w.session_id WHERE w.state IN ('stopped','exited')
+                    AND NOT EXISTS(SELECT 1 FROM operations o
+                      WHERE json_extract(o.receipt,'$.session_id')=s.id
+                      AND json_extract(o.receipt,'$.state') IN ('pending','uncertain'));
+                PRAGMA user_version=4; COMMIT;",
+            )?;
+        }
         Ok(Self(db))
     }
 
@@ -243,6 +262,18 @@ impl Store {
             "UPDATE sessions SET kind=?2,rank=CASE WHEN ?2='shell' THEN NULL ELSE 'crew' END,name=(SELECT name FROM workers WHERE workers.session_id=sessions.id) WHERE id=?1",
             params![id, metadata["kind"].as_str().unwrap_or("codex")],
         )?;
+        tx.execute(
+            "INSERT INTO runtime_generations VALUES (?1,1,?2,?3,'running',?4)",
+            params![
+                id,
+                launch,
+                server,
+                metadata
+                    .get("resume_settings")
+                    .filter(|v| v.is_object())
+                    .map(Value::to_string)
+            ],
+        )?;
         tx.commit()?;
         self.local(
             &id,
@@ -254,10 +285,35 @@ impl Store {
 
     pub fn worker_state(&self, launch: &str, state: &str) -> Result<()> {
         self.0.execute(
+            "UPDATE runtime_generations SET state=?2 WHERE operation_id=?1",
+            params![launch, state],
+        )?;
+        self.0.execute(
             "UPDATE workers SET state=?2 WHERE launch_id=?1",
             params![launch, state],
         )?;
         Ok(())
+    }
+
+    pub fn runtime_observation(&self, session: &str, live: bool, external: bool) -> Result<Value> {
+        let saved: Option<(i64, String)> = self.0.query_row(
+            "SELECT generation,state FROM runtime_generations WHERE session_id=?1 ORDER BY generation DESC LIMIT 1",
+            [session], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let state = if external {
+            "external"
+        } else if live {
+            "running"
+        } else if saved
+            .as_ref()
+            .is_some_and(|(_, s)| matches!(s.as_str(), "stopped" | "exited"))
+        {
+            "stopped"
+        } else if saved.as_ref().is_some_and(|(_, s)| s == "starting") {
+            "starting"
+        } else {
+            "unknown"
+        };
+        Ok(json!({"runtime":state,"runtime_generation":saved.map(|s|s.0)}))
     }
 
     pub fn native(&self, session: &str, server: &str) -> Result<String> {

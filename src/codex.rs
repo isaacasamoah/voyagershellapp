@@ -15,6 +15,7 @@ use tungstenite::{Message, WebSocket};
 
 pub struct Codex {
     pub peer_pid: u32,
+    pub user_agent: Option<String>,
     socket: WebSocket<UnixStream>,
     next_id: u64,
     failed: bool,
@@ -43,12 +44,17 @@ impl Codex {
         let mut this = Self {
             peer_pid: u32::try_from(peer.pid()).context("invalid native server PID")?,
             socket,
+            user_agent: None,
             next_id: 1,
             failed: false,
             pending: VecDeque::new(),
             replies: HashMap::new(),
         };
-        this.rpc("initialize", json!({"clientInfo":{"name":"voyager_shell","title":"Voyager Shell","version":"0.2.0"},"capabilities":{"experimentalApi":true}}))?;
+        let initialized = this.rpc("initialize", json!({"clientInfo":{"name":"voyager_shell","title":"Voyager Shell","version":"0.2.0"},"capabilities":{"experimentalApi":true}}))?;
+        this.user_agent = initialized["userAgent"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
         this.socket.send(Message::Text(
             json!({"method":"initialized"}).to_string().into(),
         ))?;

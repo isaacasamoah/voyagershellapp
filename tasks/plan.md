@@ -91,8 +91,10 @@ Acceptance: running requires a live owned child; confirmed stops remain stopped
 after restart; unknown ownership never becomes stopped or eligible. Original launch
 records and history remain unchanged. Verification: focused service-boundary cases
 for creation, confirmed stop, restart and legacy missing settings. Likely files:
-`src/store.rs`, `src/worker.rs`, `src/service.rs`, `tests/service.rs` and
-`tests/worker_server.py`. Scope: medium, one observable lifecycle/settings behaviour.
+`src/store.rs`, `src/worker.rs`, `src/service.rs`, `src/codex.rs`,
+`tests/service.rs` and `tests/worker_server.py`. The extra transport field retains
+the provider version returned by initialize, avoiding a second version process.
+Scope: four production files and two existing fixtures for one observable behaviour.
 Dependency: R00 and its independent review. No Resume action is exposed yet.
 
 ### R01b: resume one verified stopped conversation through the owner service API

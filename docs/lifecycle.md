@@ -311,3 +311,44 @@ Generated schemas identify available fields; only the opt-in run establishes the
 observed settings and idle behaviour above. Missing or incompatible settings,
 unsupported profiles and unverified workflow customizations must remain readable
 refusals in the eventual product.
+
+
+## Runtime observations and saved settings
+
+Schema version 4 adds `runtime_generations` without rewriting original workers,
+launch operations or events. A newly registered owned runtime starts at generation
+1. Verified stopped/exited legacy workers receive baseline 0 only when migration
+finds no pending or uncertain operation for their Vessel. This baseline alone does
+not establish that the settings needed for Resume exist.
+
+The owner list reports a `lifecycle` object separately from window and capture
+observations. Running requires the current service's live child. An external
+registration makes no ownership claim. A confirmed recorded stop survives restart;
+previously running records become unknown. Removing a registration does not change
+these process facts. This increment supplies observations, not a Resume action.
+
+Worker startup retains a versioned subset of the provider's effective response
+only when its required fields and ordinary field types are present. The native
+initialize response supplies provider-version provenance, avoiding another process
+just to ask for a version. Missing or unsupported settings leave the snapshot
+absent and do not prevent the existing new-agent flow. The snapshot contains no
+conversation content, credentials, instructions text or account information. Named
+profiles are not supported by this first snapshot format. Later Resume must validate
+recognized values and compatibility before use; saving an observation does not
+make it eligible by itself.
+
+The optional real-provider boundary check uses the existing service fixture and
+its normal owned-child cleanup. It creates one background Codex, records its list
+state/settings, explicitly stops it, and restarts only its disposable service.
+Run it with an authenticated provider and a fresh evidence directory:
+
+```sh
+VOYAGER_NATIVE_RESUME_PROVIDER=/absolute/path/to/codex \
+VOYAGER_NATIVE_RESUME_EVIDENCE=/tmp/NEW_OBSERVATION_EVIDENCE \
+  cargo test --locked --test service \
+  native_runtime_observations_retain_settings_after_confirmed_stop -- --exact --ignored
+```
+
+This is real service/API evidence, not a terminal, panel interaction or a working
+Resume journey. The later full-module application check must still use the shared
+desktop runner and the selected package.
