@@ -729,6 +729,8 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   flex-wrap: wrap;
 }
 .history-toolbar .instance-menu {
+  position: relative;
+  inset: auto;
   margin: 0;
 }
 .vessel-feedback {
@@ -773,7 +775,8 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   color: inherit;
 }
 .resume-action,
-#previous-more {
+#previous-more,
+#previous-back {
   font: inherit;
   font-size: 11px;
   border: 1px solid #7a9bac35;

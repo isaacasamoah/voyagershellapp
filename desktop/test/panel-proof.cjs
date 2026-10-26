@@ -20,6 +20,8 @@ exports.run = async (
     unregistered: [...document.querySelectorAll('#unregistered-sessions [data-key]')].map(n => n.dataset.key),
     previous: [...document.querySelectorAll('#previous-sessions [data-key]')].map(n => n.dataset.key),
     previousOpen: document.getElementById('previous-agents').open,
+    historyMenu: document.getElementById('menu-history').getBoundingClientRect().toJSON(),
+    historyToolbar: document.querySelector('.history-toolbar').getBoundingClientRect().toJSON(),
     count: document.getElementById('previous-toggle').textContent,
     text: document.getElementById('panel').textContent
   })`);
@@ -61,6 +63,9 @@ exports.run = async (
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.wait(snapshot, (s) => s.previousOpen);
+  const visibleHistory = await snapshot();
+  assert.ok(visibleHistory.historyMenu.top >= visibleHistory.historyToolbar.top);
+  assert.ok(visibleHistory.historyMenu.bottom <= visibleHistory.historyToolbar.bottom);
   await proof.pageClick(panelWin, `menu-${live.session_id}`);
   await proof.wait(
     () =>
