@@ -13,6 +13,39 @@ The current model/effort policy and YOLO launch default are owner-selected. Isaa
 broadly agreed with the compact presentation and specified no checkbox. The
 running app still uses the previous design.
 
+## Proposed follow-up: proactive connection recovery
+
+Approved by Isaac, 26 October 2026. The service behavior is owned by the
+[reconnection section](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
+This section supersedes the earlier automatic Needs attention placement for a
+previously managed Codex Vessel whose service connection was lost.
+
+- Keep that Vessel in Vessels while the service checks it. Show Reconnecting as
+  temporary progress. Do not require the owner to find it in another group first.
+- Successful verification returns the same Vessel to normal use. Preserve focus,
+  Fleet placement and the owner's current window and avatar arrangement.
+- A failed bounded check shows a readable Connection lost reason and Retry
+  connection. Retry invokes verification of the existing runtime, not Resume.
+  Disable duplicate requests while an attempt is active and announce progress.
+- Use Previous vessels and Resume after the service confirms runtime exit.
+  A failed connection alone must never imply stopped or enable a replacement.
+- Use Needs attention only for a specific problem with a supported user remedy.
+  Details can explain evidence; it is not itself a remedy for lost management.
+  Keep unavoidable system uncertainty readable without making the user responsible
+  for repairing a connection the application can check itself.
+- Show window state as unverified when the service has lost its viewer record.
+  Do not report closed until the native observation establishes that result.
+
+Keep the existing minimal, subtle look. Reuse the current row, secondary-menu,
+keyboard and error-feedback patterns. Put fallback Retry connection in the existing
+Vessel menu; add no dashboard, permanent recovery banner or confirmation dialog. This
+follow-up changes recovery and its presentation, not the separate requested
+name-only collapsed-row refinement or the retained free-undocking behavior.
+
+Verification uses the same service-loss journey as the owning Resume spec. Prove
+that recovery is automatic, that Retry connection works after a failed check,
+that no attention-only dead end remains, and that no new process or turn starts.
+
 ## Objective and scope
 
 The owner sees the agents they are using, can find previous conversations when needed, and can understand why an agent needs attention. Stopped agents no longer fill the main panel with grey buttons that do nothing. Hiding a row must not delete its history or change who manages the agent.
@@ -40,7 +73,8 @@ Apply the following classification in order. Show each Vessel only once as a row
 | The service confirms that a process it owns is running | Show the agent in Vessels whether its terminal window is open, minimised or closed. Keep the existing permitted Open, Background and Stop actions. Show a warning if event capture has a problem. |
 | Registration was removed, but the service confirms its managed process is still running | Show the agent in Vessels as Unregistered. Keep the existing permitted Open, Stop and Register again actions. Do not hide it in history or suggest that event capture continues. |
 | An external agent is registered and its event capture is connected | Show it in Vessels as External, with the supported read-only details and history. Do not offer actions reserved for processes Voyager manages or imply Voyager owns it. |
-| A managed agent's process state is unknown, an operation has no established outcome, or an external registration remains present but its capture is disconnected | Show it in Needs attention without requiring the owner to open history. Offer Inspect and explain the actual problem. Do not offer Resume until the service confirms it is allowed. |
+| A managed Codex Vessel loses its service connection | Apply the proposed recovery section above: check automatically, keep it in Vessels, and offer Retry connection after a failed bounded check. Do not offer Resume without confirmed exit. |
+| An operation has no established outcome, an external registration loses capture, or a runtime remains unverified outside the proposed recovery scope | Explain the actual problem. Needs attention requires a supported remedy; otherwise show the unresolved system state and available checks directly. Preserve uncertainty and do not offer Resume until the service confirms it is allowed. |
 | Exit is confirmed and the registration remains present | Show it in Previous vessels, collapsed by default. Offer details and history. Offer Resume only when the service allows it. |
 | Registration was removed and exit is confirmed, or an external registration was removed and Voyager owns no runtime for it | Show it in the Removed vessels view after the owner chooses Show removed vessels from the history menu. Keep history readable. Explicitly say that an external process's state is unverified. Do not silently register or resume it. |
 
@@ -98,7 +132,7 @@ Put a concise startup error on the affected Vessel row. Its details can retain
 the full provider error and operation identifier. Do not show raw error codes in
 the main list or place a Vessel-specific error above unrelated Vessels. A service
 connection failure still belongs at panel level. A known failed Resume leaves the
-Vessel stopped; an uncertain outcome belongs in Needs attention. Neither should
+Vessel stopped; an uncertain outcome retains its evidence and a supported next action. Neither should
 appear as a success. Keep the failure visible after refresh until the owner
 dismisses it or a later explicit operation supersedes it.
 
