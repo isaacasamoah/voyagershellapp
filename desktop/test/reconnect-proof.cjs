@@ -108,6 +108,14 @@ exports.run = async (
     await setExpanded(true, { x: 180, y: 100 });
     const activate = async () => {
       await refresh();
+      await wait(
+        () =>
+          panelWin.webContents.executeJavaScript(
+            `!document.querySelector('.instance-actions:popover-open') && document.body.dataset.arranging !== 'true' && !document.querySelector('[data-key="${id}"]')?.disabled`,
+          ),
+        Boolean,
+        'Previous panel action did not finish',
+      );
       const button = await panelWin.webContents.executeJavaScript(
         `document.querySelector('[data-key="${id}"]').id = 'reconnect-open'`,
       );
