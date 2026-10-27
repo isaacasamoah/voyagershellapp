@@ -121,7 +121,7 @@ async function run(context) {
     await input(['button', true]);
     await input(['button', false]);
   };
-  const pageClick = async (window, id) => {
+  const pageClick = async (window, id, { receiver = id } = {}) => {
     window.focus();
     if (!window.isFocused()) {
       await new Promise((resolve, reject) =>
@@ -135,7 +135,7 @@ async function run(context) {
     }
     await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
     await window.webContents.executeJavaScript(`
-      window.proofLastClick = { expected: ${JSON.stringify(id)}, received: null };
+      window.proofLastClick = { expected: ${JSON.stringify(receiver)}, received: null };
       document.addEventListener('click', event => {
         const target = event.target.closest('button') || event.target;
         window.proofLastClick.received = target.id;
@@ -151,7 +151,7 @@ async function run(context) {
       window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
       await delay(30);
       const ready = await window.webContents.executeJavaScript(
-        `document.getElementById(${JSON.stringify(id)}).contains(document.elementFromPoint(${point.x}, ${point.y}))`,
+        `document.getElementById(${JSON.stringify(receiver)}).contains(document.elementFromPoint(${point.x}, ${point.y}))`,
       );
       return ready ? point : null;
     }, 'Control did not settle at the pointer target');
