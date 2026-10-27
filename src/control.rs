@@ -15,13 +15,17 @@ use std::{
 };
 
 #[derive(Clone, PartialEq)]
-struct Process {
+pub(crate) struct Process {
     pid: u32,
     start: String,
 }
 
 impl Process {
-    fn read(pid: u32) -> Result<Self> {
+    pub(crate) fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    pub(crate) fn read(pid: u32) -> Result<Self> {
         let path = format!("/proc/{pid}");
         ensure!(
             fs::metadata(&path)?.uid() == Uid::effective().as_raw(),
@@ -55,10 +59,10 @@ impl Process {
         Ok(Self { pid, start })
     }
 
-    fn live(&self) -> bool {
+    pub(crate) fn live(&self) -> bool {
         Self::read(self.pid).is_ok_and(|p| p == *self)
     }
-    fn value(&self) -> Value {
+    pub(crate) fn value(&self) -> Value {
         json!({"pid":self.pid,"start":self.start})
     }
 }

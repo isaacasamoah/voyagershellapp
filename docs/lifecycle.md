@@ -574,3 +574,29 @@ packaged Resume journey pass. Arbitrarily fragmented WebSocket messages after th
 handshake remain an existing transport review limit; this result does not claim
 new absolute bounds for that broader case. The measured initial connection and
 handshake correction adds no native permission or workflow restriction.
+
+## Candidate follow-up: surviving native viewers
+
+The reconnect-viewer candidate uses a saved viewer operation as a discovery lead,
+not proof of ownership. In the existing recovery thread it checks the actual
+same-user terminal executable and process start, retains a Linux process handle,
+verifies its unique native window and one direct native client with the current
+runtime's exact executable and attach arguments. A changed identity, ambiguous
+client or failed display query leaves window state unknown. It does not start a
+viewer to hide an uncertain observation. Capture recovery can succeed independently
+of viewer discovery. The result is admitted only with the original current runtime
+and capture generation, alongside the existing recovery admission check.
+
+The viewer process is either the original Child or a checked existing process.
+The latter never fabricates a Child or signals a stored PID. Linux process-handle
+polling observes its exit without claiming it can reap a non-child. Explicit Stop
+continues through the existing managed runtime handle. Viewer focus and close use
+the existing native window checks and X11 requests. Dropping the viewer record
+neither stops the agent nor kills the surviving viewer.
+
+A successful discovery retains its actual viewer kind, so Open focuses that same
+window. A confirmed absent window permits ordinary Open to create a viewer for the
+same runtime. An unverified saved viewer remains unknown with a readable reason;
+it is not reported closed or silently duplicated. This is Fedora/X11 behavior,
+not evidence for native Wayland or another operating system. Native proving and
+independent review remain pending for this candidate.

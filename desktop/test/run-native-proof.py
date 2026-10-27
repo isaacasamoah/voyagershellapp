@@ -62,9 +62,16 @@ try:
                     info = call('attach-info', row['id'])
                     if info['pid'] not in owned:
                         owned[info['pid']] = os.pidfd_open(info['pid'])
+            closing = call('operation', request['close_viewer']) if request.get('close_viewer') else None
+            if closing:
+                windows = json.loads(subprocess.check_output([str(Path(exe).with_name('voyager-windows'))]))['windows']
+                assert any(w['id'] == closing['window_id'] and w['pid'] == closing['pid'] for w in windows)
             previous = service.pid
             service.kill()
             service.wait(timeout=10)
+            if closing:
+                subprocess.run(['xdotool', 'windowclose', str(closing['window_id'])], check=True, timeout=5)
+                time.sleep(.1)
             service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'restarted-service.log').open('w'), stderr=subprocess.STDOUT)
             control.unlink()
             (state / 'proof-service-restarted.json').write_text(json.dumps({'request': request['request'], 'before': previous, 'after': service.pid}))

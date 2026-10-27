@@ -4,7 +4,9 @@
 panel consumer. Spec and plan approved by Isaac, 26 October. The K1 background
 recovery implementation and its additional owner-approved correction passed
 fresh review with no Required finding. Earlier stopped reviews remain evidence.
-K2 and K3 are unstarted. Earlier C1–C3 completion remains in Git history.
+Isaac approved completing the remaining reconnect work before the small panel
+refinement on 27 October. K2 is now in progress on feat/reconnect-native-viewer;
+K3 remains unstarted. Avatar behavior is separate specification work. Earlier C1–C3 completion remains in Git history.
 
 The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
 [native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
@@ -19,9 +21,9 @@ results authorize no main merge, installation or owner runtime restart.
 
 ### R01: restore a verified managed-runtime connection
 
-- [ ] Add the child/checked-process alternative and automatic recovery of the current saved generation, without starting another runtime or requiring idle state.
-- [ ] Renew credentials at the current runtime's existing locator; restore capture and explicit managed controls under current policy.
-- [ ] Start with failing service regressions for service loss, connection loss and current-generation identity. Keep unrelated processes and native settings unchanged.
+- [x] Add the child/checked-process alternative and automatic recovery of the current saved generation, without starting another runtime or requiring idle state.
+- [x] Renew credentials at the current runtime's existing locator; restore capture and explicit managed controls under current policy.
+- [x] Start with failing service regressions for service loss, connection loss and current-generation identity. Keep unrelated processes and native settings unchanged.
 
 Likely owners: src/worker.rs, src/service.rs, src/authority.rs, tests/service.rs
 and the existing provider fixture if needed. Split a larger implementation into
@@ -29,9 +31,9 @@ small tasks within this same vertical journey rather than shipping a scaffold.
 
 ### R02: prove and review background recovery
 
-- [ ] Extend the maintained native runner with service restart ownership and a small reusable reconnect journey. Do not duplicate launcher or cleanup code.
+- [x] Extend the maintained native runner with service restart ownership and a small reusable reconnect journey. Do not duplicate launcher or cleanup code.
 - [ ] Prove same process/thread/runtime generation, fresh bound CLI context, continued active work, ordinary Open/Stop, and known-different refusal in disposable state.
-- [ ] Pass relevant checks, size inventory, fresh Rust/general review and at most one corrective pass plus re-review.
+- [x] Pass relevant checks, size inventory, fresh Rust/general review and at most one corrective pass plus re-review.
 
 Likely owners: desktop/test/run-native-proof.py, desktop/test/native-proof.cjs,
 one reconnect journey, and existing service tests. Depends on R01. This completes
@@ -92,3 +94,13 @@ owning lifecycle document. Depends on R06; completes K3.
 - [ ] All approved acceptance journeys pass on one selected package and bundled service.
 - [ ] All Required findings resolved within the approved correction limit; no check or constraint weakened.
 - [ ] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.
+
+## Current K2 evidence
+
+The saved-viewer regression first failed with closed instead of unknown, then
+passed after the candidate change. All ordinary Rust tests, ten reconnect cases,
+Clippy, 104 desktop tests and formatting pass. Native viewer modes have been added
+to the maintained reconnect journey, but no packaged K2 pass or independent review
+is claimed yet. The incomplete R02 ordinary-Open coverage is carried explicitly
+into K2, not marked proved by background-only evidence. Main and the owner's
+running trial remain untouched.

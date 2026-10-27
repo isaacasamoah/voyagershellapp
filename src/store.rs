@@ -503,6 +503,16 @@ impl Store {
         .transpose()
     }
 
+    pub(crate) fn viewer_receipt(&self, session: &str) -> Result<Option<Value>> {
+        let receipt: Option<String> = self.0.query_row(
+            "SELECT receipt FROM operations WHERE json_extract(receipt,'$.session_id')=?1 AND (json_type(receipt,'$.pid')='integer' OR json_extract(inputs,'$.op')='open') ORDER BY created_ms DESC,rowid DESC LIMIT 1",
+            [session], |row| row.get(0),
+        ).optional()?;
+        receipt
+            .map(|s| serde_json::from_str(&s).map_err(Into::into))
+            .transpose()
+    }
+
     pub fn begin_operation(&self, id: &str, inputs: &Value, receipt: &Value) -> Result<()> {
         self.0.execute(
             "INSERT INTO operations (id,inputs,receipt,created_ms,updated_ms,actor_session_id,actor_kind) VALUES (?1,?2,?3,?4,?4,?5,?6)",
