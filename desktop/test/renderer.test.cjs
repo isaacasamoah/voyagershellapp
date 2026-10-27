@@ -124,58 +124,79 @@ test('the real creation form resets Crew and hides rank for Bash', async () => {
   assert.equal(ui.calls[1].rank, null);
 });
 
-test('a rejected rank change keeps the same request on an explicit retry', async () => {
-  const ui = renderer();
-  const requests = [];
-  ui.api.rankInstance = async (...args) => {
-    requests.push(args);
-    return { error: 'Assignments would be invalid.' };
-  };
-  ui.update({
-    sessions: [
-      {
-        id: 'one',
-        name: 'Worker',
-        kind: 'codex',
-        cwd: '/project',
-        rank: 'crew',
-        ownership: 'managed',
-        worker_state: 'stopped',
-        lifecycle: { runtime: 'stopped' },
-      },
-    ],
-  });
-  const row = ui.nodes.get('previous-sessions').children[0];
-  const change = row
-    .querySelectorAll('button')
-    .find((button) => button.textContent === 'Change rank');
-  const select = row.querySelectorAll('select')[0];
-  select.value = 'captain';
-  await change.onclick();
-  assert.equal(ui.nodes.get('instance-error').textContent, '');
-  assert.equal(
-    row.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
-    'Assignments would be invalid.',
-  );
-  await change.onclick();
-  assert.equal(requests[0][2], requests[1][2]);
-  select.value = 'admiral';
-  await change.onclick();
-  assert.notEqual(requests[1][2], requests[2][2]);
-  vm.runInContext('lastRows = null; renderState(lastState)', ui.context);
-  const refreshed = ui.nodes.get('previous-sessions').children[0];
-  assert.equal(
-    refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
-    'Assignments would be invalid.',
-  );
-  refreshed
-    .querySelectorAll('button')
-    .find((node) => node.id === 'dismiss-one')
-    .onclick();
-  assert.equal(
-    refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').hidden,
-    true,
-  );
+test('direct choices apply once, restore refused values and retain their retry identity', async () => {
+  for (const [method, field, current, next, other] of [
+    ['rankInstance', 0, 'crew', 'captain', 'admiral'],
+    ['superviseInstance', 1, '', 'captain', 'admiral'],
+  ]) {
+    const ui = renderer();
+    let finish;
+    const requests = [];
+    ui.api[method] = (...args) => {
+      requests.push(args);
+      return requests.length === 1
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { error: 'Assignments would be invalid.' };
+    };
+    ui.update({
+      sessions: [
+        {
+          id: 'one',
+          name: 'Worker',
+          kind: 'codex',
+          cwd: '/project',
+          rank: 'crew',
+          ownership: 'managed',
+          worker_state: 'stopped',
+          lifecycle: { runtime: 'stopped' },
+        },
+      ],
+    });
+    const row = ui.nodes.get('previous-sessions').children[0];
+    assert.equal(
+      row.querySelectorAll('button').some((b) => /^Change (rank|assignment)$/.test(b.textContent)),
+      false,
+    );
+    const select = row.querySelectorAll('select')[field];
+    await select.onchange();
+    assert.equal(requests.length, 0);
+    select.value = next;
+    const pending = select.onchange();
+    assert.equal(select.disabled, true);
+    await select.onchange();
+    assert.equal(requests.length, 1);
+    finish({ error: 'Assignments would be invalid.' });
+    await pending;
+    assert.equal(select.disabled, false);
+    assert.equal(select.value, current);
+    assert.equal(ui.nodes.get('instance-error').textContent, '');
+    assert.equal(
+      row.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
+      'Assignments would be invalid.',
+    );
+    select.value = next;
+    await select.onchange();
+    assert.equal(requests[0][2], requests[1][2]);
+    select.value = other;
+    await select.onchange();
+    assert.notEqual(requests[1][2], requests[2][2]);
+    vm.runInContext('lastRows = null; renderState(lastState)', ui.context);
+    const refreshed = ui.nodes.get('previous-sessions').children[0];
+    assert.equal(
+      refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').textContent,
+      'Assignments would be invalid.',
+    );
+    refreshed
+      .querySelectorAll('button')
+      .find((node) => node.id === 'dismiss-one')
+      .onclick();
+    assert.equal(
+      refreshed.querySelectorAll('p').find((node) => node.id === 'feedback-one').hidden,
+      true,
+    );
+  }
 });
 
 test('existing fleets appear in creation and the selected fleet reaches the service action', async () => {

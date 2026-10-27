@@ -8,7 +8,12 @@ exports.run = async (
   { wait, pageClick, pageKey },
 ) => {
   let workerContext;
-  await rpc('rank', id, 'captain');
+  await refresh();
+  await pageClick(panelWin, `menu-${id}`);
+  await pageClick(panelWin, `rank-${id}`);
+  await pageKey(panelWin, 'Up');
+  await pageKey(panelWin, 'Return');
+  await wait(row, (r) => r.rank === 'captain', 'Rank choice did not apply');
   const worker = await rpc(
     'create',
     'shell',
@@ -16,8 +21,16 @@ exports.run = async (
     'Context worker',
     cwd,
     '--background',
-    '--supervisor',
-    id,
+  );
+  await refresh();
+  await pageClick(panelWin, `menu-${worker.session_id}`);
+  await pageClick(panelWin, `supervisor-${worker.session_id}`);
+  await pageKey(panelWin, 'End');
+  await pageKey(panelWin, 'Return');
+  await wait(
+    () => rpc('list'),
+    (rows) => rows.find((r) => r.id === worker.session_id).supervisor_id === id,
+    'Controller choice did not apply',
   );
   const fleet = randomUUID();
   await rpc('create-fleet', fleet, 'Context work');

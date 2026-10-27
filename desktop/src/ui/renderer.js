@@ -56,6 +56,7 @@ function runtimeLabel(session) {
   return 'Runtime unverified';
 }
 function disableServiceActions(container) {
+  for (const select of container.querySelectorAll('select')) select.disabled = true;
   for (const button of container.querySelectorAll('button'))
     if (!/^(menu|inspect|expand|dismiss)-/.test(button.id || '')) button.disabled = true;
 }
@@ -194,7 +195,7 @@ function renderState(value) {
     const row = element('div', '', 'instance-row');
     row.dataset.vessel = s.id;
     row.append(b);
-    const { menu, actions, addAction } = actionMenu(name, s.id, feedback);
+    const { menu, actions, addAction, addChoice } = actionMenu(name, s.id, feedback);
     const inspect = element('button', 'Details');
     inspect.id = `inspect-${s.id}`;
     inspect.setAttribute('aria-label', `Details for ${name}`);
@@ -235,11 +236,7 @@ function renderState(value) {
           authority.ranks.map((r) => [r, authority.rankName(r)]),
           s.rank,
         );
-        addAction(
-          'Change rank',
-          (request) => api.rankInstance(s.id, rank.value, request),
-          () => [rank.value],
-        );
+        addChoice(rank, `rank-${s.id}`, (value, request) => api.rankInstance(s.id, value, request));
       }
       const options = authority.supervisors(registered, s.kind, s.rank, s.id);
       const supervisor = choiceField(
@@ -251,10 +248,8 @@ function renderState(value) {
         ],
         s.supervisor_id || '',
       );
-      addAction(
-        'Change assignment',
-        (request) => api.superviseInstance(s.id, supervisor.value || null, request),
-        () => [supervisor.value],
+      addChoice(supervisor, `supervisor-${s.id}`, (value, request) =>
+        api.superviseInstance(s.id, value || null, request),
       );
     }
     if (s.recovery?.retry_available && s.removed_ms == null) {
@@ -533,8 +528,38 @@ function actionMenu(name, key, feedback = showError) {
     actions.append(button);
     return button;
   }
+  function addChoice(select, id, call) {
+    select.id = id;
+    let confirmed = select.value;
+    select.onchange = async () => {
+      if (select.disabled || lastState?.serviceError || select.value === confirmed) return;
+      const value = select.value;
+      const requestKey = JSON.stringify([key, id, value]);
+      if (!pendingActions.has(requestKey)) pendingActions.set(requestKey, crypto.randomUUID());
+      const request = pendingActions.get(requestKey);
+      select.disabled = true;
+      select.setAttribute('aria-busy', 'true');
+      try {
+        const result = await call(value, request);
+        if (result?.error) {
+          if (result.retry_with_new_request) pendingActions.delete(requestKey);
+          throw Error(result.error);
+        }
+        confirmed = value;
+        pendingActions.delete(requestKey);
+        if (actions.isConnected) actions.hidePopover();
+        feedback(result?.warning || '', request);
+      } catch (error) {
+        select.value = confirmed;
+        feedback(error.message, request);
+      } finally {
+        select.disabled = Boolean(lastState?.serviceError);
+        select.setAttribute('aria-busy', 'false');
+      }
+    };
+  }
   menu.append(summary, actions);
-  return { menu, actions, addAction };
+  return { menu, actions, addAction, addChoice };
 }
 function nameEditor(actions, current, save, feedback = showError) {
   const form = element('form', '', 'rename-form');
