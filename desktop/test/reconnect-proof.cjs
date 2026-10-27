@@ -101,6 +101,8 @@ exports.run = async (
       const observed = (await inventory()).find((w) => w.id === viewer.window_id);
       for (const key of ['x', 'y', 'width', 'height'])
         assert.equal(observed[key], viewerBounds[key]);
+      const focused = await rpc('open', id, 'xterm', '--request-id', 'reconnect-focus-existing');
+      assert.deepEqual([focused.pid, focused.window_id], [viewer.pid, viewer.window_id]);
     }
     await refresh();
     await setExpanded(true, { x: 180, y: 100 });
@@ -232,5 +234,6 @@ exports.run = async (
     readyMs,
     stopped,
     viewerRecovery,
+    unrelatedControl: control,
   };
 };
