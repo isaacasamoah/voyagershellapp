@@ -94,14 +94,22 @@ exports.run = async (
     assert.equal(failed.lifecycle.runtime, 'unknown');
     await refresh();
     await setExpanded(true, { x: 180, y: 100 });
-    const retryButton = await panelWin.webContents.executeJavaScript(`(() => {
-      const row = document.querySelector('[data-vessel="${id}"]');
-      if (!document.querySelector('#sessions').contains(row)) throw Error('Recovering Vessel left current Vessels');
-      const action = [...row.querySelectorAll('button')].find(b => b.textContent === 'Retry connection');
-      action.id = 'reconnect-retry';
-      action.addEventListener('click', () => queueMicrotask(() => window.reconnectProofRequest = action.dataset.request), { once: true });
-      return action.id;
-    })()`);
+    const retryButton = await wait(
+      async () => {
+        await refresh();
+        return panelWin.webContents.executeJavaScript(`(() => {
+        const row = document.querySelector('[data-vessel="${id}"]');
+        if (!row || !document.querySelector('#sessions').contains(row)) return null;
+        const action = [...row.querySelectorAll('button')].find(b => b.textContent === 'Retry connection');
+        if (!action) return null;
+        action.id = 'reconnect-retry';
+        action.addEventListener('click', () => queueMicrotask(() => window.reconnectProofRequest = action.dataset.request), { once: true });
+        return action.id;
+      })()`);
+      },
+      Boolean,
+      'Retry connection was not shown in current Vessels',
+    );
     await fs.writeFile(
       path.join(stateDir, 'proof-service-control.json'),
       JSON.stringify({ action: 'restore-endpoint', request: 'restore-existing-endpoint' }),
