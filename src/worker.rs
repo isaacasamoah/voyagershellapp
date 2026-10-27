@@ -180,7 +180,7 @@ impl Worker {
         operation: &str,
         context: &Path,
         deadline: Instant,
-        cancelled: &std::sync::atomic::AtomicBool,
+        cancelled: &std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<Self> {
         let server = record["server"]
             .as_str()
@@ -188,7 +188,11 @@ impl Worker {
         let native = record["native_thread_id"]
             .as_str()
             .context("native conversation missing")?;
-        let mut connection = Codex::connect_before(Path::new(server), deadline)?;
+        let mut connection = Codex::connect_cancellable(
+            Path::new(server),
+            deadline,
+            std::sync::Arc::clone(cancelled),
+        )?;
         ensure!(
             receipt["runtime_pid"].as_u64() == Some(u64::from(connection.peer_pid)),
             "native server process differs from the saved runtime"

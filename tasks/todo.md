@@ -1,17 +1,19 @@
 # Tasks: proactive recovery of existing Codex Vessels
 
 [Plan](plan.md). Owning spec: conversation-resume reconnect follow-up, with its
-panel consumer. Spec and plan approved by Isaac, 26 October. K1 is implemented but not accepted:
-one fresh review, one corrective pass and final review left the initial socket
-connection deadline and the full acceptance-code budget unresolved. K2 and K3
-are unstarted. Earlier C1–C3 completion remains in Git history.
+panel consumer. Spec and plan approved by Isaac, 26 October. The K1 background
+recovery implementation and its additional owner-approved correction passed
+fresh review with no Required finding. Earlier stopped reviews remain evidence.
+K2 and K3 are unstarted. Earlier C1–C3 completion remains in Git history.
 
-The frozen K1 build is available in [service-restart recovery](https://github.com/isaacasamoah/voyagershellapp/pull/55)
-and [native connection-loss recovery](https://github.com/isaacasamoah/voyagershellapp/pull/56).
-Both remain drafts. The final review's two Required findings stop this build
-sequence. Do not start another corrective build or a dependent slice without
-Isaac approving a further pass. The native legacy-runtime journey and ordinary
-checks passed, but they do not clear either outstanding gate.
+The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
+[native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
+[bounded initial connection and shared proof](https://github.com/isaacasamoah/voyagershellapp/pull/58).
+The two native journeys passed on the same selected package. Full acceptance is
+9,863 lines against 9,881 exercised production lines, including all 817 temporary
+helper lines. No threshold or assertion was weakened. Remaining native Open and
+surviving-viewer control coverage continues in the approved K2 journey. These
+results authorize no main merge, installation or owner runtime restart.
 
 ## K1: background Vessel recovers automatically
 

@@ -9,9 +9,13 @@ use std::{
     io,
     os::unix::net::UnixStream,
     path::Path,
+    sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant},
 };
 use tungstenite::{Message, WebSocket};
+
+mod check;
+use check::Check;
 
 pub struct Codex {
     pub peer_pid: u32,
@@ -19,35 +23,58 @@ pub struct Codex {
     socket: WebSocket<UnixStream>,
     next_id: u64,
     failed: bool,
-    deadline: Option<Instant>,
+    check: Option<Check>,
     pub pending: VecDeque<Value>,
     replies: HashMap<u64, Value>,
 }
 
 impl Codex {
     pub fn connect(path: &Path) -> Result<Self> {
-        Self::connect_with_deadline(path, None)
+        Self::connect_with_check(path, None)
     }
 
     pub fn connect_before(path: &Path, deadline: Instant) -> Result<Self> {
-        Self::connect_with_deadline(path, Some(deadline))
+        Self::connect_cancellable(path, deadline, Arc::new(AtomicBool::new(false)))
     }
 
-    fn connect_with_deadline(path: &Path, deadline: Option<Instant>) -> Result<Self> {
-        let stream = UnixStream::connect(path).context("connect to existing Codex socket")?;
+    pub fn connect_cancellable(
+        path: &Path,
+        deadline: Instant,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<Self> {
+        Self::connect_with_check(
+            path,
+            Some(Check {
+                deadline,
+                cancelled,
+            }),
+        )
+    }
+
+    fn connect_with_check(path: &Path, check: Option<Check>) -> Result<Self> {
+        let stream = match &check {
+            Some(check) => check.connect(path),
+            None => UnixStream::connect(path).map_err(Into::into),
+        }
+        .context("connect to existing Codex socket")?;
         let peer = getsockopt(&stream, sockopt::PeerCredentials)?;
         ensure!(
             peer.uid() == Uid::effective().as_raw(),
             "different-user Codex server"
         );
-        let timeout = deadline
-            .map(|at| at.saturating_duration_since(Instant::now()))
+        let timeout = check
+            .as_ref()
+            .map(Check::remaining)
+            .transpose()?
             .unwrap_or(Duration::from_secs(5))
             .min(Duration::from_secs(5));
         ensure!(!timeout.is_zero(), "native connection check timed out");
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
-        let (mut socket, _) = tungstenite::client("ws://localhost/", stream)?;
+        let mut socket = match &check {
+            Some(check) => check.handshake(stream)?,
+            None => tungstenite::client("ws://localhost/", stream)?.0,
+        };
         socket.set_config(|c| {
             c.max_message_size = Some(4 * 1024 * 1024);
             c.max_frame_size = Some(4 * 1024 * 1024);
@@ -61,7 +88,7 @@ impl Codex {
             user_agent: None,
             next_id: 1,
             failed: false,
-            deadline,
+            check,
             pending: VecDeque::new(),
             replies: HashMap::new(),
         };
@@ -79,7 +106,9 @@ impl Codex {
     pub fn rpc(&mut self, method: &str, params: Value) -> Result<Value> {
         let id = self.begin_rpc(method, params)?;
         let deadline = self
-            .deadline
+            .check
+            .as_ref()
+            .map(|check| check.deadline)
             .unwrap_or(Instant::now() + Duration::from_secs(8))
             .min(Instant::now() + Duration::from_secs(8));
         while Instant::now() < deadline {
@@ -91,9 +120,8 @@ impl Codex {
     }
 
     pub fn begin_rpc(&mut self, method: &str, params: Value) -> Result<u64> {
-        if let Some(deadline) = self.deadline {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            ensure!(!remaining.is_zero(), "native connection check timed out");
+        if let Some(check) = &self.check {
+            let remaining = check.remaining()?;
             self.socket
                 .get_mut()
                 .set_write_timeout(Some(remaining.min(Duration::from_secs(5))))?;
@@ -109,7 +137,7 @@ impl Codex {
     }
 
     pub(crate) fn finish_connection_check(&mut self) -> Result<()> {
-        self.deadline = None;
+        self.check = None;
         self.socket
             .get_mut()
             .set_write_timeout(Some(Duration::from_secs(5)))?;
