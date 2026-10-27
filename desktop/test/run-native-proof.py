@@ -87,8 +87,8 @@ try:
             if request.get('block_endpoint'):
                 selected = next(r for r in rows if r['id'] == request['block_endpoint'])
                 assert selected['ownership'] == 'managed' and selected['kind'] == 'codex'
-                original = Path(selected['server']).resolve()
-                assert original.is_relative_to(state)
+                original = Path(selected['server'])
+                assert original.parent.resolve().is_relative_to(state)
                 saved = original.with_suffix('.held')
                 original.rename(saved)
                 blocked_endpoint = (saved, original)

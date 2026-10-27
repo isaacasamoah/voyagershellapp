@@ -124,3 +124,27 @@ test('history orders known recorded activity first and uses identity to break ti
   );
   assert.equal(rows[0].id, 'z');
 });
+
+test('connection recovery stays current until exit is confirmed', () => {
+  const vessel = {
+    id: 'recover',
+    ownership: 'managed',
+    lifecycle: { runtime: 'unknown' },
+    recovery: { state: 'checking' },
+  };
+  const stopped = { ...vessel, id: 'stopped', lifecycle: { runtime: 'stopped' } };
+  const unverified = { ...vessel, id: 'unverified', recovery: null };
+  const groups = hierarchy.classify([vessel, stopped, unverified]);
+  assert.deepEqual(
+    groups.current.map((v) => v.id),
+    ['recover'],
+  );
+  assert.deepEqual(
+    groups.previous.map((v) => v.id),
+    ['stopped'],
+  );
+  assert.deepEqual(
+    groups.attention.map((v) => v.id),
+    ['unverified'],
+  );
+});
