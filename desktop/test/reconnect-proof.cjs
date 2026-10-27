@@ -95,19 +95,15 @@ exports.run = async (
     assert.equal(failed.lifecycle.runtime, 'unknown');
     await refresh();
     await setExpanded(true, { x: 180, y: 100 });
-    const retryButton = await wait(
-      async () => {
-        await refresh();
-        return panelWin.webContents.executeJavaScript(`(() => {
-        const row = document.querySelector('[data-vessel="${id}"]');
-        if (!row || !document.querySelector('#sessions').contains(row)) return null;
-        const action = [...row.querySelectorAll('button')].find(b => b.textContent === 'Retry connection');
-        if (!action) return null;
-        action.id = 'reconnect-retry';
-        action.addEventListener('click', () => queueMicrotask(() => window.reconnectProofRequest = action.dataset.request), { once: true });
-        return action.id;
-      })()`);
-      },
+    const retryButton = `retry-${id}`;
+    await wait(
+      () =>
+        panelWin.webContents.executeJavaScript(`(() => {
+      const button = document.getElementById('${retryButton}');
+      if (!button || !document.querySelector('#sessions').contains(button)) return false;
+      window.reconnectProofButton = button;
+      return true;
+    })()`),
       Boolean,
       'Retry connection was not shown in current Vessels',
     );
@@ -117,7 +113,7 @@ exports.run = async (
     retried = await wait(
       async () => {
         const request = await panelWin.webContents.executeJavaScript(
-          'window.reconnectProofRequest',
+          'window.reconnectProofButton.dataset.request',
         );
         return request ? rpc('operation', request) : null;
       },

@@ -252,7 +252,7 @@ function renderState(value) {
       );
     }
     if (s.recovery?.retry_available && s.removed_ms == null) {
-      addAction(
+      const retry = addAction(
         'Retry connection',
         async (request) => {
           announceVessel(`Checking the connection to ${name}.`);
@@ -269,6 +269,7 @@ function renderState(value) {
         },
         () => [s.lifecycle.runtime_generation],
       );
+      retry.id = `retry-${s.id}`;
     }
     if (s.recovery?.state === 'disconnected')
       row.append(
