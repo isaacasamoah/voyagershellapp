@@ -128,6 +128,11 @@ def handle(stream):
                           'reasoningEffort': r['params']['config']['model_reasoning_effort']}
                 result['thread']['cwd'] = str(Path(policy['VOYAGER_STATE']))
             elif method == 'thread/resume':
+                hold_reconnect = Path(policy['VOYAGER_STATE']) / 'hold-reconnect'
+                if not resume_preflight and hold_reconnect.exists():
+                    (hold_reconnect.parent / 'reconnect-pending').write_text('1')
+                    while hold_reconnect.exists():
+                        time.sleep(.01)
                 hold = Path(policy['VOYAGER_STATE']) / 'hold-resume'
                 if resume_preflight and hold.exists():
                     (hold.parent / 'resume-loaded').write_text('1')
@@ -151,6 +156,8 @@ def handle(stream):
                                   sandbox={'type': 'dangerFullAccess'}, activePermissionProfile={'id': r['params']['permissions'], 'extends': None})
                     if (Path(policy['VOYAGER_STATE']) / 'resume-setting-mismatch').exists():
                         result['model'] = 'different-model'
+            elif method == 'fixture/slow':
+                time.sleep(.4)
             elif method == 'thread/read':
                 result = {'thread': metadata()}
             elif method == 'thread/loaded/list':

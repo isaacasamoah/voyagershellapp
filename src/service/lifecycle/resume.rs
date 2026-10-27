@@ -197,6 +197,11 @@ impl Runtime {
             .context("resumed worker missing")?
             .attach()?["pid"]
             .clone();
+        receipt["process_identity"] = self
+            .workers
+            .get(session)
+            .context("resumed worker missing")?
+            .identity()?;
         receipt["effects"][0]["state"] = json!("confirmed");
         self.store.local(session,"conversation.resumed",json!({"request_id":id,"runtime_generation":receipt["runtime_generation"],"task_submitted":false}))?;
         receipt["event_seq"] = json!(self.store.0.last_insert_rowid());

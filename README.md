@@ -163,3 +163,11 @@ tmux and Pi without using them as Voyager's backend or copying their code.
 
 Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
 Reports of real workflows, failures and integration limits are welcome.
+
+
+The proactive reconnect increment is under verification on its working branch.
+It checks an existing managed Codex runtime after service or capture loss rather
+than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
+identity checks, native process limits and the opt-in proof. It does not restore
+an expired dock or submit work. Surviving-viewer and panel retry behavior remain
+separate follow-up slices until their own proof and review pass.

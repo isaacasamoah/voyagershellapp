@@ -505,3 +505,40 @@ runtimes, stop the service and wait for confirmed exit. Copy the closed
 `events.sqlite` to a private backup directory and retain the prior executable.
 Do not copy a live database file or treat an executable rollback as a schema
 rollback. A restore must preserve any newer history rather than overwrite it.
+
+
+## Reconnecting an existing managed Codex runtime
+
+The reconnect follow-up checks the latest runtime generation and its completed
+launch or Resume receipt. It never spawns a replacement or submits a turn. A
+background check connects to the saved same-user native socket and obtains the
+actual peer PID. Its process must match the receipt, the managed process group,
+the endpoint and the credential locator injected at launch. The native server
+must already have the recorded thread loaded. The subscription uses only
+threadId and excludeTurns, preserving current native settings and active work.
+
+New receipts retain observed process start identity and executable path. Older
+completed receipts are supported through the other checks, without inventing old
+start evidence. A Linux pidfd pins the checked process during admission and later
+exit observation. pidfd_open returns an owned descriptor, converted once after a
+successful syscall. Polling that descriptor observes exit without inventing a
+child exit code. Explicit Stop uses pidfd_send_signal with the process-group flag
+only after checking that the peer is its group leader. That flag requires Linux
+6.9; normal child launch keeps its existing path. Failure or cancellation drops
+the new connection and descriptor without signalling the existing process.
+
+Provider I/O runs outside the service loop. Initialization and every verification
+RPC share one absolute deadline. A cancelled or timed-out check retains its result
+receiver until its connection is relinquished, so a retry cannot overlap it. A
+registration change cancels subscription before it starts, or rejects the result
+at admission if that subscription was already pending. Admission rechecks registration,
+capture generation and the current runtime record, then records a capture gap and
+advances capture identity while retaining runtime generation. Same-service loss
+retains its owned child and credential. A service restart renews credentials at
+the current runtime operation's existing private locator. The file is written to
+a private temporary path and renamed atomically. Old credentials and temporary
+dock grants stay invalid. Reconnection neither opens a viewer nor restores a dock.
+
+The shared native proof has a reconnect journey. Its outer runner retains orphaned
+disposable provider children, restarts only its own service and cleans up through
+anchored process handles. It never uses the owner's existing Vessel as a fixture.

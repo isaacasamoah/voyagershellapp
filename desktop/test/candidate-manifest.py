@@ -9,6 +9,8 @@ def command(*args):
     return subprocess.check_output(args, cwd=root, text=True).strip()
 files = [p for folder in ['desktop/src', 'desktop/test', 'src', 'tests'] for p in (root / folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts]
 files += [root / f for f in ['Cargo.lock', 'desktop/package-lock.json', 'target/debug/voyager', 'target/debug/voyager-windows', 'desktop/node_modules/electron/dist/electron']]
+if os.environ.get('VOYAGER_PROOF_SEED_SERVICE'):
+    files.append(Path(os.environ['VOYAGER_PROOF_SEED_SERVICE']).resolve())
 packaged = Path(os.environ['VOYAGER_PROOF_APP']).resolve() if os.environ.get('VOYAGER_PROOF_APP') else None
 if packaged:
     files += [packaged, packaged.parent / 'build.json']
