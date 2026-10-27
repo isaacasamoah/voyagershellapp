@@ -39,6 +39,13 @@ a worker's captain is absent from the filtered list. Routine successful state
 belongs in Details, while progress, errors and missing responsibility context
 remain visible when needed.
 
+Opening a three-dot menu must put its controls and any Rename input in front of
+the avatar. The owner must be able to select Rename, type and save without moving
+the avatar. Keep the panel usable for the whole menu interaction, including
+keyboard use. Closing or dismissing the menu restores ordinary window ordering
+without moving the avatar or panel, changing docking or reopening a closed menu.
+This is a window-ordering correction, not a new Rename flow.
+
 Refresh must retain useful keyboard focus and keep an open details view tied to
 the same Vessel. Preserve history scroll position and the existing focus fallback
 when a whole group closes. Details remain readable while the service is offline,
@@ -48,8 +55,8 @@ registration, assignments or Fleet placement.
 
 Measure panel size from rendered content through the existing ResizeObserver.
 Keep long details readable within the display bounds and existing scroll areas.
-Do not estimate height from a Vessel count. No avatar or docking change is part
-of this refinement.
+Do not estimate height from a Vessel count. Apart from menu window ordering,
+this refinement changes neither avatar placement nor docking behavior.
 
 ### Refinement acceptance journeys
 
@@ -60,6 +67,7 @@ of this refinement.
 | N3 | Refresh, sorting and a change between current and previous lists preserve useful focus and keep the details view associated with the correct Vessel. History scrolling and menu keyboard access remain usable. |
 | N4 | Pending operations, failed actions, missing-supervisor context and service loss remain understandable. Status remains accessible without relying on color, and viewing stale details never enables an unavailable lifecycle action. |
 | N5 | Long names and paths, short and long history lists, and narrow or short displays remain readable and keyboard usable. Rendered content determines panel size within the display limit. Existing history batching, Fleet stacks and docking remain usable. |
+| N6 | With the avatar overlapping a menu location, open the three-dot menu and complete Rename by pointer and keyboard without moving the avatar. Menu controls stay in front throughout editing. Dismissal restores ordinary ordering and changes no window position or docking state. |
 
 Use existing renderer tests for deterministic behavior and the maintained native
 panel journey for real interaction and layout. Demonstrate that the baseline
