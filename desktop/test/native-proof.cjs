@@ -141,9 +141,6 @@ async function run(context) {
         window.proofLastClick.received = target.id;
       }, { once: true, capture: true });
     `);
-    await window.webContents.executeJavaScript(
-      `document.getElementById(${JSON.stringify(id)}).scrollIntoView({block:'nearest',inline:'nearest'})`,
-    );
     const point = await stable(async () => {
       const point = await window.webContents.executeJavaScript(`(() => {
         const element = document.getElementById(${JSON.stringify(id)});
