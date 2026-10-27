@@ -158,7 +158,12 @@ impl Runtime {
                         let cancellation = Arc::clone(&cancelled);
                         thread::spawn(move || {
                             let result = Worker::recover(&record, &receipt, &operation, &context, deadline, &cancellation).map(|worker| {
-                                let viewer = check_viewer.then(|| worker.attach().and_then(|attachment| crate::viewer::recover(saved_viewer.as_ref(), &attachment)).unwrap_or_else(|error| crate::viewer::Recovery::Unknown(error.to_string())));
+                                let viewer = check_viewer.then(|| {
+                                    let result = worker.attach().and_then(|attachment| {
+                                        crate::viewer::recover(saved_viewer.as_ref(), &attachment)
+                                    });
+                                    result.unwrap_or_else(|error| crate::viewer::Recovery::Unknown(error.to_string()))
+                                });
                                 (worker, viewer)
                             });
                             let _ = sender.send(result);

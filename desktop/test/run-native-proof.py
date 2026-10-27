@@ -41,6 +41,10 @@ service = subprocess.Popen([seed, '--state', str(state), 'serve'], env=env, stdo
 app = None
 verdict = None
 cleanup = []
+control_process = None
+if os.environ.get('VOYAGER_PROOF_RECONNECT_VIEWER'):
+    control_process = subprocess.Popen(['/usr/bin/sleep', '600'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env['VOYAGER_PROOF_CONTROL_PID'] = str(control_process.pid)
 try:
     deadline = time.monotonic() + 10
     while not (state / 'service.sock').exists() and time.monotonic() < deadline:
@@ -108,6 +112,9 @@ finally:
             cleanup.append(result)
     cleanup.append(clean('stop-service', lambda: call('stop')))
     clean('wait-service', lambda: service.wait(timeout=15))
+    if control_process:
+        control_process.terminate()
+        clean('unrelated-control', lambda: control_process.wait(timeout=5))
     for pid, handle in owned.items():
         try:
             signal.pidfd_send_signal(handle, signal.SIGKILL, None, 4)

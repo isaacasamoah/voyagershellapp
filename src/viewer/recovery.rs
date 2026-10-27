@@ -72,6 +72,14 @@ pub(crate) fn recover(saved: Option<&Value>, attachment: &Value) -> Result<Recov
         .and_then(|n| u32::try_from(n).ok())
         .filter(|pid| *pid > 0)
         .context("saved viewer has no established process identity")?;
+    if let Some(window) = saved["window_id"]
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+    {
+        if !terminal::exists(window)? {
+            return Ok(Recovery::Closed);
+        }
+    }
     match fs::metadata(format!("/proc/{pid}")) {
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Recovery::Closed),

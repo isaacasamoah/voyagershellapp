@@ -505,7 +505,7 @@ impl Store {
 
     pub(crate) fn viewer_receipt(&self, session: &str) -> Result<Option<Value>> {
         let receipt: Option<String> = self.0.query_row(
-            "SELECT receipt FROM operations WHERE json_extract(receipt,'$.session_id')=?1 AND (json_type(receipt,'$.pid')='integer' OR json_extract(inputs,'$.op')='open') ORDER BY created_ms DESC,rowid DESC LIMIT 1",
+            "SELECT receipt FROM operations WHERE json_extract(receipt,'$.session_id')=?1 AND (json_type(receipt,'$.pid')='integer' OR json_extract(inputs,'$.op')='open') AND NOT (json_extract(receipt,'$.state')='partial' AND json_type(receipt,'$.pid') IS NULL AND COALESCE(json_array_length(json_extract(receipt,'$.effects')),-1)=0) ORDER BY created_ms DESC,rowid DESC LIMIT 1",
             [session], |row| row.get(0),
         ).optional()?;
         receipt
