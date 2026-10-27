@@ -79,9 +79,8 @@ input must target verified process and PTY identity, never desktop keyboard focu
 
 ## Workspace and working documents
 
-The primary checkout tracks `main`. The historical prototype branch is
-`experiment/private-harness-voice` in `.worktrees/harness-voice`. Integration and
-packaging use separate task worktrees. Rust checks are defined in CONTRIBUTING.md;
+The primary checkout tracks `main`. Integration and packaging use separate task
+worktrees. Rust checks are defined in CONTRIBUTING.md;
 Electron commands are in desktop/package.json.
 
 Linux packaging is owned by `desktop/scripts/package-linux.cjs`; its account-local
