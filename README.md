@@ -175,7 +175,7 @@ an expired dock or submit work. Surviving-viewer and panel retry behavior remain
 separate follow-up slices until their own proof and review pass.
 
 
-The surviving-terminal follow-up is in [draft PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59).
+The surviving-terminal follow-up is merged in [PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59).
 It verifies and reuses the original viewer, retains its viewer choice, and keeps
 unverified windows distinct from confirmed closure. The corrective pass resolves
 the two Rust findings. Both native viewer journeys passed on the same package,
@@ -190,5 +190,7 @@ separate decisions.
 The current retry branch adds owner-only Retry connection for an existing Codex
 Vessel after automatic checks finish. It shares automatic verification and saved
 request results, and keeps recovering Vessels visible in the panel. Automated
-checks pass; packaged native proving and independent review remain pending.
+checks, four packaged native journeys and final independent re-review pass. The
+[Retry connection PR](https://github.com/isaacasamoah/voyagershellapp/pull/60) remains
+unmerged for owner inspection.
 It does not resolve the separately deferred intermittent native voice startup.
