@@ -204,7 +204,7 @@ exports.run = async (
   );
   let stopRequest;
   if (viewerMode) {
-    const previousSeq = (await events()).at(-1)?.seq || 0;
+    const previousSeq = (await events()).at(-1)?.sequence || 0;
     await setExpanded(true, { x: 180, y: 100 });
     await refresh();
     await pageClick(panelWin, `menu-${id}`);
@@ -214,11 +214,12 @@ exports.run = async (
     await pageClick(panelWin, 'reconnect-stop');
     const closed = await wait(events, (items) =>
       items.some(
-        (e) => e.seq > previousSeq && e.type === 'interface.closed' && e.payload.runtime_stopped,
+        (e) =>
+          e.sequence > previousSeq && e.type === 'interface.closed' && e.payload.runtime_stopped,
       ),
     );
     stopRequest = closed.find(
-      (e) => e.seq > previousSeq && e.type === 'interface.closed' && e.payload.runtime_stopped,
+      (e) => e.sequence > previousSeq && e.type === 'interface.closed' && e.payload.runtime_stopped,
     ).payload.request_id;
   }
   const stopped = viewerMode
