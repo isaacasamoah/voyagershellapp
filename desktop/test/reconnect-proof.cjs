@@ -156,7 +156,7 @@ exports.run = async (
     await setExpanded(true);
     const voice = await wait(
       () => rpc('status'),
-      (status) => status.voice?.target === id && status.voice.state === 'ready',
+      (status) => status.voice?.target === id && status.voice.state === 'on',
       'Recovered terminal did not acquire native voice',
       20000,
     );
