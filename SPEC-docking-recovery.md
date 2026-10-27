@@ -86,25 +86,10 @@ Registration alone does not prove process ownership. Do not send input based on 
 
 The owner approved undocking when another window covers the target and the local timing targets. Test the failure cases described here, but do not claim they all occurred in the original incident. The evidence does not establish that sequence.
 
-## Source finding, 27 October 2026: rejected dock moves the panel
+## Follow-up: avatar behavior
 
-Isaac again observed an unsupported-terminal drop show the expected refusal but
-pull the panel to the avatar's new location. A free drop had previously left the
-panel in place. His latest choice remains to allow the avatar to sit freely away
-from the panel.
-
-Source inspection found a matching path in desktop/src/main.cjs. refuseDock
-chooses a saved dockOrigin only when binding already exists. A refusal before
-attachment therefore calls restoreFloating with no origin. That calls
-setExpanded with no anchor; placePanel then positions the panel relative to the
-avatar. The ordinary empty-desktop drop calls undock instead and does not make
-that restoration call. This explains a concrete behavioral difference in source;
-no new live reproduction or corrective build has run.
-
-Review a focused correction that preserves the panel's prior bounds when a dock
-is refused, retains the readable refusal and permits the avatar's existing free
-placement. Preserve the separately accepted return-to-panel behavior when an
-already docked terminal closes. Prove unsupported-terminal rejection and empty-
-desktop drop as different cases, including hidden and visible panel states. Menu
-overlap is a separate window-ordering requirement in the current-work-panel spec.
-This finding does not start a docking build or expand the active panel task list.
+The reported rejected-dock panel movement and menu obstruction now belong to the
+separate [avatar behavior draft](SPEC-avatar-behavior.md), as Isaac requested on
+27 October 2026. It records the source finding and preserves free placement and
+the accepted terminal-close return behavior. No new docking build is authorized
+by this reference.

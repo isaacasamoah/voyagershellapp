@@ -39,12 +39,10 @@ a worker's captain is absent from the filtered list. Routine successful state
 belongs in Details, while progress, errors and missing responsibility context
 remain visible when needed.
 
-Opening a three-dot menu must put its controls and any Rename input in front of
-the avatar. The owner must be able to select Rename, type and save without moving
-the avatar. Keep the panel usable for the whole menu interaction, including
-keyboard use. Closing or dismissing the menu restores ordinary window ordering
-without moving the avatar or panel, changing docking or reopening a closed menu.
-This is a window-ordering correction, not a new Rename flow.
+Avatar placement and menu overlap belong to the separate
+[avatar behavior draft](SPEC-avatar-behavior.md). They are not part of this small
+panel refinement. The reported stale window-action label remains an investigation
+note below, not an approved additional panel build slice.
 
 Selecting a different Rank or Supervisor applies that selection through the
 existing service action. Use the existing Controller terminology for Bash where
@@ -53,14 +51,6 @@ unchanged selection sends nothing. Show pending or failed changes with the
 Vessel, avoid duplicate submissions and return the control to the confirmed value
 when the service refuses a change. Do not let the renderer grant authority or
 expand the service's permitted assignments.
-
-While a menu remains open, update its window actions from fresh observations.
-An open terminal offers Run in background according to the existing semantics;
-a backgrounded Vessel offers its supported bring-forward or Open action. An open
-window can be behind other windows, so foreground focus alone must not decide
-whether the terminal is backgrounded. Preserve readable unavailable or unverified
-state instead of inventing a successful transition. Keep Rename drafts, keyboard
-focus and pending operation identity intact while those controls update.
 
 Refresh must retain useful keyboard focus and keep an open details view tied to
 the same Vessel. Preserve history scroll position and the existing focus fallback
@@ -71,8 +61,7 @@ registration, assignments or Fleet placement.
 
 Measure panel size from rendered content through the existing ResizeObserver.
 Keep long details readable within the display bounds and existing scroll areas.
-Do not estimate height from a Vessel count. Apart from menu window ordering,
-this refinement changes neither avatar placement nor docking behavior.
+Do not estimate height from a Vessel count. This refinement changes neither avatar placement nor docking behavior.
 
 ### Refinement acceptance journeys
 
@@ -83,9 +72,7 @@ this refinement changes neither avatar placement nor docking behavior.
 | N3 | Refresh, sorting and a change between current and previous lists preserve useful focus and keep the details view associated with the correct Vessel. History scrolling and menu keyboard access remain usable. |
 | N4 | Pending operations, failed actions, missing-supervisor context and service loss remain understandable. Status remains accessible without relying on color, and viewing stale details never enables an unavailable lifecycle action. |
 | N5 | Long names and paths, short and long history lists, and narrow or short displays remain readable and keyboard usable. Rendered content determines panel size within the display limit. Existing history batching, Fleet stacks and docking remain usable. |
-| N6 | With the avatar overlapping a menu location, open the three-dot menu and complete Rename by pointer and keyboard without moving the avatar. Menu controls stay in front throughout editing. Dismissal restores ordinary ordering and changes no window position or docking state. |
 | N7 | Selecting a new rank or supervisor applies once without another Change button. Unchanged selections do nothing. Pending and refused changes remain understandable, with confirmed values restored after refusal and service policy unchanged. |
-| N8 | Keep a menu open while the terminal opens, closes or runs in background through another control. Its available window actions follow fresh observations without losing a Rename draft or focus. Repeat after reopening the menu and after service loss. |
 
 Use existing renderer tests for deterministic behavior and the maintained native
 panel journey for real interaction and layout. Demonstrate that the baseline

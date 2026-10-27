@@ -76,3 +76,16 @@ Follow Specify, Plan, Tasks and Implement for each capability in the approved or
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
 Human-facing research and project navigation can link to these repository documents. Private incident logs, transcripts and account-local evidence remain outside committed source. Do not maintain a second editable specification elsewhere.
+
+## Selected follow-up order, 27 October 2026
+
+Isaac approved finishing the current reconnect plan first, including surviving
+terminal recovery and retry. Then build the small current-work-panel refinement:
+name and rank with the existing status dot, metadata in menu Details, and direct
+Rank/Supervisor selections without Change buttons. The reconnect task files stay
+active until that work completes. Panel planning then becomes active on its own
+branch. This resolves the earlier plan-location question without dropping tasks.
+
+Avatar behavior is separated into [its own specification draft](SPEC-avatar-behavior.md)
+for review. The stale window-action report remains an investigation note. Neither
+silently expands the approved small panel build.
