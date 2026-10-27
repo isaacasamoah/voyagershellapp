@@ -154,16 +154,21 @@ test('direct choices apply once, restore refused values and retain their retry i
         },
       ],
     });
-    const row = ui.nodes.get('previous-sessions').children[0];
+    let row = ui.nodes.get('previous-sessions').children[0];
     assert.equal(
       row.querySelectorAll('button').some((b) => /^Change (rank|assignment)$/.test(b.textContent)),
       false,
     );
-    const select = row.querySelectorAll('select')[field];
+    let select = row.querySelectorAll('select')[field];
     await select.onchange();
     assert.equal(requests.length, 0);
     select.value = next;
     const pending = select.onchange();
+    assert.equal(select.disabled, true);
+    await select.onchange();
+    vm.runInContext('lastRows = null; renderState(lastState)', ui.context);
+    row = ui.nodes.get('previous-sessions').children[0];
+    select = row.querySelectorAll('select')[field];
     assert.equal(select.disabled, true);
     await select.onchange();
     assert.equal(requests.length, 1);

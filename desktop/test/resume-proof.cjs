@@ -10,6 +10,7 @@ exports.run = async (
   { rpc, stateDir, refresh, getState, panelWin, setExpanded },
   { wait, delay, pageClick, pageKey },
 ) => {
+  const read = panelWin.webContents.executeJavaScript.bind(panelWin.webContents);
   const panel = process.env.VOYAGER_PROOF_JOURNEY === 'panel-resume';
   const configProof = process.env.VOYAGER_PROOF_CURRENT_CONFIG === '1';
   const cwd = path.join(stateDir, 'resume-project');
@@ -116,7 +117,7 @@ exports.run = async (
       await setExpanded(true, { x: 180, y: 100 });
       await refresh();
       await pageClick(panelWin, 'previous-toggle');
-      const compact = await panelWin.webContents.executeJavaScript(`(() => {
+      const compact = await read(`(() => {
         const row = document.getElementById('resume-${id}').closest('[data-vessel]');
         const resume = document.getElementById('resume-${id}').getBoundingClientRect();
         const menu = document.getElementById('menu-${id}').getBoundingClientRect();
@@ -131,7 +132,7 @@ exports.run = async (
         path.join(stateDir, 'compact-resume.png'),
         (await panelWin.webContents.capturePage()).toPNG(),
       );
-      await panelWin.webContents.executeJavaScript(`
+      await read(`
         window.resumeControl = document.getElementById('resume-${id}');
         window.resumeLabels = [];
         window.resumeFocus = [];
@@ -145,28 +146,22 @@ exports.run = async (
         }).observe(document.getElementById('sessions'), {childList:true,subtree:true});
       `);
       await pageClick(panelWin, `resume-${id}`);
-      const request = await panelWin.webContents.executeJavaScript(
-        'window.resumeControl.dataset.request',
-      );
+      const request = await read('window.resumeControl.dataset.request');
       resumed = await wait(
         () => rpc('operation', request),
         (r) => r.state === 'completed',
       );
       await wait(row, (r) => r.window === 'open');
-      assert.ok(
-        await panelWin.webContents.executeJavaScript(
-          "window.resumeLabels.some(label => label.includes('Resuming'))",
-        ),
-      );
+      assert.ok(await read("window.resumeLabels.some(label => label.includes('Resuming'))"));
 
       assert.ok(
-        await panelWin.webContents.executeJavaScript(
+        await read(
           `window.resumeFocus.some(entry => entry.state.includes('Resuming') && entry.control === 'menu-${id}')`,
         ),
         'Pending Resume keeps focus on its Vessel menu',
       );
       assert.ok(
-        await panelWin.webContents.executeJavaScript(
+        await read(
           "document.getElementById('vessel-status')?.getAttribute('role') === 'status' && document.getElementById('vessel-status')?.getAttribute('aria-live') === 'polite' && window.resumeFocus.some(entry => entry.announcement === 'Resuming Resume proof.')",
         ),
         'Resume is announced through the persistent live status',
@@ -237,23 +232,15 @@ exports.run = async (
     let failedRequest = 'resume-failed-open';
     if (panel) {
       await pageClick(panelWin, `menu-${id}`);
-      await panelWin.webContents.executeJavaScript(
-        `window.openControl = document.getElementById('open-${id}')`,
-      );
+      await read(`window.openControl = document.getElementById('open-${id}')`);
       await pageClick(panelWin, `open-${id}`);
-      await wait(() =>
-        panelWin.webContents.executeJavaScript(
-          `document.getElementById('feedback-${id}').textContent`,
-        ),
-      );
-      failedRequest = await panelWin.webContents.executeJavaScript(
-        'window.openControl.dataset.request',
-      );
+      await wait(() => read(`document.getElementById('feedback-${id}').textContent`));
+      failedRequest = await read('window.openControl.dataset.request');
     } else await assert.rejects(rpc('open', id, 'xterm', '--request-id', failedRequest));
     if (panel) {
       await pageKey(panelWin, 'Escape');
       await refresh();
-      const feedback = await panelWin.webContents.executeJavaScript(
+      const feedback = await read(
         `({local:document.getElementById('feedback-${id}').textContent,global:document.getElementById('instance-error').textContent})`,
       );
       assert.ok(feedback.local);
@@ -261,15 +248,13 @@ exports.run = async (
       await pageClick(panelWin, `menu-${id}`);
       await pageClick(panelWin, `inspect-${id}`);
       assert.ok(
-        await panelWin.webContents.executeJavaScript(
+        await read(
           `document.getElementById('agent-details').textContent.includes(${JSON.stringify(failedRequest)})`,
         ),
       );
       await pageClick(panelWin, 'history-close');
       await pageClick(panelWin, `menu-${id}`);
-      await panelWin.webContents.executeJavaScript(
-        `window.openControl = document.getElementById('open-${id}')`,
-      );
+      await read(`window.openControl = document.getElementById('open-${id}')`);
     }
     const failedOpen = await rpc('operation', failedRequest);
     assert.equal(failedOpen.state, 'partial');
@@ -281,26 +266,21 @@ exports.run = async (
     let opened;
     if (panel) {
       await wait(
-        () =>
-          panelWin.webContents.executeJavaScript(`document.getElementById('open-${id}').disabled`),
+        () => read(`document.getElementById('open-${id}').disabled`),
         (disabled) => !disabled,
       );
       await pageClick(panelWin, `open-${id}`);
-      const request = await panelWin.webContents.executeJavaScript(
-        'window.openControl.dataset.request',
-      );
+      const request = await read('window.openControl.dataset.request');
       assert.notEqual(request, failedRequest);
       opened = await wait(
         () => rpc('operation', request),
         (r) => r.state === 'completed',
       );
       await wait(
-        () => panelWin.webContents.executeJavaScript('window.openControl.disabled'),
+        () => read('window.openControl.disabled'),
         (disabled) => !disabled,
       );
-      openFeedback = await panelWin.webContents.executeJavaScript(
-        `document.getElementById('feedback-${id}').textContent`,
-      );
+      openFeedback = await read(`document.getElementById('feedback-${id}').textContent`);
       assert.ok(!openFeedback || openFeedback.startsWith('Terminal opened, but'), openFeedback);
     } else opened = await rpc('open', id, 'xterm', '--request-id', 'resume-open');
     const attachment = await attached(opened, current.server);
