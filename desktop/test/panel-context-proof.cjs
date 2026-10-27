@@ -28,6 +28,19 @@ exports.run = async (
     await panelWin.webContents.executeJavaScript("document.getElementById('previous-agents').open")
   )
     await pageClick(panelWin, 'previous-toggle');
+  const names = () =>
+    panelWin.webContents.executeJavaScript(
+      `[...document.querySelectorAll('#fleets .session-name')].filter(n => n.getClientRects().length).map(n => n.textContent)`,
+    );
+  assert.deepEqual(await names(), ['Resume proof']);
+  await pageClick(panelWin, `expand-${id}`);
+  assert.deepEqual(await names(), ['Resume proof', 'Context worker']);
+  await fs.writeFile(
+    path.join(stateDir, 'panel-resume.png'),
+    (await panelWin.webContents.capturePage()).toPNG(),
+  );
+  await pageClick(panelWin, `expand-${id}`);
+  assert.deepEqual(await names(), ['Resume proof']);
   await panelWin.webContents.executeJavaScript(`
     window.focusJourney = [];
     document.addEventListener('focusin', event => window.focusJourney.push({id:event.target.id, tag:event.target.tagName, vessel:event.target.closest('[data-vessel]')?.dataset.vessel}));
