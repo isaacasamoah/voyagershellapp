@@ -8,6 +8,7 @@ let lastRows;
 let creating = false;
 let currentSessions = [];
 const pendingActions = new Map();
+const activeChoices = new Set();
 const resumeViewers = new Map();
 const vesselMessages = new Map();
 const expandedVessels = new Set();
@@ -530,6 +531,8 @@ function actionMenu(name, key, feedback = showError) {
   }
   function addChoice(select, id, call) {
     select.id = id;
+    select.disabled = activeChoices.has(id);
+    select.setAttribute('aria-busy', String(select.disabled));
     let confirmed = select.value;
     select.onchange = async () => {
       if (select.disabled || lastState?.serviceError || select.value === confirmed) return;
@@ -537,6 +540,7 @@ function actionMenu(name, key, feedback = showError) {
       const requestKey = JSON.stringify([key, id, value]);
       if (!pendingActions.has(requestKey)) pendingActions.set(requestKey, crypto.randomUUID());
       const request = pendingActions.get(requestKey);
+      activeChoices.add(id);
       select.disabled = true;
       select.setAttribute('aria-busy', 'true');
       try {
@@ -553,8 +557,10 @@ function actionMenu(name, key, feedback = showError) {
         select.value = confirmed;
         feedback(error.message, request);
       } finally {
-        select.disabled = Boolean(lastState?.serviceError);
-        select.setAttribute('aria-busy', 'false');
+        activeChoices.delete(id);
+        const current = $(id) || select;
+        current.disabled = Boolean(lastState?.serviceError);
+        current.setAttribute('aria-busy', 'false');
       }
     };
   }
