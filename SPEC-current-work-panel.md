@@ -46,6 +46,22 @@ keyboard use. Closing or dismissing the menu restores ordinary window ordering
 without moving the avatar or panel, changing docking or reopening a closed menu.
 This is a window-ordering correction, not a new Rename flow.
 
+Selecting a different Rank or Supervisor applies that selection through the
+existing service action. Use the existing Controller terminology for Bash where
+applicable. Remove the separate Change rank and Change assignment buttons. An
+unchanged selection sends nothing. Show pending or failed changes with the
+Vessel, avoid duplicate submissions and return the control to the confirmed value
+when the service refuses a change. Do not let the renderer grant authority or
+expand the service's permitted assignments.
+
+While a menu remains open, update its window actions from fresh observations.
+An open terminal offers Run in background according to the existing semantics;
+a backgrounded Vessel offers its supported bring-forward or Open action. An open
+window can be behind other windows, so foreground focus alone must not decide
+whether the terminal is backgrounded. Preserve readable unavailable or unverified
+state instead of inventing a successful transition. Keep Rename drafts, keyboard
+focus and pending operation identity intact while those controls update.
+
 Refresh must retain useful keyboard focus and keep an open details view tied to
 the same Vessel. Preserve history scroll position and the existing focus fallback
 when a whole group closes. Details remain readable while the service is offline,
@@ -68,6 +84,8 @@ this refinement changes neither avatar placement nor docking behavior.
 | N4 | Pending operations, failed actions, missing-supervisor context and service loss remain understandable. Status remains accessible without relying on color, and viewing stale details never enables an unavailable lifecycle action. |
 | N5 | Long names and paths, short and long history lists, and narrow or short displays remain readable and keyboard usable. Rendered content determines panel size within the display limit. Existing history batching, Fleet stacks and docking remain usable. |
 | N6 | With the avatar overlapping a menu location, open the three-dot menu and complete Rename by pointer and keyboard without moving the avatar. Menu controls stay in front throughout editing. Dismissal restores ordinary ordering and changes no window position or docking state. |
+| N7 | Selecting a new rank or supervisor applies once without another Change button. Unchanged selections do nothing. Pending and refused changes remain understandable, with confirmed values restored after refusal and service policy unchanged. |
+| N8 | Keep a menu open while the terminal opens, closes or runs in background through another control. Its available window actions follow fresh observations without losing a Rename draft or focus. Repeat after reopening the menu and after service loss. |
 
 Use existing renderer tests for deterministic behavior and the maintained native
 panel journey for real interaction and layout. Demonstrate that the baseline
@@ -284,3 +302,14 @@ Use the service's observations, preserve history and explain why an action is un
 Do not delete records to reduce clutter, treat a closed terminal window as a stopped agent, move Fleets while filtering rows, or let the renderer grant permissions.
 
 The approved first UI uses Vessels, Needs attention and Previous vessels. Previous vessels uses the panel's available space, internal scrolling and small batches rather than a fixed 50-record batch. Check the batch sizing and scrolling interaction in the real panel during implementation. Full transcript search, recovery of native conversations and restoration of removed records remain deferred. The revised Resume eligibility rules apply to older records: missing historic settings alone do not block Resume, while missing identity or confirmed-stop evidence still does. Keep history readable when an operation is unavailable.
+
+## Source finding, 27 October 2026: stale window actions in an open menu
+
+Isaac intermittently observed Bring forward after the terminal was already open.
+A later attempt did not reproduce it. Source inspection found that renderState
+in desktop/src/ui/renderer.js records incoming state but returns before rebuilding
+rows whenever openMenus is nonempty. Window action labels are chosen from the
+row's earlier window observation. This is a concrete stale-menu path to test,
+not proof that it caused every reported occurrence. A wrong service window
+observation could also produce a wrong action and must be distinguished during
+proving. N8 covers keeping the menu accurate without discarding active input.
