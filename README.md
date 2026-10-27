@@ -180,6 +180,8 @@ It verifies and reuses the original viewer, retains its viewer choice, and keeps
 unverified windows distinct from confirmed closure. The corrective pass resolves
 the two Rust findings. Both native viewer journeys passed on the same package,
 but another run of that package could not confirm native voice startup. A passing
-repeat does not explain the failure. Final review therefore retains a Required
-acceptance concern, and dependent retry/panel work is stopped under the approved
-review limit. Main and installed applications have not been replaced.
+repeat does not explain the failure. Final review retained that acceptance concern. Isaac subsequently accepted viewer
+recovery on 27 October and explicitly deferred the voice investigation, requesting
+merge followed by retry and the small panel changes. The failed receipt remains
+evidence and no voice fix is claimed. Installation and owner-app restart remain
+separate decisions.

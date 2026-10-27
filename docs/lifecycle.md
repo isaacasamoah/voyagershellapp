@@ -603,3 +603,10 @@ including UI controls and native voice startup, but an earlier run of that packa
 had an uncertain native voice-start outcome. The cause remains unconfirmed after
 an unchanged passing repeat. Final review retains this Required acceptance concern.
 No reliable native voice-start claim or rollout approval follows from these results.
+
+
+Isaac accepted this viewer recovery on 27 October after reviewing the walkthrough
+and explicitly deferred the intermittent native voice-start investigation. The
+recorded uncertain outcome is unchanged. This named decision permits the next
+connection-retry slice; it does not authorize automatic native shortcut replay,
+longer deadlines or a voice-readiness claim.

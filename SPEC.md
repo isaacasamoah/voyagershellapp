@@ -9,15 +9,18 @@ This branch implements surviving-terminal recovery within the approved reconnect
 plan. The earlier background reconnect correction remains its base. The two Rust
 findings from the first viewer review are resolved. The same corrected package
 has passing surviving-window and closed-during-outage journeys, but one native
-voice-start failure remains unexplained after a passing repeat. Final review
-retains that Required acceptance concern. The one corrective pass is spent.
+voice-start failure remains unexplained after a passing repeat. Final review retained that Required acceptance concern after the one corrective
+pass. The later owner decision below records the named deferral.
 
-Do not begin the dependent retry slice or the later small panel changes until
-Isaac decides the next step. Keep the existing reconnect plan and task list active.
-The later panel work contains only compact name/rank/status rows with metadata in
-Details, and direct rank/assignment dropdown actions. Avatar behavior has a separate
-specification draft outside this build. No merge, installation or owner-app restart
-has been performed. [Draft PR and current review state](https://github.com/isaacasamoah/voyagershellapp/pull/59).
+Isaac reviewed the walkthrough on 27 October, accepted viewer recovery with the
+native voice-start failure explicitly deferred, and requested merge followed by
+retry and the small panel changes. This supersedes the earlier stop for that
+named acceptance concern. The failure remains recorded and is not claimed fixed.
+Keep the reconnect plan active for K3. The later panel work contains compact
+name/rank/status rows with metadata in Details and direct rank/assignment dropdown
+actions. Avatar behavior remains a separate specification draft. Installation
+and an owner-app restart are not part of this merge decision.
+[Accepted viewer recovery](https://github.com/isaacasamoah/voyagershellapp/pull/59).
 
 ## Purpose and terminology
 

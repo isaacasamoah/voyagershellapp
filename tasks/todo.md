@@ -5,9 +5,11 @@ panel consumer. Spec and plan approved by Isaac, 26 October. The K1 background
 recovery implementation and its additional owner-approved correction passed
 fresh review with no Required finding. Earlier stopped reviews remain evidence.
 Isaac approved completing the remaining reconnect work before the small panel
-refinement on 27 October. K2 reached final re-review on feat/reconnect-native-viewer. Both initial Rust
-findings are resolved, but an unexplained native voice-start failure remains
-Required acceptance work. The corrective pass is spent. K3 remains unstarted. Avatar behavior is separate specification work. Earlier C1–C3 completion remains in Git history.
+refinement on 27 October. K2 reached final re-review, which resolved both original Rust findings and
+retained the intermittent native voice-start concern. Isaac accepted the viewer
+recovery on 27 October and explicitly deferred that voice investigation. This
+named acceptance decision permits merge and K3; it does not claim the voice fault
+is fixed. K3 remains unstarted. Earlier C1–C3 completion remains in Git history.
 
 The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
 [native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
@@ -54,8 +56,8 @@ lifecycle tests. Depends on K1.
 ### R04: prove and review viewer recovery
 
 - [x] Use the same reconnect journey with a surviving viewer and one closed during the outage. Verify exact native identities and no automatic viewer creation.
-- [ ] Drive background/Open, a new dock and voice attachment, then Stop on the real candidate; confirm the unrelated control process stays untouched.
-- [ ] Pass checks, size inventory and fresh review, with one corrective pass and re-review at most.
+- [x] Drive background/Open, a new dock and voice attachment, then Stop on the real candidate; confirm the unrelated control process stays untouched. Both passing journeys and the intermittent voice failure are retained.
+- [x] Complete checks, size inventory, one corrective pass and final re-review. Both Rust findings are resolved. Isaac accepted K2 with the remaining native voice-start concern explicitly deferred on 27 October.
 
 Likely owners: the existing reconnect journey and shared native actions, plus the
 owning lifecycle documentation. Depends on R03; completes K2.
@@ -96,28 +98,35 @@ owning lifecycle document. Depends on R06; completes K3.
 - [ ] All Required findings resolved within the approved correction limit; no check or constraint weakened.
 - [ ] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.
 
-## K2 final review stop, 27 October
+## K2 accepted with a deferred follow-up, 27 October
 
-[Draft PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59) contains the
-viewer recovery and its permitted corrective pass. Both initial Rust defects are
-resolved. Three independent negative controls discriminate their regressions.
-All ordinary Rust tests, strict Clippy, ten reconnect cases, 104 desktop tests and
-formatting pass. GitHub checks passed on the tested implementation revision.
+Isaac reviewed the [build walkthrough](https://github.com/isaacasamoah/voyagershellapp/pull/59),
+noted the intermittent native voice-start failure and explicitly chose to address
+it later. He requested merging the accepted work and proceeding to retry and the
+small panel changes. That decision supersedes the earlier acceptance stop for
+this named issue only. The independent review and failing receipt remain evidence.
+No native voice fix or general relaxation of the review budget is claimed.
+
+Both original Rust findings are resolved. Three independent negative controls
+discriminate their regressions. All ordinary Rust tests, strict Clippy, ten
+reconnect cases, 104 desktop tests and formatting pass. The tested implementation
+and documentation revisions passed GitHub checks.
 
 The same packaged app and bundled service passed surviving-window and
 closed-during-outage journeys, including original runtime/conversation identity,
 viewer position, service Open, panel Open/Background/Stop, native voice startup
 and an unrelated sleep process left alive. Cleanup is confirmed. The R02 ordinary
-Open coverage carried into K2 is now proved. These successful observations do not
-close the full K2 acceptance gate.
-
-An earlier closed-window run of the same package has a genuine uncertain native
-voice-start receipt. The unchanged passing repeat does not explain or fix it.
-Final re-review retains this as Required acceptance work under R04. Stop K3 and
-panel implementation under the approved one-correction limit. No further product
-build, merge, installation or owner-app restart is authorized by this report.
+Open coverage carried into K2 is proved. An earlier run's native voice-start
+receipt remains uncertain despite the unchanged passing repeat.
 
 The final inventory counts 9,275 maintained and 1,149 temporary helper lines,
 10,424 combined, against 10,449 exercised production lines. The 25-line margin
 passes without dropping prior helpers or weakening assertions. The canonical
 Obsidian walkthrough links both reviews, exact inventory and native evidence.
+
+Deferred reference: investigate intermittent native voice startup in a newly
+opened terminal. Preserve its uncertain receipt; do not replay the shortcut or
+claim the failure resolved. This is not an additional executable K3 task. K3
+retries connection verification, not native voice toggles or agent work.
+
+Merge is requested. Installation and owner-app restart remain separate decisions.
