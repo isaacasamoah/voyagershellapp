@@ -119,6 +119,13 @@ async function run(context) {
       );
     }
     await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
+    await window.webContents.executeJavaScript(`
+      window.proofLastClick = { expected: ${JSON.stringify(id)}, received: null };
+      document.addEventListener('click', event => {
+        const target = event.target.closest('button') || event.target;
+        window.proofLastClick.received = target.id;
+      }, { once: true, capture: true });
+    `);
     await window.webContents.executeJavaScript(
       `document.getElementById(${JSON.stringify(id)}).scrollIntoView({block:'nearest',inline:'nearest'})`,
     );
@@ -155,6 +162,7 @@ async function run(context) {
   let result;
   let failure;
   let cleanup;
+  let screenshotError;
   try {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
@@ -163,6 +171,14 @@ async function run(context) {
     );
   } catch (error) {
     failure = error;
+    try {
+      await fs.writeFile(
+        path.join(directory, 'failure.png'),
+        (await context.panelWin.webContents.capturePage()).toPNG(),
+      );
+    } catch (error) {
+      screenshotError = error.message;
+    }
   }
   try {
     pointer.stdin.end();
@@ -185,6 +201,12 @@ async function run(context) {
     candidate: context.getState?.().candidate,
     result,
     cleanup,
+    screenshotError,
+    clickFailure: failure
+      ? await context.panelWin.webContents
+          .executeJavaScript('window.proofLastClick')
+          .catch((error) => ({ error: error.message }))
+      : undefined,
     dockFailure: failure
       ? {
           reason: context.getState?.().dockError,
