@@ -185,6 +185,12 @@ async function run(context) {
     candidate: context.getState?.().candidate,
     result,
     cleanup,
+    dockFailure: failure
+      ? {
+          reason: context.getState?.().dockError,
+          attempt: context.getState?.().dockAttempts.at(-1),
+        }
+      : undefined,
     error: failure?.stack,
   });
   if (failure) throw failure;

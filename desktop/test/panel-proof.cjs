@@ -49,7 +49,6 @@ exports.run = async (
     ),
     'Agent name was squeezed into an unreadable column',
   );
-  const before = await rpc('events');
   await fs.writeFile(
     path.join(stateDir, 'panel-before.png'),
     (await panelWin.webContents.capturePage()).toPNG(),
@@ -59,47 +58,82 @@ exports.run = async (
   const visibleHistory = await snapshot();
   assert.ok(visibleHistory.historyMenu.top >= visibleHistory.historyToolbar.top);
   assert.ok(visibleHistory.historyMenu.bottom <= visibleHistory.historyToolbar.bottom);
-  await proof.pageClick(panelWin, `menu-${live.session_id}`);
-  await proof.wait(
-    () =>
-      panelWin.webContents.executeJavaScript("document.querySelectorAll(':popover-open').length"),
-    (count) => count === 1,
-    'Actions menu did not open before the disconnect check',
+  const fleet = '00000000-0000-4000-8000-000000000001';
+  await rpc('create-fleet', fleet, 'Offline controls');
+  await panelWin.webContents.executeJavaScript(
+    `window.voyager.onState(s => { if (s.serviceError) window.offlineUpdates++; });`,
   );
-  const socket = path.join(stateDir, 'service.sock');
-  const hiddenSocket = path.join(stateDir, 'service-hidden.sock');
-  await fs.rename(socket, hiddenSocket);
-  try {
+  for (const location of ['none', fleet]) {
+    await rpc('move-vessel', live.session_id, location);
+    await proof.wait(async () => {
+      await refresh();
+      return panelWin.webContents.executeJavaScript(
+        `document.querySelector('[data-key="${live.session_id}"]').closest('#sessions, #fleets').id === '${location === fleet ? 'fleets' : 'sessions'}'`,
+      );
+    });
+    await panelWin.webContents.executeJavaScript('window.offlineUpdates = 0');
+    const before = await rpc('events');
+    await proof.pageClick(panelWin, `menu-${live.session_id}`);
+    await proof.wait(
+      () =>
+        panelWin.webContents.executeJavaScript("document.querySelectorAll(':popover-open').length"),
+      (count) => count === 1,
+      'Actions menu did not open before the disconnect check',
+    );
+    const socket = path.join(stateDir, 'service.sock');
+    const hiddenSocket = path.join(stateDir, 'service-hidden.sock');
+    await fs.rename(socket, hiddenSocket);
+    try {
+      await refresh();
+      await proof.wait(
+        () =>
+          panelWin.webContents.executeJavaScript(`({
+      disabled: document.querySelector('[data-key="${live.session_id}"]').disabled,
+      label: document.querySelector('[data-key="${live.session_id}"]').getAttribute('aria-label'),
+      open: document.querySelectorAll(':popover-open').length,
+      createDisabled: document.getElementById('create').disabled && document.getElementById('create-fleet').disabled,
+      readingAvailable: !document.getElementById('inspect-${live.session_id}').disabled && !document.getElementById('menu-${live.session_id}').disabled,
+      fleetDisabled: document.getElementById('fleet-${fleet}').disabled,
+      updates: window.offlineUpdates
+    })`),
+        (s) =>
+          s.disabled &&
+          s.label.includes('Last known') &&
+          s.open === 0 &&
+          s.createDisabled &&
+          s.readingAvailable &&
+          s.fleetDisabled &&
+          s.updates >= 2,
+        'Open menu kept stale controls available after disconnect',
+      );
+    } finally {
+      await fs.rename(hiddenSocket, socket);
+    }
     await refresh();
     await proof.wait(
       () =>
-        panelWin.webContents.executeJavaScript(`({
-      disabled: document.querySelector('[data-key="${live.session_id}"]').disabled,
-      label: document.querySelector('[data-key="${live.session_id}"]').getAttribute('aria-label'),
-      open: document.querySelectorAll(':popover-open').length
-    })`),
-      (s) => s.disabled && s.label.includes('Last known') && s.open === 0,
-      'Open menu kept stale controls available after disconnect',
+        panelWin.webContents.executeJavaScript(
+          `!document.querySelector('[data-key="${live.session_id}"]').disabled && !document.querySelector('[data-key="${live.session_id}"]').getAttribute('aria-label').includes('Last known')`,
+        ),
+      Boolean,
+      'Reconnect did not refresh the existing row',
     );
-  } finally {
-    await fs.rename(hiddenSocket, socket);
+    const after = await rpc('events');
+    assert.equal(after.cursor, before.cursor);
   }
-  await refresh();
-  await proof.wait(
-    () =>
-      panelWin.webContents.executeJavaScript(
-        `document.querySelector('[data-key="${live.session_id}"]').disabled`,
-      ),
-    (disabled) => !disabled,
-    'Reconnect did not refresh the existing row',
-  );
-  const after = await rpc('events');
-  assert.equal(after.cursor, before.cursor);
-  const previous = [];
-  for (let i = 0; i < 20; i++) {
+  await rpc('move-vessel', live.session_id, 'none');
+  await rpc('remove-fleet', fleet);
+  await proof.wait(async () => {
+    await refresh();
+    return panelWin.webContents.executeJavaScript(`!document.getElementById('fleet-${fleet}')`);
+  });
+  const previousCount = await panelWin.webContents.executeJavaScript(`(() => {
+    const list = document.getElementById('previous-sessions');
+    return Math.ceil(parseFloat(list.style.maxHeight) / list.firstElementChild.getBoundingClientRect().height) * 2;
+  })()`);
+  for (let i = 0; i < previousCount; i++) {
     const agent = await make(`History ${i}`);
     await rpc('stop-instance', agent.session_id);
-    previous.push(agent.session_id);
   }
   await rpc('stop-instance', removed.session_id);
   await refresh();
@@ -116,7 +150,7 @@ exports.run = async (
   })`);
   await proof.wait(
     historyState,
-    (s) => s.count > 0 && s.count < 21 && s.more && s.total > s.height,
+    (s) => s.count > 0 && s.count < previousCount + 1 && s.more && s.total > s.height,
   );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.pageKey(panelWin, 'Space');
@@ -130,6 +164,7 @@ exports.run = async (
   const first = await historyState();
   await proof.pageClick(panelWin, 'previous-more');
   const grown = await proof.wait(historyState, (s) => s.count > first.count);
+  assert.equal(grown.more, true);
   assert.equal(grown.height, first.height);
   assert.equal(grown.scroll, first.scroll, JSON.stringify({ first, grown }));
   while ((await historyState()).more) await proof.pageClick(panelWin, 'previous-more');
