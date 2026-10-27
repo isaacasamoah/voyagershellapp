@@ -388,14 +388,18 @@ impl Runtime {
         } else {
             "unknown"
         });
-        let mut window_state = "closed";
+        let mut window_state = if self.viewer_errors.contains_key(id) {
+            "unknown"
+        } else {
+            "closed"
+        };
         for terminal in self.terminals.iter_mut().filter(|t| &t.session == id) {
             match terminal.window_state() {
                 "open" => {
                     window_state = "open";
                     break;
                 }
-                "unknown" if terminal.window.is_some() || terminal.child.try_wait()?.is_none() => {
+                "unknown" if terminal.window.is_some() || !terminal.process.finished()? => {
                     window_state = "unknown";
                 }
                 _ => {}
@@ -486,8 +490,11 @@ impl Runtime {
         match std::mem::replace(&mut operation.phase, Phase::Start) {
             Phase::Start => match operation.action {
                 Action::Open(kind) => {
+                    if let Some(reason) = self.viewer_errors.get(&id) {
+                        anyhow::bail!("outcome_unknown: terminal is not verified: {reason}");
+                    }
                     for terminal in self.terminals.iter_mut().rev().filter(|t| t.session == id) {
-                        if terminal.child.try_wait()?.is_some() {
+                        if terminal.process.finished()? {
                             ensure!(
                                 terminal.window.map(terminal::exists).transpose()? != Some(true),
                                 "outcome_unknown: the previous terminal window is still closing"
@@ -500,7 +507,7 @@ impl Runtime {
                                 continue;
                             }
                             ensure!(
-                                terminal::window(terminal.child.id())? == Some(window),
+                                terminal::window(terminal.process.id())? == Some(window),
                                 "outcome_unknown: terminal window identity changed"
                             );
                             ensure!(
@@ -513,10 +520,10 @@ impl Runtime {
                                 terminal.kind == kind,
                                 "viewer_conflict: background the current viewer before selecting another terminal"
                             );
-                            terminal::focus(terminal.child.id())?;
+                            terminal::focus(terminal.process.id())?;
                             operation.receipt["terminal"] = json!(kind.as_str());
                             operation.receipt["window_id"] = json!(window);
-                            operation.receipt["pid"] = json!(terminal.child.id());
+                            operation.receipt["pid"] = json!(terminal.process.id());
                             operation.effect("open", "confirmed");
                             self.store.local(
                                 &id,
@@ -534,7 +541,7 @@ impl Runtime {
                     self.terminals.push(Terminal {
                         kind,
                         session: id.clone(),
-                        child,
+                        process: viewer::Process::Child(child),
                         window: None,
                     });
                     operation.receipt["pid"] = json!(pid);
@@ -662,15 +669,18 @@ impl Runtime {
                 Ok(false)
             }
             Phase::Close => {
+                if let Some(reason) = self.viewer_errors.get(&id) {
+                    anyhow::bail!("outcome_unknown: terminal is not verified: {reason}");
+                }
                 if let Some(terminal) = self.terminals.iter_mut().rev().find(|t| t.session == id) {
                     if let Some(window) = terminal.window {
                         if terminal::exists(window)? {
-                            if terminal.child.try_wait()?.is_none() {
+                            if !terminal.process.finished()? {
                                 ensure!(
-                                    terminal::window(terminal.child.id())? == Some(window),
+                                    terminal::window(terminal.process.id())? == Some(window),
                                     "outcome_unknown: terminal window identity changed"
                                 );
-                                terminal::close(terminal.child.id())?;
+                                terminal::close(terminal.process.id())?;
                             }
                             operation.effect("close", "requested");
                             operation.phase = Phase::WaitClose { window };
@@ -678,7 +688,7 @@ impl Runtime {
                         }
                     } else {
                         ensure!(
-                            terminal.child.try_wait()?.is_some(),
+                            terminal.process.finished()?,
                             "outcome_unknown: terminal opening has not been identified"
                         );
                     }
@@ -700,13 +710,13 @@ impl Runtime {
                 let terminal = self
                     .terminals
                     .iter_mut()
-                    .find(|t| t.session == id && u64::from(t.child.id()) == pid)
+                    .find(|t| t.session == id && u64::from(t.process.id()) == pid)
                     .context("provider_failed: terminal exited before opening")?;
                 ensure!(
-                    terminal.child.try_wait()?.is_none(),
+                    !terminal.process.finished()?,
                     "provider_failed: terminal exited before opening"
                 );
-                if let Some(window) = terminal::window(terminal.child.id())? {
+                if let Some(window) = terminal::window(terminal.process.id())? {
                     terminal.window = Some(window);
                     operation.receipt["window_id"] = json!(window);
                     if self

@@ -31,7 +31,6 @@ use std::{
         net::{UnixListener, UnixStream},
     },
     path::{Path, PathBuf},
-    process::Child,
     process::{Command, Stdio},
     time::Duration,
 };
@@ -244,6 +243,19 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
     let codex = server.as_deref().map(Codex::connect).transpose()?;
     Credentials::clear_stale(state)?;
     let executable = codex_executable();
+    let viewer_errors = store
+        .sessions()?
+        .into_iter()
+        .filter(|s| {
+            s["ownership"] == "managed" && s["kind"] == "codex" && s["worker_state"] != "stopped"
+        })
+        .map(|s| {
+            (
+                s["id"].as_str().unwrap().to_owned(),
+                "Checking the saved terminal.".to_owned(),
+            )
+        })
+        .collect();
     let mut runtime = Runtime {
         conversation: conversation::Conversation::start(&executable, state),
         voice: voice::Voice::new(),
@@ -260,6 +272,7 @@ pub fn serve(state: &Path, codex_path: Option<&Path>) -> Result<()> {
         shells: HashMap::new(),
         terminals: Vec::new(),
         viewer_choices: HashMap::new(),
+        viewer_errors,
         tests: development_ops::Tests::default(),
         operations: HashMap::new(),
         creations: HashMap::new(),
@@ -450,6 +463,7 @@ struct Runtime {
     shells: HashMap<String, Shell>,
     terminals: Vec<Terminal>,
     viewer_choices: HashMap<String, crate::viewer::Kind>,
+    viewer_errors: HashMap<String, String>,
     tests: development_ops::Tests,
     operations: HashMap<String, PendingOperation>,
     creations: HashMap<String, (Value, StartingWorker)>,
@@ -462,7 +476,7 @@ struct Runtime {
 struct Terminal {
     kind: crate::viewer::Kind,
     session: String,
-    child: Child,
+    process: crate::viewer::Process,
     window: Option<u32>,
 }
 
@@ -476,8 +490,7 @@ impl Terminal {
     }
 
     fn finished(&mut self) -> Result<bool> {
-        Ok(self.child.try_wait()?.is_some()
-            && (self.window.is_none() || self.window_state() == "closed"))
+        Ok(self.process.finished()? && (self.window.is_none() || self.window_state() == "closed"))
     }
 }
 
@@ -665,9 +678,19 @@ impl Runtime {
                         .find(|t| session["id"] == t.session)
                     {
                         viewer.window_state()
+                    } else if self
+                        .viewer_errors
+                        .contains_key(session["id"].as_str().unwrap())
+                    {
+                        "unknown"
                     } else {
                         "closed"
                     });
+                    session["window_reason"] = self
+                        .viewer_errors
+                        .get(session["id"].as_str().unwrap())
+                        .cloned()
+                        .map_or(Value::Null, Value::String);
                     session["capture"] = json!(if captured && session["removed_ms"].is_null() {
                         "connected"
                     } else {
@@ -822,7 +845,7 @@ impl Runtime {
         }
         for index in (0..self.terminals.len()).rev() {
             if self.terminals[index].finished()? {
-                self.terminals.swap_remove(index).child.wait()?;
+                self.terminals.swap_remove(index).process.reap()?;
             }
         }
         for shell in self.shells.values_mut() {
@@ -993,7 +1016,7 @@ mod viewer_tests {
         let mut viewer = Terminal {
             kind: crate::viewer::Kind::Xterm,
             session: "fixture".into(),
-            child,
+            process: crate::viewer::Process::Child(child),
             window: Some(1),
         };
         assert_eq!(viewer.window_state(), "unknown");

@@ -6,6 +6,9 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+mod recovery;
+pub(crate) use recovery::{Process, Recovery, recover};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Ghostty,

@@ -5,19 +5,22 @@ State: The owner approved the capability boundaries, dependency direction, first
 
 ## This build branch
 
-This branch contains the owner-approved extension to `conversation-resume` and its panel
-contract: proactively reconnect previously managed Codex Vessels after service
-loss. The owner selected proactive recovery on 26 October. The approved revision is
-[here](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
-The panel consumes that service result through its
-[recovery presentation](SPEC-current-work-panel.md#proposed-follow-up-proactive-connection-recovery).
-This is one recovery journey across the existing module boundary, not a new
-capability hierarchy or a wider rebuild.
+This branch implements surviving-terminal recovery within the approved reconnect
+plan. The earlier background reconnect correction remains its base. The two Rust
+findings from the first viewer review are resolved. The same corrected package
+has passing surviving-window and closed-during-outage journeys, but one native
+voice-start failure remains unexplained after a passing repeat. Final review retained that Required acceptance concern after the one corrective
+pass. The later owner decision below records the named deferral.
 
-The preceding C1–C3 build completed review and native proving. Its completed plan
-and task list remain in Git history. The owner approved the reconnection specification on 26 October.
-Isaac approved the reconnection plan on 26 October; no product code has changed. The running
-test package remains unchanged. Merge, installation and rollout are separate.
+Isaac reviewed the walkthrough on 27 October, accepted viewer recovery with the
+native voice-start failure explicitly deferred, and requested merge followed by
+retry and the small panel changes. This supersedes the earlier stop for that
+named acceptance concern. The failure remains recorded and is not claimed fixed.
+Keep the reconnect plan active for K3. The later panel work contains compact
+name/rank/status rows with metadata in Details and direct rank/assignment dropdown
+actions. Avatar behavior remains a separate specification draft. Installation
+and an owner-app restart are not part of this merge decision.
+[Accepted viewer recovery](https://github.com/isaacasamoah/voyagershellapp/pull/59).
 
 ## Purpose and terminology
 

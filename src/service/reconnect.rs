@@ -24,7 +24,7 @@ struct Recovery {
 
 enum Phase {
     Checking {
-        ready: Receiver<Result<Worker>>,
+        ready: Receiver<Result<(Worker, Option<crate::viewer::Recovery>)>>,
         deadline: Instant,
         cancelled: Arc<AtomicBool>,
     },
@@ -109,8 +109,12 @@ impl Runtime {
                 if !eligible || connected {
                     continue;
                 }
-                match result.and_then(|worker| {
-                    self.admit_recovery(&row, &recovery.runtime, recovery.capture, worker)
+                match result.and_then(|(worker, viewer)| {
+                    self.admit_recovery(&row, &recovery.runtime, recovery.capture, worker)?;
+                    if let Some(viewer) = viewer {
+                        self.admit_viewer(id, viewer);
+                    }
+                    Ok(())
                 }) {
                     Ok(()) => continue,
                     Err(error) => {
@@ -147,11 +151,22 @@ impl Runtime {
                         let (sender, ready) = channel();
                         let context = Credentials::locator(&self.state, &operation);
                         let record = row.clone();
+                        let check_viewer = !self.terminals.iter().any(|t| t.session == id);
+                        let saved_viewer = self.store.viewer_receipt(id)?;
                         let deadline = Instant::now() + Duration::from_secs(10);
                         let cancelled = Arc::new(AtomicBool::new(false));
                         let cancellation = Arc::clone(&cancelled);
                         thread::spawn(move || {
-                            let _ = sender.send(Worker::recover(&record, &receipt, &operation, &context, deadline, &cancellation));
+                            let result = Worker::recover(&record, &receipt, &operation, &context, deadline, &cancellation).map(|worker| {
+                                let viewer = check_viewer.then(|| {
+                                    let result = worker.attach().and_then(|attachment| {
+                                        crate::viewer::recover(saved_viewer.as_ref(), &attachment)
+                                    });
+                                    result.unwrap_or_else(|error| crate::viewer::Recovery::Unknown(error.to_string()))
+                                });
+                                (worker, viewer)
+                            });
+                            let _ = sender.send(result);
                         });
                         recovery.attempts += 1;
                         recovery.phase = Phase::Checking { ready, deadline, cancelled };
@@ -162,6 +177,32 @@ impl Runtime {
             self.recoveries.0.insert(id.into(), recovery);
         }
         Ok(())
+    }
+
+    fn admit_viewer(&mut self, session: &str, viewer: crate::viewer::Recovery) {
+        use crate::viewer::Recovery;
+        match viewer {
+            Recovery::Open {
+                kind,
+                process,
+                window,
+            } => {
+                self.viewer_errors.remove(session);
+                self.viewer_choices.insert(session.to_owned(), kind);
+                self.terminals.push(super::Terminal {
+                    kind,
+                    session: session.to_owned(),
+                    process,
+                    window: Some(window),
+                });
+            }
+            Recovery::Closed => {
+                self.viewer_errors.remove(session);
+            }
+            Recovery::Unknown(reason) => {
+                self.viewer_errors.insert(session.to_owned(), reason);
+            }
+        }
     }
 
     fn admit_recovery(

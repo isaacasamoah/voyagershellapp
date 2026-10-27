@@ -2,6 +2,56 @@ use super::*;
 use nix::{libc, sys::signal::Signal};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
+#[test]
+fn restarted_service_does_not_report_an_unverified_saved_viewer_closed() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"viewer-runtime","name":"Viewer","cwd":f.dir}));
+    let id = created["session_id"].as_str().unwrap();
+    let _owned = OwnedFixture::new(created["runtime_pid"].as_u64().unwrap() as u32);
+    let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
+    store.begin_operation("saved-viewer", &json!({"op":"open","session_id":id}), &json!({"state":"completed","session_id":id,"pid":std::process::id(),"window_id":1,"terminal":"xterm","effects":[{"phase":"open","state":"confirmed"}]})).unwrap();
+    store
+        .begin_operation(
+            "failed-open",
+            &json!({"op":"open","session_id":id}),
+            &json!({"state":"partial","session_id":id,"effects":[],"error":"viewer_conflict"}),
+        )
+        .unwrap();
+    lose_service(&mut f);
+    f.start();
+    wait(|| f.call(json!({"op":"list"}))[0]["capture"] == "connected");
+    let row = &f.call(json!({"op":"list"}))[0];
+    assert_eq!(row["window"], "unknown");
+    assert_eq!(row["lifecycle"]["runtime"], "running");
+    assert!(
+        !row["window_reason"]
+            .as_str()
+            .unwrap()
+            .contains("no established process identity")
+    );
+    store
+        .begin_operation(
+            "uncertain-open",
+            &json!({"op":"open","session_id":id}),
+            &json!({"state":"uncertain","session_id":id,"effects":[]}),
+        )
+        .unwrap();
+    lose_service(&mut f);
+    f.start();
+    wait(|| f.call(json!({"op":"list"}))[0]["capture"] == "connected");
+    let uncertain = &f.call(json!({"op":"list"}))[0];
+    assert_eq!(uncertain["window"], "unknown");
+    assert!(
+        uncertain["window_reason"]
+            .as_str()
+            .unwrap()
+            .contains("no established process identity")
+    );
+    f.call(json!({"op":"stop-instance","session_id":id,"close_window":false}));
+    f.halt();
+}
+
 struct OwnedFixture(OwnedFd);
 
 impl OwnedFixture {

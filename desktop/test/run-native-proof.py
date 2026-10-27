@@ -41,6 +41,10 @@ service = subprocess.Popen([seed, '--state', str(state), 'serve'], env=env, stdo
 app = None
 verdict = None
 cleanup = []
+control_process = None
+if os.environ.get('VOYAGER_PROOF_RECONNECT_VIEWER'):
+    control_process = subprocess.Popen(['/usr/bin/sleep', '600'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env['VOYAGER_PROOF_CONTROL_PID'] = str(control_process.pid)
 try:
     deadline = time.monotonic() + 10
     while not (state / 'service.sock').exists() and time.monotonic() < deadline:
@@ -62,9 +66,16 @@ try:
                     info = call('attach-info', row['id'])
                     if info['pid'] not in owned:
                         owned[info['pid']] = os.pidfd_open(info['pid'])
+            closing = call('operation', request['close_viewer']) if request.get('close_viewer') else None
+            if closing:
+                windows = json.loads(subprocess.check_output([str(Path(exe).with_name('voyager-windows'))]))['windows']
+                assert any(w['id'] == closing['window_id'] and w['pid'] == closing['pid'] for w in windows)
             previous = service.pid
             service.kill()
             service.wait(timeout=10)
+            if closing:
+                subprocess.run(['xdotool', 'windowclose', str(closing['window_id'])], check=True, timeout=5)
+                time.sleep(.1)
             service = subprocess.Popen([exe, '--state', str(state), 'serve'], env=env, stdout=(state / 'restarted-service.log').open('w'), stderr=subprocess.STDOUT)
             control.unlink()
             (state / 'proof-service-restarted.json').write_text(json.dumps({'request': request['request'], 'before': previous, 'after': service.pid}))
@@ -101,6 +112,9 @@ finally:
             cleanup.append(result)
     cleanup.append(clean('stop-service', lambda: call('stop')))
     clean('wait-service', lambda: service.wait(timeout=15))
+    if control_process:
+        control_process.terminate()
+        clean('unrelated-control', lambda: control_process.wait(timeout=5))
     for pid, handle in owned.items():
         try:
             signal.pidfd_send_signal(handle, signal.SIGKILL, None, 4)
