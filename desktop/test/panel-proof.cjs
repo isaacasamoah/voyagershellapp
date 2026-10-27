@@ -240,6 +240,9 @@ exports.run = async (
   })`);
   assert.ok(viewport.content <= viewport.available, 'Panel content overflowed its narrow viewport');
   const bounds = panelWin.getBounds();
+  const native = (await inventory()).find(
+    (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
+  );
   const area = screen.getDisplayMatching(bounds).workArea;
   assert.ok(
     bounds.height <= area.height &&
@@ -265,9 +268,7 @@ exports.run = async (
     geometry: {
       bounds,
       display: screen.getDisplayMatching(bounds),
-      native: (await inventory()).find(
-        (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
-      ),
+      native,
     },
     viewport,
     expansionChangedEvents: false,
