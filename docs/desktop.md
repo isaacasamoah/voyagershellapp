@@ -593,10 +593,12 @@ broader architecture question, not a change in this wording correction.
 
 ## Compact Vessel Resume
 
-Stopped Vessel names remain legible static text. The compact row shows its state,
-folder name and activity date, one Resume action and the existing secondary menu.
-The full path, precise timestamp, rank and saved history are available through
-Details in that menu. Viewer selection also lives there rather than in a form
+Rows show the Vessel name, applicable rank and existing connection dot. Routine
+state, folder and activity metadata are in Details in the three-dot menu.
+Starting, Resuming, Reconnecting and actual connection failures stay visible.
+Stopped names remain static text with one explicit Resume action. Resume and the
+menu have separate columns. Details keeps the full path, labeled last activity,
+state, rank and saved history, and identifies unavailable metadata. Viewer selection also lives there rather than in a form
 under every row. Runtime ownership, task submission and separate Open receipts
 retain their existing service contracts.
 

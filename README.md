@@ -21,14 +21,13 @@ is our starting point, and we’d love to build toward it with other developers.
 
 ## Specification review
 
-The [tracer-bullet usability specifications](SPEC.md) cover conversation
-resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved. Docking recovery is accepted and merged, including returning the floating
-controls to their pre-dock position. The active [implementation plan](tasks/plan.md) covers current startup settings and
-a compact Resume flow after the reviewed saved-conversation and panel modules. This branch groups running,
-uncertain and stopped records, reveals bounded saved history and offers an explicit
-Resume-and-open journey. Owner acceptance, merge and installation remain separate.
-The task list records each independent review and the input limits of native proof.
+The [tracer-bullet usability specifications](SPEC.md) cover conversation Resume,
+current-work presentation, voice handoffs and docking recovery. The specifications
+and build order are approved. The active [implementation plan](tasks/plan.md)
+refines the panel after completed reconnect work. This branch shows compact Vessel
+rows with metadata in Details. Direct rank and supervisor choices are next.
+Independent review and packaged verification passed for the compact rows.
+Owner acceptance, merge and installation remain separate decisions.
 
 ## Current build
 
@@ -165,32 +164,23 @@ Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
 Reports of real workflows, failures and integration limits are welcome.
 
 
-Background reconnect has passed the owner-approved additional correction and
-fresh review on its working branch. Initial connection and handshake deadlines,
-cancellation and the full acceptance-code budget pass their focused checks.
-It checks an existing managed Codex runtime after service or capture loss rather
-than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
-identity checks, native process limits and the opt-in proof. It does not restore
-an expired dock or submit work. Surviving-viewer and panel retry behavior remain
-separate follow-up slices until their own proof and review pass.
+Managed Codex Vessels reconnect to their existing runtime after service or capture
+loss. The service verifies process and conversation identity, preserves active
+work, restores capture and can recover a surviving viewer. It does not replay a
+task, restore an expired dock or open a replacement agent automatically. The
+[terminal-recovery change](https://github.com/isaacasamoah/voyagershellapp/pull/59)
+is merged. The owner can explicitly retry a failed connection check through
+[Retry connection](https://github.com/isaacasamoah/voyagershellapp/pull/60), which
+remains unmerged for inspection. See [the lifecycle contract](docs/lifecycle.md).
 
+[Compact Vessel rows](https://github.com/isaacasamoah/voyagershellapp/pull/62)
+show the name, applicable rank and existing connection dot. Routine status,
+folder and activity metadata live in Details. Progress and failures remain with
+the Vessel. Live names keep Open; previous Vessels keep explicit Resume, with its
+menu in a separate column. Three native journeys and final independent review
+pass on one package. Direct rank/assignment selection is a later plan slice.
 
-The surviving-terminal follow-up is merged in [PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59).
-It verifies and reuses the original viewer, retains its viewer choice, and keeps
-unverified windows distinct from confirmed closure. The corrective pass resolves
-the two Rust findings. Both native viewer journeys passed on the same package,
-but another run of that package could not confirm native voice startup. A passing
-repeat does not explain the failure. Final review retained that acceptance concern. Isaac subsequently accepted viewer
-recovery on 27 October and explicitly deferred the voice investigation, requesting
-merge followed by retry and the small panel changes. The failed receipt remains
-evidence and no voice fix is claimed. Installation and owner-app restart remain
-separate decisions.
-
-
-The current retry branch adds owner-only Retry connection for an existing Codex
-Vessel after automatic checks finish. It shares automatic verification and saved
-request results, and keeps recovering Vessels visible in the panel. Automated
-checks, four packaged native journeys and final independent re-review pass. The
-[Retry connection PR](https://github.com/isaacasamoah/voyagershellapp/pull/60) remains
-unmerged for owner inspection.
-It does not resolve the separately deferred intermittent native voice startup.
+Native evidence is Linux/X11. The earlier intermittent native voice-start failure
+remains explicitly deferred after owner acceptance of terminal recovery. No voice
+fix, Ghostty freeze fix or support for other platforms is claimed. These branch
+changes have not been installed and the owner's running trial is unchanged.
