@@ -786,13 +786,6 @@ body[data-docked='true'] #voice-toggle:not(:hover):not([aria-pressed='true']) {
   color: inherit;
 }
 
-.vessel-metadata {
-  color: #42566a;
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .resume-action {
   white-space: nowrap;
 }
