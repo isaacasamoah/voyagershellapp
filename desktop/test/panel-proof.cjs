@@ -251,7 +251,7 @@ exports.run = async (
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.pageClick(panelWin, 'history-close');
   assert.equal((await historyState()).focus, 'previous-toggle');
-  await proof.pageClick(panelWin, 'panel-brand');
+  await proof.pageClick(panelWin, 'panel-brand', { receiver: 'panel' });
   assert.equal(
     await panelWin.webContents.executeJavaScript('window.reviewTextPointer.prevented'),
     true,
