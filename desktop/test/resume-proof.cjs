@@ -120,10 +120,10 @@ exports.run = async (
         const row = document.getElementById('resume-${id}').closest('[data-vessel]');
         return {
           columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
-          metadata: getComputedStyle(row.querySelector('.vessel-metadata')).textOverflow
+          metadata: Boolean(row.querySelector('.vessel-metadata, .session-state'))
         };
       })()`);
-      assert.deepEqual(compact, { columns: 3, metadata: 'ellipsis' });
+      assert.deepEqual(compact, { columns: 3, metadata: false });
       await fs.writeFile(
         path.join(stateDir, 'compact-resume.png'),
         (await panelWin.webContents.capturePage()).toPNG(),

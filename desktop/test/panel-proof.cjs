@@ -6,8 +6,12 @@ exports.run = async (
   { rpc, stateDir, refresh, panelWin, setExpanded, inventory, screen },
   proof,
 ) => {
-  const make = (id) => rpc('create', 'shell', id, id, stateDir, '--background');
-  const live = await make('Panel live');
+  const cwd = path.join(stateDir, 'long-working-folder-'.repeat(10));
+  await fs.mkdir(cwd);
+  const make = (id) => rpc('create', 'shell', id, id, cwd, '--background');
+  const live = await make(
+    'Panel live with a long Vessel name that remains readable in this narrow panel',
+  );
   const stopped = await make('Panel previous');
   await rpc('stop-instance', stopped.session_id);
   const removed = await make('Panel unregistered');
@@ -165,13 +169,14 @@ exports.run = async (
   await proof.pageClick(panelWin, `menu-${removedId}`);
   await proof.pageKey(panelWin, 'Tab');
   assert.equal((await historyState()).focus, `inspect-${removedId}`);
+  const beforeRead = await rpc('events');
   await proof.pageKey(panelWin, 'Return');
   const metadata = await panelWin.webContents.executeJavaScript(
     "document.querySelector('.saved-metadata').textContent",
   );
-  assert.ok(metadata.includes(stateDir));
+  assert.ok(metadata.includes(cwd));
   assert.match(metadata, /Last activity:/);
-  const beforeRead = await rpc('events');
+  assert.deepEqual(await rpc('list'), registrations);
   await proof.pageKey(panelWin, 'Return');
   await proof.wait(
     () =>
@@ -199,17 +204,6 @@ exports.run = async (
     available:document.getElementById('panel-viewport').clientWidth
   })`);
   assert.ok(viewport.content <= viewport.available, 'Panel content overflowed its narrow viewport');
-  await fs.writeFile(
-    path.join(stateDir, 'panel-display.json'),
-    JSON.stringify({
-      bounds: panelWin.getBounds(),
-      display: screen.getDisplayMatching(panelWin.getBounds()),
-      viewport,
-      native: (await inventory()).find(
-        (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
-      ),
-    }),
-  );
   const bounds = panelWin.getBounds();
   const area = screen.getDisplayMatching(bounds).workArea;
   assert.ok(
@@ -233,6 +227,13 @@ exports.run = async (
     stopped: stopped.session_id,
     removed: removed.session_id,
     initial,
+    geometry: {
+      bounds,
+      display: screen.getDisplayMatching(bounds),
+      native: (await inventory()).find(
+        (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
+      ),
+    },
     viewport,
     expansionChangedEvents: false,
     history: {
