@@ -617,10 +617,11 @@ following increment, not part of this compact-row change.
 The direct rank and supervisor choices are implemented on the current candidate.
 They use the existing service actions, retain pending state across row replacement
 and restore confirmed values on refusal. Code checks pass. Native acceptance is
-still blocked: the mouse-only Controller selection left it Unassigned. The
+incomplete: the mouse-only Controller selection left it Unassigned. The
 existing keyboard-selection journey passed on the earlier package, but does not
-resolve this mouse check. See the active task record before treating the slice
-as ready for owner inspection.
+resolve this mouse check. The owner explicitly deferred that automated check to
+manual testing and requested the combined candidate. See the active task record
+for the trial decision and pending final acceptance.
 
 
 Offline action disabling uses one helper for standalone rows, Fleet rows and

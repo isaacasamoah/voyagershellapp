@@ -2,7 +2,7 @@
 
 Selected order: finish the approved reconnect plan, then activate this panel plan
 at the canonical task paths on its own branch. Module: current-work-panel.
-N01 is complete on feat/compact-vessel-rows, based on the completed reconnect candidate. N02 is implemented but blocked by native mouse-selection proving after its permitted corrective pass.
+N01 is complete on feat/compact-vessel-rows, based on the completed reconnect candidate. N02 is implemented and in owner testing. Isaac deferred the failed automated mouse-selection check to that manual trial; its cause remains unconfirmed.
 
 - [x] N01: show name, applicable rank and existing status dot. Keep live name-click
   Open and explicit Resume. Put routine metadata in existing Details. Prove N1–N5.
@@ -84,3 +84,12 @@ duplicate focus diagnostic. All acceptance assertions remain.
 The normal one corrective pass is consumed. No further product or proving edit
 is authorized by this checkpoint. N02 and the combined handover remain unchecked.
 No merge, installation or owner-app restart occurred.
+
+## Owner manual trial decision
+
+After the blocked checkpoint above, Isaac explicitly deferred the automated
+mouse-only Controller check to manual testing and requested the top-stack app
+and service. That trial is now running. This named decision does not establish
+the cause of the failed check, change the general constraints or authorize
+another implementation pass. Owner observations and final acceptance remain
+pending. No merge or installation is authorized by this trial.

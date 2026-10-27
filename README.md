@@ -27,10 +27,10 @@ and build order are approved. The active [implementation plan](tasks/plan.md)
 refines the panel after completed reconnect work. This branch shows compact Vessel
 rows with metadata in Details. Independent review and packaged verification
 passed for the compact rows. The [direct rank and supervisor choices](https://github.com/isaacasamoah/voyagershellapp/pull/64)
-are implemented and pass code checks, but acceptance is blocked by the native
-mouse-selection test. Controller remained Unassigned. The evidence does not yet
-distinguish a test-input fault from an application fault. The permitted corrective
-pass is used; this slice is not complete.
+are implemented and pass code checks. An automated mouse-selection check left
+Controller Unassigned. Its cause remains unconfirmed. The owner deferred this
+specific check to manual testing and requested the combined candidate for that
+trial. Final owner acceptance remains pending.
 Owner acceptance, merge and installation remain separate decisions.
 
 ## Current build

@@ -1,7 +1,7 @@
 # Spec: a panel focused on current work
 
 Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner approved its implementation plan and build on 25 October 2026.
-The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The earlier candidate passed independent review for owner inspection on 26 October. The compact-row refinement passed packaged verification and independent review on 27 October. Direct rank and supervisor choices are implemented but remain blocked by the native mouse-selection check after the permitted corrective pass. The requirements below are unchanged. Merge and installation remain separate decisions.
+The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The earlier candidate passed independent review for owner inspection on 26 October. The compact-row refinement passed packaged verification and independent review on 27 October. Direct rank and supervisor choices are implemented. After the permitted corrective pass, the owner deferred the remaining automated mouse-selection check to manual testing and requested the combined candidate. Owner acceptance is pending. The requirements below are unchanged. Merge and installation remain separate decisions.
 
 ## Approved refinement: compact Vessel rows with details in the menu
 
