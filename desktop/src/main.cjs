@@ -1411,6 +1411,13 @@ app.whenReady().then(async () => {
         console.error(error);
         if (process.argv.includes('--proof-native')) {
           try {
+            const saved = await fs
+              .readFile(path.join(stateDir, 'native-proof.json'), 'utf8')
+              .catch((error) => {
+                if (error.code === 'ENOENT') return 'null';
+                throw error;
+              });
+            if (JSON.parse(saved)?.verdict === 'rework') return;
             await fs.writeFile(
               path.join(stateDir, 'native-proof.json'),
               JSON.stringify(
