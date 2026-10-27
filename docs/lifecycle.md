@@ -598,5 +598,8 @@ A successful discovery retains its actual viewer kind, so Open focuses that same
 window. A confirmed absent window permits ordinary Open to create a viewer for the
 same runtime. An unverified saved viewer remains unknown with a readable reason;
 it is not reported closed or silently duplicated. This is Fedora/X11 behavior,
-not evidence for native Wayland or another operating system. Native proving and
-independent review remain pending for this candidate.
+not evidence for native Wayland or another operating system. The same package passes surviving-viewer and closed-during-outage journeys,
+including UI controls and native voice startup, but an earlier run of that package
+had an uncertain native voice-start outcome. The cause remains unconfirmed after
+an unchanged passing repeat. Final review retains this Required acceptance concern.
+No reliable native voice-start claim or rollout approval follows from these results.

@@ -5,8 +5,9 @@ panel consumer. Spec and plan approved by Isaac, 26 October. The K1 background
 recovery implementation and its additional owner-approved correction passed
 fresh review with no Required finding. Earlier stopped reviews remain evidence.
 Isaac approved completing the remaining reconnect work before the small panel
-refinement on 27 October. K2 is now in progress on feat/reconnect-native-viewer;
-K3 remains unstarted. Avatar behavior is separate specification work. Earlier C1–C3 completion remains in Git history.
+refinement on 27 October. K2 reached final re-review on feat/reconnect-native-viewer. Both initial Rust
+findings are resolved, but an unexplained native voice-start failure remains
+Required acceptance work. The corrective pass is spent. K3 remains unstarted. Avatar behavior is separate specification work. Earlier C1–C3 completion remains in Git history.
 
 The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
 [native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
@@ -32,7 +33,7 @@ small tasks within this same vertical journey rather than shipping a scaffold.
 ### R02: prove and review background recovery
 
 - [x] Extend the maintained native runner with service restart ownership and a small reusable reconnect journey. Do not duplicate launcher or cleanup code.
-- [ ] Prove same process/thread/runtime generation, fresh bound CLI context, continued active work, ordinary Open/Stop, and known-different refusal in disposable state.
+- [x] Prove same process/thread/runtime generation, fresh bound CLI context, continued active work, ordinary Open/Stop, and known-different refusal in disposable state.
 - [x] Pass relevant checks, size inventory, fresh Rust/general review and at most one corrective pass plus re-review.
 
 Likely owners: desktop/test/run-native-proof.py, desktop/test/native-proof.cjs,
@@ -43,16 +44,16 @@ K1; no dependent product work starts with a Required review finding unresolved.
 
 ### R03: reconnect the original native viewer
 
-- [ ] Recover checked terminal/frontend/window identities from existing native discovery; reuse the current runtime handle rather than fabricating a Child.
-- [ ] Make ordinary Open/background and explicit Stop work without creating a duplicate viewer; leave position, focus and avatar arrangement unchanged.
-- [ ] Keep actual closed, visible and unverified window observations distinct, with a failure regression for lost in-memory viewer state.
+- [x] Recover checked terminal/frontend/window identities from existing native discovery; reuse the current runtime handle rather than fabricating a Child.
+- [x] Make ordinary Open/background and explicit Stop work without creating a duplicate viewer; leave position, focus and avatar arrangement unchanged.
+- [x] Keep actual closed, visible and unverified window observations distinct, with a failure regression for lost in-memory viewer state.
 
 Likely owners: src/service.rs, src/service/lifecycle.rs, src/terminal.rs and existing
 lifecycle tests. Depends on K1.
 
 ### R04: prove and review viewer recovery
 
-- [ ] Use the same reconnect journey with a surviving viewer and one closed during the outage. Verify exact native identities and no automatic viewer creation.
+- [x] Use the same reconnect journey with a surviving viewer and one closed during the outage. Verify exact native identities and no automatic viewer creation.
 - [ ] Drive background/Open, a new dock and voice attachment, then Stop on the real candidate; confirm the unrelated control process stays untouched.
 - [ ] Pass checks, size inventory and fresh review, with one corrective pass and re-review at most.
 
@@ -95,12 +96,28 @@ owning lifecycle document. Depends on R06; completes K3.
 - [ ] All Required findings resolved within the approved correction limit; no check or constraint weakened.
 - [ ] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.
 
-## Current K2 evidence
+## K2 final review stop, 27 October
 
-The saved-viewer regression first failed with closed instead of unknown, then
-passed after the candidate change. All ordinary Rust tests, ten reconnect cases,
-Clippy, 104 desktop tests and formatting pass. Native viewer modes have been added
-to the maintained reconnect journey, but no packaged K2 pass or independent review
-is claimed yet. The incomplete R02 ordinary-Open coverage is carried explicitly
-into K2, not marked proved by background-only evidence. Main and the owner's
-running trial remain untouched.
+[Draft PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59) contains the
+viewer recovery and its permitted corrective pass. Both initial Rust defects are
+resolved. Three independent negative controls discriminate their regressions.
+All ordinary Rust tests, strict Clippy, ten reconnect cases, 104 desktop tests and
+formatting pass. GitHub checks passed on the tested implementation revision.
+
+The same packaged app and bundled service passed surviving-window and
+closed-during-outage journeys, including original runtime/conversation identity,
+viewer position, service Open, panel Open/Background/Stop, native voice startup
+and an unrelated sleep process left alive. Cleanup is confirmed. The R02 ordinary
+Open coverage carried into K2 is now proved. These successful observations do not
+close the full K2 acceptance gate.
+
+An earlier closed-window run of the same package has a genuine uncertain native
+voice-start receipt. The unchanged passing repeat does not explain or fix it.
+Final re-review retains this as Required acceptance work under R04. Stop K3 and
+panel implementation under the approved one-correction limit. No further product
+build, merge, installation or owner-app restart is authorized by this report.
+
+The final inventory counts 9,275 maintained and 1,149 temporary helper lines,
+10,424 combined, against 10,449 exercised production lines. The 25-line margin
+passes without dropping prior helpers or weakening assertions. The canonical
+Obsidian walkthrough links both reviews, exact inventory and native evidence.

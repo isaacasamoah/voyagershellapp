@@ -5,19 +5,19 @@ State: The owner approved the capability boundaries, dependency direction, first
 
 ## This build branch
 
-This branch contains the owner-approved extension to `conversation-resume` and its panel
-contract: proactively reconnect previously managed Codex Vessels after service
-loss. The owner selected proactive recovery on 26 October. The approved revision is
-[here](SPEC-conversation-resume.md#proposed-follow-up-reconnect-a-surviving-vessel).
-The panel consumes that service result through its
-[recovery presentation](SPEC-current-work-panel.md#proposed-follow-up-proactive-connection-recovery).
-This is one recovery journey across the existing module boundary, not a new
-capability hierarchy or a wider rebuild.
+This branch implements surviving-terminal recovery within the approved reconnect
+plan. The earlier background reconnect correction remains its base. The two Rust
+findings from the first viewer review are resolved. The same corrected package
+has passing surviving-window and closed-during-outage journeys, but one native
+voice-start failure remains unexplained after a passing repeat. Final review
+retains that Required acceptance concern. The one corrective pass is spent.
 
-The preceding C1–C3 build completed review and native proving. Its completed plan
-and task list remain in Git history. The owner approved the reconnection specification on 26 October.
-Isaac approved the reconnection plan on 26 October; no product code has changed. The running
-test package remains unchanged. Merge, installation and rollout are separate.
+Do not begin the dependent retry slice or the later small panel changes until
+Isaac decides the next step. Keep the existing reconnect plan and task list active.
+The later panel work contains only compact name/rank/status rows with metadata in
+Details, and direct rank/assignment dropdown actions. Avatar behavior has a separate
+specification draft outside this build. No merge, installation or owner-app restart
+has been performed. [Draft PR and current review state](https://github.com/isaacasamoah/voyagershellapp/pull/59).
 
 ## Purpose and terminology
 

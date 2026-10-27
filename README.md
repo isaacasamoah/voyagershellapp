@@ -173,3 +173,13 @@ than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
 identity checks, native process limits and the opt-in proof. It does not restore
 an expired dock or submit work. Surviving-viewer and panel retry behavior remain
 separate follow-up slices until their own proof and review pass.
+
+
+The surviving-terminal follow-up is in [draft PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59).
+It verifies and reuses the original viewer, retains its viewer choice, and keeps
+unverified windows distinct from confirmed closure. The corrective pass resolves
+the two Rust findings. Both native viewer journeys passed on the same package,
+but another run of that package could not confirm native voice startup. A passing
+repeat does not explain the failure. Final review therefore retains a Required
+acceptance concern, and dependent retry/panel work is stopped under the approved
+review limit. Main and installed applications have not been replaced.
