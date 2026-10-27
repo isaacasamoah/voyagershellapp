@@ -131,7 +131,7 @@ exports.run = async (
   await proof.pageClick(panelWin, 'previous-more');
   const grown = await proof.wait(historyState, (s) => s.count > first.count);
   assert.equal(grown.height, first.height);
-  assert.equal(grown.scroll, first.scroll);
+  assert.equal(grown.scroll, first.scroll, JSON.stringify({ first, grown }));
   while ((await historyState()).more) await proof.pageClick(panelWin, 'previous-more');
   const finalFocus = await panelWin.webContents.executeJavaScript(`({
     id: document.activeElement.id,
