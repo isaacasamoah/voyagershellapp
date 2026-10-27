@@ -542,3 +542,12 @@ dock grants stay invalid. Reconnection neither opens a viewer nor restores a doc
 The shared native proof has a reconnect journey. Its outer runner retains orphaned
 disposable provider children, restarts only its own service and cleans up through
 anchored process handles. It never uses the owner's existing Vessel as a fixture.
+
+
+The current reconnect candidate does not yet meet the full deadline contract.
+Its initial UnixStream connection blocks before the deadline applies. A full
+listen queue reproduces this gap and can leave the connection check waiting
+indefinitely. The later RPC deadline test passes but does not cover this earlier
+step. Final review therefore blocks acceptance; surviving-viewer recovery and
+panel retry remain unimplemented. A further correction needs to bound the
+initial connection and preserve cancellation without blocking the service loop.

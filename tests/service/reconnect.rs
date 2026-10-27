@@ -86,6 +86,39 @@ fn background_runtime_reconnects_after_service_loss_without_repeating_work() {
 }
 
 #[test]
+fn connection_loss_keeps_active_work_and_credentials_without_resubmission() {
+    let mut f = Fixture::new();
+    f.start();
+    fs::write(f.dir.join("hold-turn"), "1").unwrap();
+    let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"active-reconnect","name":"Active","cwd":f.dir}));
+    let session = &created["session_id"];
+    let before = f.call(json!({"op":"list"}))[0].clone();
+    let context = voyager_shell::authority::Credentials::locator(&f.dir, "active-reconnect");
+    let original = fs::read(&context).unwrap();
+    let sent = f.call(json!({"op":"send","session_id":session,"request_id":"single-turn","message":"keep working"}));
+    let mut control = Codex::connect(Path::new(before["server"].as_str().unwrap())).unwrap();
+    control.rpc("fixture/disconnect", json!({})).unwrap();
+    wait(|| f.call(json!({"op":"list"}))[0]["capture_generation"] != before["capture_generation"]);
+    let after = f.call(json!({"op":"list"}))[0].clone();
+    assert_eq!(after["lifecycle"], before["lifecycle"]);
+    assert_eq!(fs::read(&context).unwrap(), original);
+    assert_eq!(
+        control.metadata("worker-thread").unwrap()["status"]["type"],
+        "active"
+    );
+    fs::remove_file(f.dir.join("hold-turn")).unwrap();
+    wait(|| {
+        f.events()["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "turn.completed" && e["native_turn_id"] == sent["native_turn_id"])
+    });
+    assert_eq!(control.rpc("fixture/count", json!({})).unwrap()["turns"], 1);
+    f.call(json!({"op":"stop-instance","session_id":session}));
+}
+
+#[test]
 fn resumed_generation_renews_its_current_locator() {
     let mut f = Fixture::new();
     let session = super::resume::stopped_saved_agent(&mut f);

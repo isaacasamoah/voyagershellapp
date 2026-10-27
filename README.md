@@ -165,7 +165,9 @@ Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
 Reports of real workflows, failures and integration limits are welcome.
 
 
-The proactive reconnect increment is under verification on its working branch.
+Background reconnect is implemented on its working branch and remains blocked
+in final review. The initial Unix socket connection can exceed the check deadline,
+and the complete acceptance-code inventory exceeds the project limit.
 It checks an existing managed Codex runtime after service or capture loss rather
 than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
 identity checks, native process limits and the opt-in proof. It does not restore

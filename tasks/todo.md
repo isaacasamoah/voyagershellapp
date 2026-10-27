@@ -1,8 +1,17 @@
 # Tasks: proactive recovery of existing Codex Vessels
 
 [Plan](plan.md). Owning spec: conversation-resume reconnect follow-up, with its
-panel consumer. Spec and plan approved by Isaac, 26 October. All items below
-are unstarted; earlier C1–C3 completion remains in Git history.
+panel consumer. Spec and plan approved by Isaac, 26 October. K1 is implemented but not accepted:
+one fresh review, one corrective pass and final review left the initial socket
+connection deadline and the full acceptance-code budget unresolved. K2 and K3
+are unstarted. Earlier C1–C3 completion remains in Git history.
+
+The frozen K1 build is available in [service-restart recovery](https://github.com/isaacasamoah/voyagershellapp/pull/55)
+and [native connection-loss recovery](https://github.com/isaacasamoah/voyagershellapp/pull/56).
+Both remain drafts. The final review's two Required findings stop this build
+sequence. Do not start another corrective build or a dependent slice without
+Isaac approving a further pass. The native legacy-runtime journey and ordinary
+checks passed, but they do not clear either outstanding gate.
 
 ## K1: background Vessel recovers automatically
 

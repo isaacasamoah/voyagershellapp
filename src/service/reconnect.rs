@@ -66,7 +66,9 @@ impl Runtime {
             let id = string(&row, "id")?;
             let current = self.store.resume_record(id)?;
             let eligible = row["removed_ms"].is_null()
-                && current.as_ref().is_some_and(|r| r["state"] == "unknown");
+                && current
+                    .as_ref()
+                    .is_some_and(|r| r["state"] == "unknown" || r["state"] == "running");
             let connected = self
                 .workers
                 .get(id)
