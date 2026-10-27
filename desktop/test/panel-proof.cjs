@@ -22,6 +22,7 @@ exports.run = async (
     previousOpen: document.getElementById('previous-agents').open,
     historyMenu: document.getElementById('menu-history').getBoundingClientRect().toJSON(),
     historyToolbar: document.querySelector('.history-toolbar').getBoundingClientRect().toJSON(),
+    routineMetadata: document.querySelectorAll('.vessel-metadata, .session-state').length,
     count: document.getElementById('previous-toggle').textContent,
     text: document.getElementById('panel').textContent
   })`);
@@ -34,8 +35,9 @@ exports.run = async (
   assert.deepEqual(initial.unregistered, [removed.session_id]);
   assert.deepEqual(initial.previous, [stopped.session_id]);
   assert.equal(initial.previousOpen, false);
+  assert.equal(initial.routineMetadata, 0);
   assert.equal(initial.count, 'Previous vessels (1)');
-  assert.match(initial.text, /Running/);
+  assert.doesNotMatch(initial.text, /Running/);
   assert.match(initial.text, /Unregistered/);
   assert.ok(
     await panelWin.webContents.executeJavaScript(
@@ -186,6 +188,11 @@ exports.run = async (
   await proof.pageKey(panelWin, 'Tab');
   assert.equal((await historyState()).focus, `inspect-${removedId}`);
   await proof.pageKey(panelWin, 'Return');
+  const metadata = await panelWin.webContents.executeJavaScript(
+    "document.querySelector('.saved-metadata').textContent",
+  );
+  assert.ok(metadata.includes(stateDir));
+  assert.match(metadata, /Last activity:/);
   const beforeRead = await rpc('events');
   await proof.pageKey(panelWin, 'Return');
   await proof.wait(

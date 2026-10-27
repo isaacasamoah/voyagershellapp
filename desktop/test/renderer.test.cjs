@@ -263,12 +263,19 @@ test('creation, Open and compact Resume retain the selected viewer', async () =>
     rank: 'crew',
     ownership: 'managed',
     worker_state: 'running',
+    capture: 'connected',
+    cwd: '/project',
     lifecycle: { runtime: 'running' },
     window: 'closed',
     terminal: 'xterm',
   };
   ui.update({ sessions: [session] });
   const items = ui.nodes.get('sessions').querySelectorAll('*');
+  const identity = items.find((n) => n.className === 'session-identity');
+  assert.deepEqual(
+    identity.children.map((n) => n.textContent),
+    ['Viewer', 'Crew'],
+  );
   const viewer = items.find((n) => n.tagName === 'select' && n.value === 'xterm');
   assert.ok(viewer);
   const open = items.find((n) => n.tagName === 'button' && n.textContent === 'Open viewer');

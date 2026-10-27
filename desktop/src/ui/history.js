@@ -132,7 +132,7 @@ function createHistory(api, element, hierarchy) {
     const title = element('h3', session.name || 'Saved vessel');
     const metadata = element(
       'p',
-      `${session.cwd}\n${session.id}\n${activity(session)}\n${session.lifecycle?.runtime || 'Runtime unverified'}${session.rank ? `\nRank: ${session.rank}` : ''}`,
+      `${session.cwd || 'Folder unavailable'}\n${session.id}\n${activity(session)}\n${session.lifecycle?.runtime || 'Runtime unverified'}${session.rank ? `\nRank: ${session.rank}` : ''}`,
       'saved-metadata',
     );
     const warning = element(
@@ -164,16 +164,5 @@ function createHistory(api, element, hierarchy) {
     details.hidden = false;
     next.focus();
   }
-  function decorate(identity, session) {
-    const folder = session.cwd?.split('/').filter(Boolean).at(-1) || 'Folder unavailable';
-    const recorded = new Date(session.last_activity_ms);
-    const date =
-      Number.isFinite(session.last_activity_ms) && !Number.isNaN(recorded.getTime())
-        ? recorded.toLocaleDateString()
-        : 'Activity unavailable';
-    const metadata = element('span', `${folder} · ${date}`, 'vessel-metadata');
-    metadata.title = `${session.cwd || 'Folder unavailable'}\n${activity(session)}`;
-    identity.append(metadata);
-  }
-  return { render, decorate, inspect };
+  return { render, inspect };
 }
