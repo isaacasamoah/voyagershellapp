@@ -610,3 +610,24 @@ and explicitly deferred the intermittent native voice-start investigation. The
 recorded uncertain outcome is unchanged. This named decision permits the next
 connection-retry slice; it does not authorize automatic native shortcut replay,
 longer deadlines or a voice-readiness claim.
+
+
+## Explicit connection retry
+
+The owner can call `reconnect-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION`.
+It checks the existing managed Codex runtime and terminal. It does not launch,
+submit work, open a viewer, start voice or change permissions. Automatic checks
+and owner requests share one attempt per Vessel, with the existing ten-second
+attempt deadline and at most three attempts. Concurrent requests join that check.
+A connected agent with an unverified terminal checks only the terminal.
+
+Retry receipts stay pending until verification finishes. Reusing an identical
+request returns its saved result. Changed inputs or a different observed runtime
+generation refuse. A known failed check can be checked again with a new request.
+A service restart preserves the unfinished receipt as uncertain. The desktop
+inspects a lost reply using the original request rather than submitting another.
+Registration and capture identity are rechecked before admitting a result.
+
+The panel keeps recovering Vessels in Vessels, shows Reconnecting during checks
+and offers Retry connection after a bounded failure. The reason stays beside the
+Vessel. Confirmed stopped runtimes use Previous vessels and explicit Resume.

@@ -9,7 +9,7 @@ refinement on 27 October. K2 reached final re-review, which resolved both origin
 retained the intermittent native voice-start concern. Isaac accepted the viewer
 recovery on 27 October and explicitly deferred that voice investigation. This
 named acceptance decision permits merge and K3; it does not claim the voice fault
-is fixed. K3 remains unstarted. Earlier C1–C3 completion remains in Git history.
+is fixed. K3 is now in progress on feat/reconnect-retry. Earlier C1–C3 completion remains in Git history.
 
 The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
 [native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
@@ -66,17 +66,17 @@ owning lifecycle documentation. Depends on R03; completes K2.
 
 ### R05: expose retry through the existing owner boundary
 
-- [ ] Add the named owner Retry connection operation and CLI path, using the automatic verification routine and current observed generation.
-- [ ] Join an active attempt, permit a new check after a known failure, and cancel admission for a changed or removed record. Never replay uncertain work.
-- [ ] Prove transient failure, eventual recovery and concurrent/stale requests with the existing service fixture.
+- [x] Add the named owner Retry connection operation and CLI path, using the automatic verification routine and current observed generation.
+- [x] Join an active attempt, permit a new check after a known failure, and cancel admission for a changed or removed record. Never replay uncertain work.
+- [x] Prove transient failure, eventual recovery and concurrent/stale requests with the existing service fixture.
 
 Likely owners: src/service.rs, src/bin/voyager.rs and existing service tests.
 Depends on K1 and K2.
 
 ### R06: present recovery in the current interface
 
-- [ ] Add the thin named desktop call in the existing bridge and a menu Retry connection action. Keep progress subtle, keyboard accessible and local to the Vessel.
-- [ ] Keep recovering Vessels visible, preserve focus and avoid attention-only dead ends. Confirmed exits use Previous vessels and explicit Resume.
+- [x] Add the thin named desktop call in the existing bridge and a menu Retry connection action. Keep progress subtle, keyboard accessible and local to the Vessel.
+- [x] Keep recovering Vessels visible, preserve focus and avoid attention-only dead ends. Confirmed exits use Previous vessels and explicit Resume.
 - [ ] Keep normal native actions, current styling, free placement and the separate name-only-row request unchanged.
 
 Likely owners: desktop/src/instances.cjs, main.cjs, preload.cjs, ui/renderer.js and

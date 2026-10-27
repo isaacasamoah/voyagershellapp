@@ -113,7 +113,8 @@ impl Runtime {
                 "dock",
                 "undock",
                 "stop",
-                "escalations"
+                "escalations",
+                "reconnect-instance"
             ]);
         }
         if dock {

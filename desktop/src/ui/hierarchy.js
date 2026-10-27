@@ -12,7 +12,15 @@ const hierarchy = (() => {
     for (const session of sessions) {
       const runtime = session.lifecycle?.runtime;
       let group = 'attention';
-      if (runtime === 'running' || runtime === 'starting' || session.resume?.state === 'pending')
+      if (
+        runtime === 'running' ||
+        runtime === 'starting' ||
+        session.resume?.state === 'pending' ||
+        (runtime === 'unknown' &&
+          session.removed_ms == null &&
+          session.ownership === 'managed' &&
+          session.recovery)
+      )
         group = 'current';
       else if (
         runtime &&

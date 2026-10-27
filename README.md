@@ -185,3 +185,10 @@ recovery on 27 October and explicitly deferred the voice investigation, requesti
 merge followed by retry and the small panel changes. The failed receipt remains
 evidence and no voice fix is claimed. Installation and owner-app restart remain
 separate decisions.
+
+
+The current retry branch adds owner-only Retry connection for an existing Codex
+Vessel after automatic checks finish. It shares automatic verification and saved
+request results, and keeps recovering Vessels visible in the panel. Automated
+checks pass; packaged native proving and independent review remain pending.
+It does not resolve the separately deferred intermittent native voice startup.

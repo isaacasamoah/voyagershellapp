@@ -3,6 +3,82 @@ use nix::{libc, sys::signal::Signal};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 #[test]
+fn explicit_retry_joins_one_check_and_preserves_the_running_runtime() {
+    let mut f = Fixture::new();
+    f.start();
+    let created = f.call(json!({"op":"create","kind":"codex","open":false,"request_id":"retry-runtime","name":"Retry","cwd":f.dir}));
+    let id = created["session_id"].as_str().unwrap();
+    let _owned = OwnedFixture::new(created["runtime_pid"].as_u64().unwrap() as u32);
+    let before = f.call(json!({"op":"list"}))[0].clone();
+    lose_service(&mut f);
+    let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
+    store
+        .0
+        .execute(
+            "UPDATE sessions SET native_id='missing-thread' WHERE id=?1",
+            [id],
+        )
+        .unwrap();
+    f.start();
+    wait(|| f.call(json!({"op":"list"}))[0]["recovery"]["retry_available"] == true);
+    store
+        .0
+        .execute(
+            "UPDATE sessions SET native_id=?2 WHERE id=?1",
+            rusqlite::params![id, before["native_thread_id"].as_str().unwrap()],
+        )
+        .unwrap();
+    fs::write(f.dir.join("hold-reconnect"), "1").unwrap();
+    let request = json!({"op":"reconnect-instance","session_id":id,"request_id":"retry-first","expected_runtime_generation":1});
+    let mut stale = request.clone();
+    stale["request_id"] = json!("stale-retry");
+    stale["expected_runtime_generation"] = json!(0);
+    assert!(
+        client(&f.dir, stale)
+            .unwrap_err()
+            .to_string()
+            .contains("stale_runtime")
+    );
+    let pending = client(&f.dir, request.clone()).unwrap();
+    let mut changed = request.clone();
+    changed["expected_runtime_generation"] = json!(2);
+    assert!(
+        client(&f.dir, changed)
+            .unwrap_err()
+            .to_string()
+            .contains("request_conflict")
+    );
+    assert_eq!(pending["state"], "pending");
+    wait(|| f.dir.join("reconnect-pending").exists());
+    let mut joined = request.clone();
+    joined["request_id"] = json!("retry-joined");
+    assert_eq!(client(&f.dir, joined.clone()).unwrap()["state"], "pending");
+    assert_eq!(client(&f.dir, request.clone()).unwrap(), pending);
+    assert_eq!(
+        f.call(json!({"op":"list"}))[0]["recovery"]["retry_available"],
+        false
+    );
+    fs::remove_file(f.dir.join("hold-reconnect")).unwrap();
+    assert_eq!(f.call(request)["state"], "completed");
+    assert_eq!(f.call(joined)["state"], "completed");
+    let after = &f.call(json!({"op":"list"}))[0];
+    assert_eq!(after["lifecycle"], before["lifecycle"]);
+    assert_eq!(after["native_thread_id"], before["native_thread_id"]);
+    assert_eq!(
+        after["capture_generation"].as_i64().unwrap(),
+        before["capture_generation"].as_i64().unwrap() + 1
+    );
+    assert_eq!(
+        f.call(json!({"op":"attach-info","session_id":id}))["pid"],
+        created["runtime_pid"]
+    );
+    let mut native = Codex::connect(Path::new(before["server"].as_str().unwrap())).unwrap();
+    assert_eq!(native.rpc("fixture/count", json!({})).unwrap()["turns"], 0);
+    f.call(json!({"op":"stop-instance","session_id":id}));
+    f.halt();
+}
+
+#[test]
 fn restarted_service_does_not_report_an_unverified_saved_viewer_closed() {
     let mut f = Fixture::new();
     f.start();
@@ -226,11 +302,16 @@ fn capture_change_during_verification_rejects_the_old_result() {
     f.start();
     wait(|| f.dir.join("reconnect-pending").exists());
     let store = Store::open(&f.dir.join("events.sqlite")).unwrap();
+    let retry = json!({"op":"reconnect-instance","session_id":id,"request_id":"stale-join","expected_runtime_generation":1});
+    assert_eq!(client(&f.dir, retry.clone()).unwrap()["state"], "pending");
     let generation = store.reactivate(id).unwrap();
     drop(store);
     fs::remove_file(f.dir.join("hold-reconnect")).unwrap();
     wait(|| f.call(json!({"op":"list"}))[0]["recovery"]["state"] == "disconnected");
     let row = f.call(json!({"op":"list"}))[0].clone();
+    let failed = f.call(json!({"op":"operation","request_id":"stale-join"}));
+    assert_eq!(failed["state"], "partial");
+    assert!(failed["error"].as_str().unwrap().contains("changed"));
     assert_eq!(row["capture_generation"], generation);
     assert_eq!(row["capture"], "disconnected");
     assert!(!voyager_shell::authority::Credentials::locator(&f.dir, "stale-check").exists());

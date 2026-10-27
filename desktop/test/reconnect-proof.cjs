@@ -8,6 +8,7 @@ exports.run = async (
   { rpc, stateDir, refresh, getState, panelWin, avatarWin, inventory, screen, setExpanded },
   { wait, pageClick, input, delay },
 ) => {
+  const retryMode = process.env.VOYAGER_PROOF_RECONNECT_RETRY === '1';
   const viewerMode = process.env.VOYAGER_PROOF_RECONNECT_VIEWER;
   const { processIdentity } = require('../src/binding.cjs');
   const control = viewerMode
@@ -71,6 +72,7 @@ exports.run = async (
     JSON.stringify({
       action: 'restart',
       request,
+      ...(retryMode ? { block_endpoint: id } : {}),
       ...(viewerMode === 'closed' ? { close_viewer: 'reconnect-old-viewer' } : {}),
     }),
   );
@@ -81,6 +83,51 @@ exports.run = async (
       ),
     (value) => value.request === request,
   );
+  let retried;
+  if (retryMode) {
+    const failed = await wait(
+      row,
+      (r) => r.recovery?.retry_available,
+      'Automatic checks did not finish',
+      30000,
+    );
+    assert.equal(failed.lifecycle.runtime, 'unknown');
+    await refresh();
+    await setExpanded(true, { x: 180, y: 100 });
+    const retryButton = await panelWin.webContents.executeJavaScript(`(() => {
+      const row = document.querySelector('[data-vessel="${id}"]');
+      if (!document.querySelector('#sessions').contains(row)) throw Error('Recovering Vessel left current Vessels');
+      const action = [...row.querySelectorAll('button')].find(b => b.textContent === 'Retry connection');
+      action.id = 'reconnect-retry';
+      action.addEventListener('click', () => queueMicrotask(() => window.reconnectProofRequest = action.dataset.request), { once: true });
+      return action.id;
+    })()`);
+    await fs.writeFile(
+      path.join(stateDir, 'proof-service-control.json'),
+      JSON.stringify({ action: 'restore-endpoint', request: 'restore-existing-endpoint' }),
+    );
+    await wait(
+      async () =>
+        JSON.parse(
+          await fs.readFile(path.join(stateDir, 'proof-endpoint-restored.json')).catch(() => '{}'),
+        ),
+      (r) => r.request === 'restore-existing-endpoint',
+    );
+    await pageClick(panelWin, `menu-${id}`);
+    await pageClick(panelWin, retryButton);
+    retried = await wait(
+      async () => {
+        const request = await panelWin.webContents.executeJavaScript(
+          'window.reconnectProofRequest',
+        );
+        return request ? rpc('operation', request) : null;
+      },
+      (r) => r?.state === 'completed',
+      'Panel Retry did not complete',
+    );
+    assert.equal(retried.action, 'reconnect-instance');
+    assert.equal(retried.runtime_generation, before.lifecycle.runtime_generation);
+  }
   const recovered = await wait(
     row,
     (r) => r.capture === 'connected',
@@ -241,6 +288,7 @@ exports.run = async (
     runtimeGeneration: before.lifecycle.runtime_generation,
     restart,
     readyMs,
+    retried,
     stopped,
     viewerRecovery,
     unrelatedControl: control,

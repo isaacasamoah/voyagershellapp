@@ -43,6 +43,8 @@ function element(tag, text, className) {
 }
 function runtimeLabel(session) {
   if (session.resume?.state === 'pending') return 'Resuming';
+  if (session.recovery?.state === 'checking') return 'Reconnecting';
+  if (session.recovery?.state === 'disconnected') return 'Connection unavailable';
   const runtime = session.lifecycle?.runtime;
   if (runtime === 'starting') return 'Starting';
   if (runtime === 'running') {
@@ -249,6 +251,33 @@ function renderState(value) {
         () => [supervisor.value],
       );
     }
+    if (s.recovery?.retry_available && s.removed_ms == null) {
+      addAction(
+        'Retry connection',
+        async (request) => {
+          announceVessel(`Checking the connection to ${name}.`);
+          const result = await api.reconnectInstance({
+            id: s.id,
+            generation: s.lifecycle.runtime_generation,
+            request,
+          });
+          if (!result?.error)
+            announceVessel(
+              result?.state === 'pending' ? `Still checking ${name}.` : `Reconnected ${name}.`,
+            );
+          return result;
+        },
+        () => [s.lifecycle.runtime_generation],
+      );
+    }
+    if (s.recovery?.state === 'disconnected')
+      row.append(
+        element(
+          'p',
+          s.recovery.reason || 'Retry connection to check this agent again.',
+          'agent-reason',
+        ),
+      );
     if (s.ownership === 'managed' && runtime === 'running') {
       if (s.window === 'open')
         addAction('Run in background', (request) => api.backgroundInstance(s.id, request));
