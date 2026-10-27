@@ -67,22 +67,23 @@ exports.run = async (
   assert.equal(receipt.process_identity, undefined);
   const request = 'active-service-restart';
   const started = performance.now();
-  await fs.writeFile(
-    path.join(stateDir, 'proof-service-control.json'),
-    JSON.stringify({
-      action: 'restart',
-      request,
-      ...(retryMode ? { block_endpoint: id } : {}),
-      ...(viewerMode === 'closed' ? { close_viewer: 'reconnect-old-viewer' } : {}),
-    }),
-  );
-  const restart = await wait(
-    async () =>
-      JSON.parse(
-        await fs.readFile(path.join(stateDir, 'proof-service-restarted.json')).catch(() => '{}'),
-      ),
-    (value) => value.request === request,
-  );
+  const serviceCommand = async (action, request, details = {}) => {
+    await fs.writeFile(
+      path.join(stateDir, 'proof-service-control.json'),
+      JSON.stringify({ action, request, ...details }),
+    );
+    return wait(
+      async () =>
+        JSON.parse(
+          await fs.readFile(path.join(stateDir, 'proof-service-restarted.json')).catch(() => '{}'),
+        ),
+      (r) => r.request === request,
+    );
+  };
+  const restart = await serviceCommand('restart', request, {
+    ...(retryMode ? { block_endpoint: id } : {}),
+    ...(viewerMode === 'closed' ? { close_viewer: 'reconnect-old-viewer' } : {}),
+  });
   let retried;
   if (retryMode) {
     const failed = await wait(
@@ -110,17 +111,7 @@ exports.run = async (
       Boolean,
       'Retry connection was not shown in current Vessels',
     );
-    await fs.writeFile(
-      path.join(stateDir, 'proof-service-control.json'),
-      JSON.stringify({ action: 'restore-endpoint', request: 'restore-existing-endpoint' }),
-    );
-    await wait(
-      async () =>
-        JSON.parse(
-          await fs.readFile(path.join(stateDir, 'proof-endpoint-restored.json')).catch(() => '{}'),
-        ),
-      (r) => r.request === 'restore-existing-endpoint',
-    );
+    await serviceCommand('restore-endpoint', 'restore-existing-endpoint');
     await pageClick(panelWin, `menu-${id}`);
     await pageClick(panelWin, retryButton);
     retried = await wait(

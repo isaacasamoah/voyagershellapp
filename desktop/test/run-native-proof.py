@@ -68,7 +68,7 @@ try:
                 saved.rename(original)
                 blocked_endpoint = None
                 control.unlink()
-                (state / 'proof-endpoint-restored.json').write_text(json.dumps({'request': request['request']}))
+                (state / 'proof-service-restarted.json').write_text(json.dumps({'request': request['request']}))
                 continue
             assert request['action'] == 'restart'
             rows = call('list')
