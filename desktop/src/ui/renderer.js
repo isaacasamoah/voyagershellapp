@@ -170,7 +170,7 @@ function renderState(value) {
       runtime === 'starting' ||
       s.resume?.state === 'pending' ||
       s.recovery?.state === 'checking' ||
-      (runtime === 'running' && s.capture !== 'connected')
+      (runtime === 'running' && s.removed_ms == null && s.capture !== 'connected')
     )
       identity.append(element('span', status, 'session-state'));
     b.append(identity, dot);
