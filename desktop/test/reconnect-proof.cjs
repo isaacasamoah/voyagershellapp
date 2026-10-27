@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process');
 
 exports.run = async (
   { rpc, stateDir, refresh, getState, panelWin, avatarWin, inventory, screen, setExpanded },
-  { wait, pageClick, input, delay },
+  { wait, stable, pageClick, input, delay },
 ) => {
   const retryMode = process.env.VOYAGER_PROOF_RECONNECT_RETRY === '1';
   const viewerMode = process.env.VOYAGER_PROOF_RECONNECT_VIEWER;
@@ -184,7 +184,7 @@ exports.run = async (
     else assert.notEqual(attached.pid, viewer.pid);
     const target = (await inventory()).find((w) => w.pid === attached.pid);
     assert(target, 'Recovered terminal window was not found');
-    const marker = avatarWin.getBounds();
+    const marker = await stable(() => avatarWin.getBounds(), 'Avatar position did not settle');
     const destination = screen.screenToDipPoint({
       x: target.x + target.width / 2,
       y: target.y + target.height / 2,

@@ -16,6 +16,21 @@ async function wait(read, accept = Boolean, message = 'Native proof timed out', 
   throw Error(message);
 }
 
+async function stable(read, message) {
+  let previous;
+  return wait(
+    async () => {
+      const value = await read();
+      const signature = JSON.stringify(value);
+      const settled = signature === previous;
+      previous = signature;
+      return settled ? value : null;
+    },
+    Boolean,
+    message,
+  );
+}
+
 async function completedTurn(events, sent, expectedText) {
   const observed = await wait(
     events,
@@ -129,10 +144,21 @@ async function run(context) {
     await window.webContents.executeJavaScript(
       `document.getElementById(${JSON.stringify(id)}).scrollIntoView({block:'nearest',inline:'nearest'})`,
     );
-    const point = await window.webContents.executeJavaScript(
-      `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) throw Error('Control is outside the visible page'); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`,
-    );
-    for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
+    const point = await stable(async () => {
+      const point = await window.webContents.executeJavaScript(`(() => {
+        const element = document.getElementById(${JSON.stringify(id)});
+        element.scrollIntoView({block:'nearest',inline:'nearest'});
+        const bounds = element.getBoundingClientRect();
+        return {x:Math.round(bounds.x+bounds.width/2),y:Math.round(bounds.y+bounds.height/2)};
+      })()`);
+      window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
+      await delay(30);
+      const ready = await window.webContents.executeJavaScript(
+        `document.getElementById(${JSON.stringify(id)}).contains(document.elementFromPoint(${point.x}, ${point.y}))`,
+      );
+      return ready ? point : null;
+    }, 'Control did not settle at the pointer target');
+    for (const type of ['mouseDown', 'mouseUp']) {
       window.webContents.sendInputEvent({ type, ...point, button: 'left', clickCount: 1 });
       await delay(30);
     }
@@ -167,7 +193,7 @@ async function run(context) {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
       { ...context, directory },
-      { wait, input, click, pageClick, pageFill, pageKey, pageWheel, delay, captureOutput },
+      { wait, stable, input, click, pageClick, pageFill, pageKey, pageWheel, delay, captureOutput },
     );
   } catch (error) {
     failure = error;
