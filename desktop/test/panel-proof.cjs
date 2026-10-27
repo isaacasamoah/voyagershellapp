@@ -50,19 +50,6 @@ exports.run = async (
     path.join(stateDir, 'panel-before.png'),
     (await panelWin.webContents.capturePage()).toPNG(),
   );
-  const geometry = await panelWin.webContents.executeJavaScript(
-    "({bounds:document.getElementById('previous-toggle').getBoundingClientRect().toJSON(),height:innerHeight})",
-  );
-  await fs.writeFile(
-    path.join(stateDir, 'panel-layout.json'),
-    JSON.stringify({
-      window: panelWin.getBounds(),
-      geometry,
-      native: (await inventory()).find(
-        (w) => w.id === panelWin.getNativeWindowHandle().readUInt32LE(),
-      ),
-    }),
-  );
   await proof.pageClick(panelWin, 'previous-toggle');
   await proof.wait(snapshot, (s) => s.previousOpen);
   const visibleHistory = await snapshot();
@@ -133,16 +120,8 @@ exports.run = async (
   await proof.pageKey(panelWin, 'Tab');
   assert.equal((await historyState()).focus, 'previous-sessions');
   await proof.pageKey(panelWin, 'End');
-  await fs.writeFile(
-    path.join(stateDir, 'history-layout.json'),
-    JSON.stringify(await historyState()),
-  );
   await proof.wait(historyState, (s) => s.scroll > 0);
   await proof.pageWheel(panelWin, 'previous-sessions', 300);
-  await fs.writeFile(
-    path.join(stateDir, 'history-wheel.json'),
-    JSON.stringify(await historyState()),
-  );
   await proof.wait(historyState, (s) => s.scroll === 0);
   const first = await historyState();
   await proof.pageClick(panelWin, 'previous-more');
@@ -155,7 +134,6 @@ exports.run = async (
     withinList: document.getElementById('previous-sessions').contains(document.activeElement),
     list: document.activeElement.id === 'previous-sessions'
   })`);
-  await fs.writeFile(path.join(stateDir, 'final-batch-focus.json'), JSON.stringify(finalFocus));
   assert.ok(finalFocus.withinList || finalFocus.list, 'Final Load more lost keyboard focus');
   const normal = await snapshot();
   const savedPosition = await historyState();
@@ -214,9 +192,7 @@ exports.run = async (
   `);
   await proof.pageClick(panelWin, 'history-status');
   const textPointer = await panelWin.webContents.executeJavaScript('window.reviewTextPointer');
-  await fs.writeFile(path.join(stateDir, 'history-text-pointer.json'), JSON.stringify(textPointer));
   assert.equal(textPointer.prevented, false, 'Reading saved text triggered panel dragging');
-  await proof.delay(100);
   const viewport = await panelWin.webContents.executeJavaScript(`({
     width:innerWidth, height:innerHeight,
     content:document.getElementById('panel-flow').scrollWidth,
