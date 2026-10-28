@@ -23,7 +23,7 @@ We learn from other projects and credit the specific ideas. Do not upload third-
 
 ## Set up a change
 
-Follow [the source setup](README.md#get-started), then install Python 3.11+ for
+Follow [the quick start](README.md#quick-start), then install Python 3.11+ for
 the disposable process fixtures. Read [AGENTS.md](AGENTS.md) and
 [CONSTRAINTS.md](CONSTRAINTS.md) before editing. The constraints define the test
 budget, native proving fixture, review size, and acceptance rules. Do not weaken
