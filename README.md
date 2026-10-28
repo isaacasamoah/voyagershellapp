@@ -188,3 +188,8 @@ Native evidence is Linux/X11. The earlier intermittent native voice-start failur
 remains explicitly deferred after owner acceptance of terminal recovery. No voice
 fix, Ghostty freeze fix or support for other platforms is claimed. These branch
 changes have not been installed and the owner's running trial is unchanged.
+
+An unmerged [native tool callback experiment](experiments/direct-vessel-tools.md)
+is available only when `VOYAGER_DIRECT_TOOL_PROBE` is explicitly set. Its two
+probe tools are not a supported general agent interface. Native proof and the
+remaining limitations are recorded separately from the application's features.

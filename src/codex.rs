@@ -119,6 +119,13 @@ impl Codex {
         bail!("Codex {method} timed out; delivery may be uncertain")
     }
 
+    pub(crate) fn tool_reply(&mut self, id: Value, result: Value) -> Result<()> {
+        self.socket.send(Message::Text(
+            json!({"id":id,"result":result}).to_string().into(),
+        ))?;
+        Ok(())
+    }
+
     pub fn begin_rpc(&mut self, method: &str, params: Value) -> Result<u64> {
         if let Some(check) = &self.check {
             let remaining = check.remaining()?;

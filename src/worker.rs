@@ -37,6 +37,7 @@ pub struct Worker {
     pub alive: bool,
     pub generation: i64,
     stopping: bool,
+    pub(crate) tool_calls: Vec<Value>,
 }
 
 impl Worker {
@@ -105,6 +106,9 @@ impl Worker {
                 let (reply, name) = match mode {
                     ThreadStart::New(name) => {
                         params["historyMode"] = json!("legacy");
+                        if std::env::var_os("VOYAGER_DIRECT_TOOL_PROBE").is_some() {
+                            params["dynamicTools"] = crate::service::tool_probe::definitions();
+                        }
                         params["developerInstructions"] = json!(include_str!("orchestration.md"));
                         let reply = connection.rpc("thread/start", params)?;
                         settings.verify(&reply)?;
@@ -259,6 +263,7 @@ impl Worker {
             alive: true,
             generation: 0,
             stopping: false,
+            tool_calls: Vec::new(),
         })
     }
 
@@ -281,7 +286,14 @@ impl Worker {
         )
     }
 
-    fn persist(&self, store: &Store, message: Value) -> Result<()> {
+    fn persist(&mut self, store: &Store, message: Value) -> Result<()> {
+        if std::env::var_os("VOYAGER_DIRECT_TOOL_PROBE").is_some()
+            && message["method"] == "item/tool/call"
+            && message.get("id").is_some()
+        {
+            self.tool_calls.push(message);
+            return Ok(());
+        }
         if message["method"] == "thread/settings/updated"
             && message["params"]["threadId"] == self.native
             && store.generation(&self.session)? == Some(self.generation)
@@ -465,6 +477,7 @@ impl StartingWorker {
             alive: true,
             generation: capture_generation,
             stopping: false,
+            tool_calls: Vec::new(),
         }))
     }
 }

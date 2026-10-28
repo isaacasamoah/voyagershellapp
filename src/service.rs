@@ -44,6 +44,7 @@ mod fleets;
 mod lifecycle;
 mod native;
 mod reconnect;
+pub(crate) mod tool_probe;
 mod voice;
 use native::NativeCall;
 
@@ -852,8 +853,18 @@ impl Runtime {
         for shell in self.shells.values_mut() {
             shell.observe(&self.store)?;
         }
+        let mut tools = Vec::new();
         for worker in self.workers.values_mut() {
             worker.observe(&self.store)?;
+            tools.extend(
+                worker
+                    .tool_calls
+                    .drain(..)
+                    .map(|call| (worker.session.clone(), call)),
+            );
+        }
+        for (session, call) in tools {
+            self.tool_probe(&session, call)?;
         }
         let mut disconnected = Vec::new();
         for (session, (connection, generation)) in &mut self.captures {
