@@ -1,187 +1,293 @@
 # Voyager Shell
 
-Voyager connects native coding agents and terminals to a local Rust service.
-Electron provides a floating astronaut and a small control panel. Your agent keeps
-its own interface; Voyager manages the work it starts and records what happens.
+Voyager Shell is a local development app being built to help people and agents work
+together through an intuitive interface. It is designed to fit alongside your
+existing tools and agents, with basic tools for communication, coordination, and
+event collection. You choose how to combine and configure them to support your
+workflow.
 
-We build small, real experiments, try them ourselves, and share the results here.
+In the future, users will be able to join communities called voyages to collaborate
+on shared projects. Events will remain stored locally. Joining a voyage will let
+users share useful context extracted from those events through a structured
+knowledge graph that agents can access and people can inspect and validate.
 
-## Vision
+**Current status:** an experimental local app with a Rust service and an Electron
+desktop client. Native trials have used Fedora GNOME/XWayland, Codex, Bash, and
+dedicated Ghostty or xterm windows. Broader agent and platform support, voyages,
+and knowledge graphs are future work.
 
-Let’s go together. We’re building voyagershell to make room for agent-to-agent,
-agent-to-human and human-to-human collaboration alongside a strong solo dev flow.
+[Current system](#current-system) · [Proposed system](#proposed-system) ·
+[Get started](#get-started) · [What you can do](#what-you-can-do) ·
+[Contribute](CONTRIBUTING.md)
 
-The direction is shared, dynamic knowledge graphs that connect what a team learns,
-decides and builds, with native messaging to keep people and agents in conversation.
-As that knowledge evolves, collaborators should be able to find relevant context,
-follow its evidence and stay aware of changes that affect their work.
+## Current system
 
-This is the vision we’re exploring through small experiments. The prototype below
-is our starting point, and we’d love to build toward it with other developers.
+The floating astronaut and panel are the desktop interface. Agents keep their own
+native interfaces. One local Rust service manages the runtimes it starts, checks
+who may act, and records permitted events. A registered agent or terminal is a
+**Vessel**. A **Fleet** groups related Vessels without changing their permissions.
 
-## Specification review
+```mermaid
+flowchart TB
+    person["You"] --> desktop["Electron desktop: panel and astronaut"]
+    desktop --> cli["Rust CLI"]
+    agent["Agent tools with bound identity"] --> cli
+    desktop -->|"Chat and docking sockets"| service
+    cli --> service
+    subgraph local["Local Voyager service"]
+        service["Lifecycle, authority, coordination and capture"]
+        conversation["Private app conversation"]
+        records[("SQLite events and receipts; Fleet metadata")]
+        service --> conversation
+        service --> records
+    end
+    service <-->|"Native protocols"| runtimes["Codex and Bash runtimes"]
+    conversation <--> private["Private Codex runtime"]
+    runtimes <--> viewers["Ghostty or xterm: native agent and shell interfaces"]
+    service --> platform["Linux process, PTY and X11 operations"]
+    desktop --> helper["Rust window helper"]
+    helper --> platform
+```
 
-The [tracer-bullet usability specifications](SPEC.md) cover conversation
-resume, current-work presentation, voice handoffs and docking recovery. The specifications are
-approved. Docking recovery is accepted and merged, including returning the floating
-controls to their pre-dock position. The active [implementation plan](tasks/plan.md) covers current startup settings and
-a compact Resume flow after the reviewed saved-conversation and panel modules. This branch groups running,
-uncertain and stopped records, reveals bounded saved history and offers an explicit
-Resume-and-open journey. Owner acceptance, merge and installation remain separate.
-The task list records each independent review and the input limits of native proof.
+Closing the desktop or backgrounding a terminal leaves managed work running.
+Explicit Stop ends the selected managed runtime. Removing a Vessel ends future
+capture and instruction routing while retaining its recorded history.
 
-## Current build
+The CLI, desktop, and app assistant reach the same service decisions, although
+their request definitions are maintained separately today. The desktop also uses
+a separate native window helper. The private app conversation is separate from
+Vessel capture and has its own in-memory history.
 
-Owner `list` responses distinguish a live owned runtime, a confirmed stop and
-unknown process ownership. Managed starts retain a runtime generation and observed
-nonsecret settings for later recovery. A service restart preserves a confirmed
-stop and never restores ownership from a saved process number. The owner service
-API can explicitly resume an eligible saved Codex conversation without submitting
-work. The owner CLI exposes `resume-instance` with the observed generation and a
-request ID. It keeps the same identity and leaves its terminal closed for a separate
-Open. The previous viewer must be closed first. The panel uses those same service decisions. Vessels keeps running agents
-visible with closed viewers; Previous vessels reveals stopped conversations and
-saved events. Panel Resume checks current runtime identity before a separate Open. A worker names
-its hidden supervisor, and keyboard focus follows meaningful controls through
-state changes.
-New launch and Resume use current Codex model and effort settings. Launch and Resume
-select YOLO; permission-default controls remain deferred. Changed configuration or missing historic settings alone does not
-block Resume. Confirmed stop, saved identity and an available directory remain
-required. Previous vessels offers Resume in one compact row, with viewer choice
-and saved details in its menu. Removed vessels has a separate view opened from
-the history menu. Vessel action failures stay beside that Vessel until dismissed
-or superseded by a later action. Details preserves the full message and request ID.
+This diagram describes the source baseline in
+[the accepted viewer-recovery revision](https://github.com/isaacasamoah/voyagershellapp/tree/abb9fe0a24653302434f803a9a278edd97bb8369).
+Read the [lifecycle contract](docs/lifecycle.md),
+[authority rules](docs/authority.md), and
+[private conversation boundary](docs/harness-runtime.md) for the detailed behavior.
+Later working branches and an installed build can differ from this baseline.
 
-- **+** creates a named Codex instance or persistent Bash terminal in Ghostty or xterm.
-  Creation registers it and starts capture. Choose a Fleet when one exists. Native
-  windows open by default.
-- Click a Vessel card to surface its terminal on half a display and minimise
-  the others. Rank rows start collapsed; separate Fleets collect related vessels
-  through drag/drop or a request to Voyager/the docked agent. Membership is visual
-  organization and grants no authority. The panel and canvases size to their visible content.
-  See [Vessels and fleets](docs/fleets.md).
-- **⋯** offers rename, background, stop, remove, and stop-and-remove. Removal ends future
-  capture and instruction routing; historical events remain.
-- Docking requires a verified running, connected managed agent. Hover and drop
-  check the same eligibility rules; external or changed targets refuse with a
-  visible explanation and no implicit registration. Undocking or closing Electron
-  leaves agents and capture running. The terminal marker fades until hovered.
-- Codex sessions launched by Voyager use YOLO. External sessions keep their
-  existing permissions. Bash commands share the human's shell state.
-- Agent creation selects Admiral, Commodore, Captain or Crew, defaulting to Crew.
-  Assigned supervisors delegate and adjudicate downward; agents escalate upward.
-  Docking temporarily grants human command authority.
-- Agent messages start an idle turn or steer the observed active turn. The service
-  checks the bound caller; it never silently replays a failed or uncertain send.
-- An owner can grant a named agent permission to run a specific development checkout
-  in a fresh service/profile, inspect its result and request cleanup. Manual testing
-  and the existing automated polish journey are separate modes. This experimental
-  [development facility](docs/development-tests.md) does not grant control of the
-  installed app and still requires a live graphical acceptance trial.
+## Proposed system
 
-The packaged candidate has Fedora GNOME/XWayland evidence with dedicated Ghostty
-and xterm windows. Native trials cover placement, target-loss recovery, voice
-routing and recorded docking output. The task list preserves fixture setup and
-voice teardown limits; owner acceptance remains open. Ordinary
-`codex` launches, tabs, other terminals, macOS and native Wayland are not supported
-by the current matcher. Registration does not transfer ownership of an external
-process. Persistence covers client disconnection, not daemon crashes or reboots.
-Rebuilding the executable at the same path preserves viewer and instance CLI paths.
-Bash open receipts also wait for the viewer connection, not just a mapped terminal window.
+The service architecture review proposes one typed definition of operations,
+results, errors, and events for desktop, CLI, and agent callers. Agent integration,
+terminal choice, and operating-system support would have separate boundaries.
+One Rust service would continue to own state and enforce permissions.
 
-Explicit supervisor preemption, knowledge extraction and shared graphs are later
-work. Voyager is an experimental tracer-bullet build.
+```mermaid
+flowchart TB
+    person["You"] --> desktop["Electron desktop: typed panel and astronaut"]
+    desktop -->|"Shared typed contract"| service
+    cli["Rust CLI"] -->|"Shared typed contract"| service
+    agent["Agent tools with bound identity"] -->|"Shared typed contract"| service
+    subgraph local["Local Voyager service"]
+        service["Lifecycle, authority, coordination and capture"]
+        conversation["Private administrator conversation"]
+        records[("Local state, events and receipts")]
+        service --> conversation
+        service --> records
+        conversation -->|"Shared typed contract"| service
+    end
+    service --> adapters["Agent and shell adapters"]
+    adapters <--> runtimes["Supported native runtimes"]
+    conversation <--> private["Native administrator agent"]
+    runtimes <--> viewers["Supported native terminal interfaces"]
+    service --> platform["Operating-system and terminal adapters"]
+    platform --> viewers
+```
 
-## Talk to Voyager
+The shared-contract labels identify common request definitions on each caller's
+service connection. Native provider and terminal connections keep their own protocols.
 
-Voyager starts a private Codex runtime with the service. Type in the subtle chat
-bar at the panel bottom, or press the avatar's soundwave to use voice. Named
-service tools manage Vessels and Fleets. Escalations and replies use the same chat,
-with the original request available behind disclosure.
-The private assistant can search/read local work files and transcripts, inspect
-captured Codex events and retained Bash output, and delegate changes to Vessels.
-Local inspection is bounded and read-only; named orchestration controls remain available.
-The conversation stays separate from terminal sessions and Vessel capture.
-Docking selects native Codex voice by default; undocking stops it. The floating
-soundwave uses the private app conversation. [Voice setup and limits](docs/voice.md).
-Closing Electron stops voice while the runtime and work continue.
-[Conversation setup and current limits](docs/harness-runtime.md).
+This is a **design proposal**, not an implemented system or an approved restructure
+specification. It includes a TypeScript desktop and direct service requests in
+place of spawning a CLI for ordinary desktop actions. Exact types, adapter support,
+compatibility, and administrator permissions still need specification and review.
+The [reconnect plan's later review scope](tasks/plan.md#later-combined-polish-review)
+records that boundary. macOS and Windows require their own implementation and
+native verification.
 
-## Try it
+The existing [specification index](SPEC.md) covers approved user journeys:
 
-For a Linux bundle, see [install the Fedora prototype](docs/install-linux.md).
-See [native instances](docs/instances.md) for setup, then use the panel's **+**.
-Opening the app starts or reconnects to the service. Closing the panel leaves work
-running. After stopping managed Vessels, use the small panel menu's **Stop service**
-to shut Voyager down explicitly. Starting at login is not enabled.
-The [desktop guide](docs/desktop.md) describes docking and gestures.
-The [lifecycle contract](docs/lifecycle.md) defines each action and its result.
-The [authority guide](docs/authority.md) explains ranks, assignment and agent tools.
-The [CLI reference](docs/service.md#commands) exposes the same operations to scripts
-and agents; the [worker skill](skills/voyager-worker/SKILL.md) teaches that workflow.
+| Specification                                      | Behavior it defines                                                                                  |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [Docking recovery](SPEC-docking-recovery.md)       | Verify a supported target, explain refusal, and keep the astronaut recoverable.                      |
+| [Voice handoff](SPEC-voice-handoff.md)             | Acknowledge delegated requests and return their actual results, with readable text when audio fails. |
+| [Conversation resume](SPEC-conversation-resume.md) | Explicitly resume eligible stopped conversations and verify surviving runtimes before reconnecting.  |
+| [Current-work panel](SPEC-current-work-panel.md)   | Keep current work visible and expose previous conversations and supported recovery actions.          |
 
-## Checks
+A specification states required behavior. Its existence does not establish that
+every acceptance case has passed. The [active task record](tasks/todo.md) owns build
+and review evidence. As changes land and are verified, update the current diagram
+and remove completed changes from the proposed view. The voyage and knowledge-graph
+vision above has no implementation specification in this repository yet.
 
-On Linux, install Rust, a C linker and Python 3.11+. Then:
+## Get started
+
+These instructions use a terminal, the application where you type commands. Run
+each command in order. A command returning to the prompt without an error means
+you can move to the next step. You do not need to know Rust or JavaScript to try
+the app, but this early build requires installing development tools.
+
+### 1. Check your system and install the tools
+
+Use a Linux graphical session. The recorded desktop evidence is from Fedora GNOME
+with XWayland. macOS, Windows, native Wayland terminals, tabs, and arbitrary
+externally launched agent terminals are outside the current supported journey.
+
+| Tool                              | Why it is needed                              | Setup                                                                                                                                                                 |
+| --------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Git                               | Download the source.                          | [Install Git](https://git-scm.com/install/linux).                                                                                                                     |
+| Rust and Cargo                    | Build the local service and window helper.    | [Install Rust with rustup](https://rust-lang.org/tools/install/). Use the current stable toolchain.                                                                   |
+| A C compiler/linker               | Build Rust's native dependencies.             | On Fedora, install GCC with `sudo dnf install gcc`.                                                                                                                   |
+| Node.js 24 and npm                | Install and run the desktop client.           | [Install Node.js](https://nodejs.org/en/download), selecting version 24. npm comes with it.                                                                           |
+| Ghostty or xterm                  | Display native agents and shells.             | [Install Ghostty](https://ghostty.org/docs/install/binary), or on Fedora run `sudo dnf install xterm`. The current paths are `/usr/bin/ghostty` and `/usr/bin/xterm`. |
+| Codex CLI and a signed-in account | Run agent Vessels and Voyager's private chat. | Follow [Codex CLI setup](https://learn.chatgpt.com/docs/codex/cli), then open `codex` and sign in. Bash Vessels work without Codex.                                   |
+
+Ghostty is the default viewer; choose xterm in the creation form if using xterm.
+Native integration evidence was recorded with Codex 0.162.x and 0.163.0. Other
+versions, accounts, and voice configurations need their own verification.
+
+After installing the tools, open a new terminal and check:
+
+```sh
+git --version
+rustc --version
+cargo --version
+node --version
+npm --version
+```
+
+Node should report `v24...`. If a command says it was not found, finish that tool's
+installation before continuing. Python 3.11+ is needed to run the development
+tests, but not to launch the app.
+
+### 2. Download Voyager Shell
+
+Choose a folder where you keep projects, open a terminal there, and run:
 
 ```sh
 git clone https://github.com/isaacasamoah/voyagershellapp.git
 cd voyagershellapp
-cargo fmt --check
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
 ```
 
-For Electron, use Node 24:
+`git clone` downloads the repository into a new `voyagershellapp` folder. `cd`
+moves your terminal into it. Later instructions call this the repository root.
+
+### 3. Build and install dependencies
+
+From the repository root:
 
 ```sh
-cd desktop
-npm ci
-npm run format:check
-npm test
+cargo build --locked --bins
+npm --prefix desktop ci
+node desktop/node_modules/electron/install.js
 ```
 
-Normal checks use disposable fixtures and real PTYs, without a desktop or model
-account. [Native checks](docs/lifecycle.md#native-checks) open real windows;
-the separate Codex test uses the installed account. Programmatic checks do not
-replace a person trying gestures and sound.
+The first command builds Voyager's Rust programs. The next commands install the
+desktop dependencies and ensure Electron's runtime is present. The initial build
+downloads dependencies and can take several minutes. `--locked` and `npm ci` use
+the dependency versions recorded in this repository.
 
-## Source map
+### 4. Open the app
 
-| Location | Responsibility |
-| --- | --- |
-| `src/` | Rust service, runtime ownership, capture and storage |
-| `src/bin/` | CLI and X11 window helper |
-| `desktop/src/` | Electron main, window binding, preload and local UI |
-| `tests/`, `desktop/test/` | Contract tests and opt-in native checks |
-| `docs/` | Contracts, run guides and evidence |
-| `skills/` | Agent instructions for the CLI |
+From the same repository root, in your graphical-session terminal:
 
-The [desktop source map](desktop/README.md) explains its process boundaries.
-Python supports experiments; the service runtime is Rust. We learn from Herdr,
-tmux and Pi without using them as Voyager's backend or copying their code.
+```sh
+npm --prefix desktop start -- --ozone-platform=x11 --expanded
+```
 
-Read [the research](docs/research.md) and [contribution guide](CONTRIBUTING.md).
-Reports of real workflows, failures and integration limits are welcome.
+The panel and astronaut should appear. Opening the app starts or reconnects to the
+local service. Its private state directory defaults to
+`~/.local/share/voyagershell`, outside the source checkout. No login startup is
+installed. To choose a different private state directory, see the
+[desktop guide](docs/desktop.md#identify-a-supported-client).
 
+Voyager-created Codex sessions currently use YOLO, which disables the native
+command sandbox and approval prompts. External registrations keep their own
+settings. Configurable permission defaults remain future work.
 
-Background reconnect has passed the owner-approved additional correction and
-fresh review on its working branch. Initial connection and handshake deadlines,
-cancellation and the full acceptance-code budget pass their focused checks.
-It checks an existing managed Codex runtime after service or capture loss rather
-than starting another agent. See [the lifecycle contract](docs/lifecycle.md) for
-identity checks, native process limits and the opt-in proof. It does not restore
-an expired dock or submit work. Surviving-viewer and panel retry behavior remain
-separate follow-up slices until their own proof and review pass.
+### 5. Try a Vessel
 
+1. Click **+** in the Vessels section.
+2. Choose **Terminal · Bash** for a first try without an agent account, or **Codex**
+   after signing in. Give it a name and choose an existing project folder.
+3. Choose your installed viewer and select **Create and open**. Its native terminal
+   should open and its card should appear in Voyager.
+4. For Bash, type `pwd` in that terminal. It should print your chosen folder.
+5. Use the Vessel menu to **Run in background**. Its terminal closes while its
+   runtime keeps running. Click its card to reopen the same work.
+6. Choose **Stop** when finished. To stop Voyager itself, first stop its managed
+   Vessels, then choose **Stop service** from the panel's small menu.
 
-The surviving-terminal follow-up is in [draft PR 59](https://github.com/isaacasamoah/voyagershellapp/pull/59).
-It verifies and reuses the original viewer, retains its viewer choice, and keeps
-unverified windows distinct from confirmed closure. The corrective pass resolves
-the two Rust findings. Both native viewer journeys passed on the same package,
-but another run of that package could not confirm native voice startup. A passing
-repeat does not explain the failure. Final review retained that acceptance concern. Isaac subsequently accepted viewer
-recovery on 27 October and explicitly deferred the voice investigation, requesting
-merge followed by retry and the small panel changes. The failed receipt remains
-evidence and no voice fix is claimed. Installation and owner-app restart remain
-separate decisions.
+The panel's close button quits the desktop while the service and work keep running.
+[Docking gestures](docs/desktop.md#try-the-journey) and
+[agent creation](docs/instances.md) have their own walkthroughs.
+
+### Install a desktop launcher
+
+Running from source is enough to try Voyager. For an Applications launcher, build
+an account-local Linux bundle from an unchanged, committed checkout:
+
+```sh
+npm --prefix desktop run package:linux
+```
+
+The command prints the generated archive's path under `desktop/out`. Open that
+folder in your file manager, extract the new `.tar.gz` archive, and open the
+extracted folder in a terminal. Run:
+
+```sh
+./install.sh
+```
+
+Then open **Voyager Shell** from Applications. Installation needs no root access
+and does not add login startup or force an existing service to restart. The bundle
+includes Electron and the compiled Rust programs; its users still install their
+terminal and Codex separately. If packaging refuses local edits, use a clean clone
+for installation. The [Linux installation guide](docs/install-linux.md) explains
+installed paths and retained state. This is an experimental archive installer,
+not a published signed release or an automatic update service.
+
+### If something does not work
+
+- If Electron's executable is missing, rerun
+  `node desktop/node_modules/electron/install.js` from the repository root.
+- If a viewer fails to open, check its installed path and selected viewer. Creation
+  may already have succeeded; inspect the existing Vessel before creating another.
+- If Codex is unavailable, check that `codex` runs and is signed in from the same
+  graphical session. [Executable selection](docs/instances.md#start-the-app) is
+  available when it is installed outside your desktop's `PATH`.
+- If docking refuses an ordinary terminal, use a Vessel created through Voyager.
+  Docking verifies managed runtime identity; registration alone is insufficient.
+- Voice depends on the native provider, account, terminal, and OS permissions.
+  Read [voice setup and limits](docs/voice.md) before treating it as working.
+
+## What you can do
+
+| Task                                                                        | Entry point and detailed guide                                                                                                       |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Create Codex agents or persistent Bash terminals.                           | Panel **+**; [Vessels](docs/instances.md).                                                                                           |
+| Open, background, stop, rename, remove, or explicitly resume eligible work. | Vessel menus and Previous vessels; [lifecycle](docs/lifecycle.md).                                                                   |
+| Group Vessels and arrange their native windows.                             | Fleet creation, drag/drop, and Fleet selection; [Fleets](docs/fleets.md).                                                            |
+| Select a current agent by docking the astronaut.                            | Drag onto a supported managed terminal; [desktop gestures](docs/desktop.md).                                                         |
+| Delegate work, send instructions, report results, and escalate questions.   | Bound agent CLI tools; [authority and coordination](docs/authority.md).                                                              |
+| Administer Vessels and Fleets through text or supported voice.              | Panel chat and soundwave; [private conversation](docs/harness-runtime.md).                                                           |
+| Inspect captured messages, turn outcomes, and action receipts.              | CLI event pages and watchers; [service reference](docs/service.md).                                                                  |
+| Run commands in a shared managed Bash session and read bounded output.      | `shell-exec` and `shell-read`; [Vessel commands](docs/instances.md#the-same-operations-from-an-agent-or-script).                     |
+| Observe an explicitly connected external Codex thread.                      | CLI discovery and registration; [service setup](docs/service.md#build-and-run). This grants no process ownership or desktop docking. |
+| Authorize an isolated development checkout trial.                           | Explicit owner grant; [development runs](docs/development-tests.md).                                                                 |
+
+The [full capability reference](docs/capabilities.md) lists the available actions,
+their effects, and the relevant commands. An accepted instruction is a submission,
+not proof of completed work. A completed native turn still needs its actual result
+checked.
+
+## Contributing and further reading
+
+The [contribution guide](CONTRIBUTING.md) covers setup, checks, source ownership,
+small experiments, and PR review. The project uses the [MIT license](LICENSE).
+Reports of real workflows, failures, and integration limits are welcome.
+
+Start with [the specification index](SPEC.md) for approved requirements,
+[the CLI reference](docs/service.md#commands) for scripting,
+[the worker guide](skills/voyager-worker/SKILL.md) for agent use, and
+[the research](docs/research.md) for ideas we have investigated.
