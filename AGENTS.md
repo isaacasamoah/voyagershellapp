@@ -104,6 +104,17 @@ work's purpose; they do not grant permission to merge. Existing fix, documentati
 and maintenance branch types remain available for those purposes. Do not rename
 active branches or worktrees merely to apply this convention.
 
+For an initiative delivered as multiple slices, use
+`feature/<initiative>--<slice>` and
+`.worktrees/feature-<initiative>--<slice>`, or the equivalent `experiment/` and
+`experiment-` prefixes. For example, `feature/voyager-restructure--panel-behavior`
+uses `.worktrees/feature-voyager-restructure--panel-behavior`. Keep the initiative
+name identical across its slices. Each slice has its own branch, worktree and PR;
+stack dependent PRs in implementation order. The double hyphen separates the
+initiative from the slice and permits an unsliced `feature/<initiative>` branch
+to coexist. Shared naming does not require dependent work to run in parallel or
+combine its verification and acceptance with other slices.
+
 New task specifications and modules belong at the selected task worktree root,
 with `SPEC.md` indexing that worktree's selected spec modules. Keep its plan and
 checklist in `tasks/plan.md` and `tasks/todo.md`. These task documents stay local
