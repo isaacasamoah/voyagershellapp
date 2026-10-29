@@ -16,6 +16,21 @@ async function wait(read, accept = Boolean, message = 'Native proof timed out', 
   throw Error(message);
 }
 
+async function stable(read, message) {
+  let previous;
+  return wait(
+    async () => {
+      const value = await read();
+      const signature = JSON.stringify(value);
+      const settled = signature === previous;
+      previous = signature;
+      return settled ? value : null;
+    },
+    Boolean,
+    message,
+  );
+}
+
 async function completedTurn(events, sent, expectedText) {
   const observed = await wait(
     events,
@@ -106,7 +121,7 @@ async function run(context) {
     await input(['button', true]);
     await input(['button', false]);
   };
-  const pageClick = async (window, id) => {
+  const pageClick = async (window, id, { receiver = id } = {}) => {
     window.focus();
     if (!window.isFocused()) {
       await new Promise((resolve, reject) =>
@@ -119,13 +134,28 @@ async function run(context) {
       );
     }
     await wait(() => window.isFocused(), Boolean, 'Proof window could not receive input');
-    await window.webContents.executeJavaScript(
-      `document.getElementById(${JSON.stringify(id)}).scrollIntoView({block:'nearest',inline:'nearest'})`,
-    );
-    const point = await window.webContents.executeJavaScript(
-      `(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) throw Error('Control is outside the visible page'); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`,
-    );
-    for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
+    await window.webContents.executeJavaScript(`
+      window.proofLastClick = { expected: ${JSON.stringify(receiver)}, received: null };
+      document.addEventListener('click', event => {
+        const target = event.target.closest('button') || event.target;
+        window.proofLastClick.received = target.id;
+      }, { once: true, capture: true });
+    `);
+    const point = await stable(async () => {
+      const point = await window.webContents.executeJavaScript(`(() => {
+        const element = document.getElementById(${JSON.stringify(id)});
+        element.scrollIntoView({block:'nearest',inline:'nearest'});
+        const bounds = element.getBoundingClientRect();
+        return {x:Math.round(bounds.x+bounds.width/2),y:Math.round(bounds.y+bounds.height/2)};
+      })()`);
+      window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
+      await delay(30);
+      const ready = await window.webContents.executeJavaScript(
+        `document.getElementById(${JSON.stringify(receiver)}).contains(document.elementFromPoint(${point.x}, ${point.y}))`,
+      );
+      return ready ? point : null;
+    }, 'Control did not settle at the pointer target');
+    for (const type of ['mouseDown', 'mouseUp']) {
       window.webContents.sendInputEvent({ type, ...point, button: 'left', clickCount: 1 });
       await delay(30);
     }
@@ -155,14 +185,23 @@ async function run(context) {
   let result;
   let failure;
   let cleanup;
+  let screenshotError;
   try {
     await save({ journey, verdict: 'running' });
     result = await require(journeys[journey]).run(
       { ...context, directory },
-      { wait, input, click, pageClick, pageFill, pageKey, pageWheel, delay, captureOutput },
+      { wait, stable, input, click, pageClick, pageFill, pageKey, pageWheel, delay, captureOutput },
     );
   } catch (error) {
     failure = error;
+    try {
+      await fs.writeFile(
+        path.join(directory, 'failure.png'),
+        (await context.panelWin.webContents.capturePage()).toPNG(),
+      );
+    } catch (error) {
+      screenshotError = error.message;
+    }
   }
   try {
     pointer.stdin.end();
@@ -185,6 +224,18 @@ async function run(context) {
     candidate: context.getState?.().candidate,
     result,
     cleanup,
+    screenshotError,
+    clickFailure: failure
+      ? await context.panelWin.webContents
+          .executeJavaScript('window.proofLastClick')
+          .catch((error) => ({ error: error.message }))
+      : undefined,
+    dockFailure: failure
+      ? {
+          reason: context.getState?.().dockError,
+          attempt: context.getState?.().dockAttempts.at(-1),
+        }
+      : undefined,
     error: failure?.stack,
   });
   if (failure) throw failure;

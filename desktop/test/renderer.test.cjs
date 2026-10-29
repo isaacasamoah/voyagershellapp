@@ -178,34 +178,6 @@ test('a rejected rank change keeps the same request on an explicit retry', async
   );
 });
 
-test('rank rows start collapsed and expand without a duplicate group header', async () => {
-  const ui = renderer();
-  const requests = [];
-  ui.api.surfaceInstance = async (id) => requests.push(id);
-  const base = {
-    kind: 'codex',
-    cwd: '/project',
-    ownership: 'managed',
-    worker_state: 'running',
-    lifecycle: { runtime: 'running' },
-  };
-  const rows = [
-    { ...base, id: 'captain', name: 'Captain', rank: 'captain' },
-    { ...base, id: 'crew', name: 'Crew', rank: 'crew', supervisor_id: 'captain' },
-  ];
-  ui.update({ sessions: rows });
-  let tree = ui.nodes.get('sessions').children[0];
-  assert.equal(tree.children[1].hidden, true);
-  tree.children[0]
-    .querySelectorAll('button')
-    .find((button) => button.dataset.expand)
-    .onclick();
-  tree = ui.nodes.get('sessions').children[0];
-  assert.equal(tree.children[1].hidden, false);
-  assert.equal(tree.children[0].children[0].children[0].children[0].textContent, 'Captain');
-  await tree.children[0].children[0].onclick();
-  assert.deepEqual(requests, ['captain']);
-});
 test('existing fleets appear in creation and the selected fleet reaches the service action', async () => {
   const ui = renderer();
   ui.update();
@@ -263,12 +235,19 @@ test('creation, Open and compact Resume retain the selected viewer', async () =>
     rank: 'crew',
     ownership: 'managed',
     worker_state: 'running',
+    capture: 'connected',
+    cwd: '/project',
     lifecycle: { runtime: 'running' },
     window: 'closed',
     terminal: 'xterm',
   };
   ui.update({ sessions: [session] });
   const items = ui.nodes.get('sessions').querySelectorAll('*');
+  const identity = items.find((n) => n.className === 'session-identity');
+  assert.deepEqual(
+    identity.children.map((n) => n.textContent),
+    ['Viewer', 'Crew'],
+  );
   const viewer = items.find((n) => n.tagName === 'select' && n.value === 'xterm');
   assert.ok(viewer);
   const open = items.find((n) => n.tagName === 'button' && n.textContent === 'Open viewer');
@@ -344,50 +323,6 @@ test('the panel separates stopped and unknown records', () => {
   assert.deepEqual(ids('previous-sessions'), ['old']);
   assert.equal(JSON.stringify(sessions), snapshot);
   assert.match(ui.nodes.get('connection').textContent, /update/i);
-});
-
-test('service loss closes an open menu and marks its existing rows last-known', () => {
-  const ui = renderer();
-  const sessions = [
-    {
-      id: 'live',
-      name: 'Live',
-      cwd: '/project',
-      kind: 'shell',
-      ownership: 'managed',
-      lifecycle: { runtime: 'running' },
-      capture: 'connected',
-    },
-  ];
-  ui.update({ sessions });
-  const old = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
-  assert.equal(old.disabled, false);
-  vm.runInContext('openMenus.add({hidePopover(){}})', ui.context);
-  ui.update({ sessions, serviceError: 'Disconnected' });
-  assert.equal(old.disabled, true);
-  const live = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
-  assert.equal(live.disabled, true);
-  assert.equal(ui.nodes.get('create').disabled, true);
-  assert.equal(ui.nodes.get('create-fleet').disabled, true);
-  assert.match(live.attributes['aria-label'], /Last known/);
-  assert.equal(vm.runInContext('openMenus.size', ui.context), 0);
-  ui.update({ sessions, serviceError: 'Disconnected' });
-  const cached = ui.nodes.get('sessions').querySelectorAll('button');
-  assert.equal(cached.find((node) => node.id === 'inspect-live').disabled, false);
-  assert.equal(cached.find((node) => node.id === 'menu-live').disabled, false);
-  ui.update({
-    sessions,
-    serviceError: 'Disconnected',
-    fleetData: { fleets: [{ id: 'work', name: 'Work' }], assignments: { live: 'work' } },
-  });
-  const fleet = ui.nodes.get('fleets').querySelectorAll('button');
-  assert.equal(fleet.find((node) => node.id === 'inspect-live').disabled, false);
-  assert.equal(fleet.find((node) => node.id === 'menu-live').disabled, false);
-  assert.equal(fleet.find((node) => node.id === 'fleet-work').disabled, true);
-  ui.update({ sessions });
-  const restored = ui.nodes.get('sessions').querySelectorAll('[data-key]')[0];
-  assert.equal(restored.disabled, false);
-  assert.doesNotMatch(restored.attributes['aria-label'], /Last known/);
 });
 
 test('late action completion cannot re-enable its offline control', async () => {

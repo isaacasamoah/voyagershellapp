@@ -166,7 +166,13 @@ function renderState(value) {
     identity.append(element('span', name, 'session-name'));
     if (s.rank && runtime !== 'stopped')
       identity.append(element('span', authority.rankName(s.rank), 'session-rank'));
-    identity.append(element('span', status, 'session-state'));
+    if (
+      runtime === 'starting' ||
+      s.resume?.state === 'pending' ||
+      s.recovery?.state === 'checking' ||
+      (runtime === 'running' && s.removed_ms == null && s.capture !== 'connected')
+    )
+      identity.append(element('span', status, 'session-state'));
     b.append(identity, dot);
     b.dataset.connected = String(s.capture === 'connected' && !value.serviceError);
     b.disabled = Boolean(value.serviceError);
@@ -368,7 +374,6 @@ function renderState(value) {
       };
       row.append(resume);
     }
-    history.decorate(identity, s);
     const notice = element('p', '', 'vessel-feedback');
     notice.id = `feedback-${s.id}`;
     const message = vesselMessages.get(s.id);

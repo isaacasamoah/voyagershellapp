@@ -118,12 +118,15 @@ exports.run = async (
       await pageClick(panelWin, 'previous-toggle');
       const compact = await panelWin.webContents.executeJavaScript(`(() => {
         const row = document.getElementById('resume-${id}').closest('[data-vessel]');
+        const resume = document.getElementById('resume-${id}').getBoundingClientRect();
+        const menu = document.getElementById('menu-${id}').getBoundingClientRect();
         return {
           columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
-          metadata: getComputedStyle(row.querySelector('.vessel-metadata')).textOverflow
+          controlsSeparate: resume.right <= menu.left,
+          metadata: Boolean(row.querySelector('.vessel-metadata, .session-state'))
         };
       })()`);
-      assert.deepEqual(compact, { columns: 3, metadata: 'ellipsis' });
+      assert.deepEqual(compact, { columns: 3, controlsSeparate: true, metadata: false });
       await fs.writeFile(
         path.join(stateDir, 'compact-resume.png'),
         (await panelWin.webContents.capturePage()).toPNG(),
@@ -313,11 +316,6 @@ exports.run = async (
       workerContext = await require('./panel-context-proof.cjs').run(
         { rpc, refresh, panelWin, stateDir, id, cwd, row },
         { wait, pageClick, pageKey },
-      );
-    if (panel)
-      await fs.writeFile(
-        path.join(stateDir, 'panel-resume.png'),
-        (await panelWin.webContents.capturePage()).toPNG(),
       );
     return {
       id,
