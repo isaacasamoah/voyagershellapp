@@ -135,3 +135,10 @@ or use a native GitHub stack of complete behaviors, not separate plumbing/tests.
 
 Prepare the candidate for Isaac's inspection and report actual skills used.
 Merge and restart remain separate decisions. Activate this plan only after the reconnect plan is complete.
+
+## Closure, 29 October 2026
+
+The owner accepted the compact rows and direct choices, approved their integration
+and requested the main installation. The task record preserves the explicit
+manual-test deferral and the failed automated mouse-selection evidence. This
+completed plan is retained as history; it is not the restructure implementation plan.

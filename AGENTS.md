@@ -77,6 +77,28 @@ Voice selection belongs in `src/service/voice.rs`; native terminal input belongs
 in `src/terminal.rs`. Read `docs/voice.md` before editing either boundary. Native
 input must target verified process and PTY identity, never desktop keyboard focus.
 
+## User experience and proportionate safeguards
+
+Prioritize the intended user experience. Establish the desired user-visible
+behavior before designing recovery or protective behavior. When a consequential
+behavior is unspecified, ask a focused question about that interaction rather
+than inventing restrictions, fallback movement, prompts or reduced capabilities.
+Do not re-ask about behavior Isaac has already specified.
+
+Base safeguards on concrete risks reachable through supported user, client,
+provider or process interactions and explain how the failure would affect the
+user. Distinguish an observed failure, a plausible reachable risk and a speculative
+concern. A conceivable contingency alone does not justify added machinery or
+friction. Address the relevant risk with the smallest sufficient safeguard that
+preserves the agreed workflow; assess its UX cost as well as its protection.
+
+Do not silently override deliberate user placement, remove supported options or
+change agreed behavior in the name of safety. If addressing a concrete risk
+requires such a change, explain the scenario and clarify that specific behavior
+with Isaac. Preserve required ownership, authority and uncertain-outcome checks
+and CONSTRAINTS.md. Verify both the intended interaction and the relevant failure
+case instead of expanding the design to cover every imagined contingency.
+
 ## Workspace and working documents
 
 The primary checkout tracks `main`. Integration and packaging use separate task
@@ -103,6 +125,11 @@ hyphenated name for the branch and worktree. For example,
 work's purpose; they do not grant permission to merge. Existing fix, documentation
 and maintenance branch types remain available for those purposes. Do not rename
 active branches or worktrees merely to apply this convention.
+
+Completed accepted specifications belong in root `done/`. Completed plans and
+task lists belong in `tasks/done/`, with descriptive feature filenames. Keep
+root `SPEC.md` as the current index, repair links during moves and retain
+unfinished specifications as active inputs rather than calling them complete.
 
 Development specifications belong at the repository root. Start at `SPEC.md`,
 which indexes the named module specifications alongside it. Keep `docs/` for

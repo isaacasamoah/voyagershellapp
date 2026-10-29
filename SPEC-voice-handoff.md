@@ -1,7 +1,16 @@
 # Spec: voice acknowledgement and result handoff
 
 Module id: `voice-handoff`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner authorized the approved voice build after docking merged on 25 October 2026.
-The [capability map](SPEC.md) is approved. The owner approved this specification and requested planning. The approved implementation plan and task list now cover this module.
+The [capability map](done/SPEC-tracer-bullet-usability.md) is approved. The owner approved this specification and requested planning. The approved implementation plan and task list now cover this module.
+
+## Current status, 29 October 2026
+
+The acknowledgement slice was merged in
+[the voice acknowledgement PR](https://github.com/isaacasamoah/voyagershellapp/pull/31).
+The full V1–V8 scope is not accepted as complete. Its
+[historical task record](https://github.com/isaacasamoah/voyagershellapp/blob/505df481f4b0bfec2316b606052538b7f96bf523/tasks/todo.md)
+retains unfinished follow-ups. This specification stays active as an input to
+the restructure review. No new voice plan or implementation is started here.
 
 ## Objective and scope
 

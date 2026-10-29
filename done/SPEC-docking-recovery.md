@@ -1,7 +1,7 @@
 # Spec: truthful docking and avatar recovery
 
 Module id: `docking-recovery`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner subsequently authorized the docking plan and D01-D04 build. The owner accepted the updated packaged trial and authorized its merge on 24 October 2026. Runtime rollout remains separate.
-The [capability map](SPEC.md) is approved. This specification defines approved requirements. The task list records implementation and verification; this document does not authorize installation or changes to the running app.
+The [capability map](SPEC-tracer-bullet-usability.md) is approved. This specification defines approved requirements. The task list records implementation and verification; this document does not authorize installation or changes to the running app.
 
 ## Objective and scope
 

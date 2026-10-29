@@ -2,7 +2,7 @@
 
 Status: Planning reference only, 24 October 2026. These notes preserve useful investigation and design candidates from the superseded combined plan. They are not an approved implementation plan or an active task list. Recheck the source and provider version before using them.
 
-The active [plan](plan.md) and [task list](todo.md) cover docking recovery only. After docking is complete and reviewed, plan [voice handoff](../SPEC-voice-handoff.md), then [conversation resume](../SPEC-conversation-resume.md), then the [current-work panel](../SPEC-current-work-panel.md), in the approved order. Each capability gets its own planning and review cycle. Implementation slices are tasks inside that capability's plan, not additional plans.
+The active [plan](done/compact-vessel-rows-plan.md) and [task list](done/compact-vessel-rows-todo.md) cover docking recovery only. After docking is complete and reviewed, plan [voice handoff](../SPEC-voice-handoff.md), then [conversation resume](../done/SPEC-conversation-resume.md), then the [current-work panel](../done/SPEC-current-work-panel.md), in the approved order. Each capability gets its own planning and review cycle. Implementation slices are tasks inside that capability's plan, not additional plans.
 
 The earlier combined plan and its task breakdown remain in Git history. None of its tasks was executed or completed. Do not treat its old task IDs or future test commands as an active build queue.
 

@@ -21,17 +21,20 @@ is our starting point, and we’d love to build toward it with other developers.
 
 ## Specification review
 
-The [tracer-bullet usability specifications](SPEC.md) cover conversation Resume,
-current-work presentation, voice handoffs and docking recovery. The specifications
-and build order are approved. The active [implementation plan](tasks/plan.md)
-refines the panel after completed reconnect work. This branch shows compact Vessel
-rows with metadata in Details. Independent review and packaged verification
-passed for the compact rows. The [direct rank and supervisor choices](https://github.com/isaacasamoah/voyagershellapp/pull/64)
-are implemented and pass code checks. An automated mouse-selection check left
-Controller Unassigned. Its cause remains unconfirmed. The owner deferred this
-specific check to manual testing and requested the combined candidate for that
-trial. Final owner acceptance remains pending.
-Owner acceptance, merge and installation remain separate decisions.
+The [current specification index](SPEC.md) selects the service restructure.
+Its [capability map](SPEC-service-restructure-map.md) is proposed and needs review
+before individual module specifications or implementation plans are written.
+
+The [historical usability index](done/SPEC-tracer-bullet-usability.md) retains the
+accepted baseline. Docking, Resume/reconnect and panel contracts are archived
+with the completed panel plan/task record. Voice handoff still has unfinished
+scope, and the avatar document remains an unbuilt draft; both stay visible as
+inputs to the restructure review.
+
+The owner accepted the compact rows and direct choices and requested the main
+installation. The failed automated mouse-only Controller check remains recorded
+with its cause unconfirmed and the owner's explicit manual-test deferral. This
+branch changes documentation only; it does not implement the restructure.
 
 ## Current build
 

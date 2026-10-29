@@ -1,7 +1,7 @@
 # Spec: a panel focused on current work
 
 Module id: `current-work-panel`. Project: VoyagerShellApp. Approved by the owner, 24 October 2026. The owner approved its implementation plan and build on 25 October 2026.
-The [capability map](SPEC.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The earlier candidate passed independent review for owner inspection on 26 October. The compact-row refinement passed packaged verification and independent review on 27 October. Direct rank and supervisor choices are implemented. After the permitted corrective pass, the owner deferred the remaining automated mouse-selection check to manual testing and requested the combined candidate. Owner acceptance is pending. The requirements below are unchanged. Merge and installation remain separate decisions.
+The [capability map](SPEC-tracer-bullet-usability.md) is approved. This panel uses the behavior defined in the [conversation-resume contract](SPEC-conversation-resume.md). The earlier candidate passed independent review for owner inspection on 26 October. The compact-row refinement passed packaged verification and independent review on 27 October. Direct rank and supervisor choices are implemented. After the permitted corrective pass, the owner deferred the remaining automated mouse-selection check to manual testing and requested the combined candidate. The owner accepted the changes on 29 October 2026. The automated mouse-only Controller check remains failed with its cause unconfirmed; the owner explicitly deferred it to manual testing and subsequently reported acceptance. The requirements below are unchanged. Merge and installation remain separate decisions.
 
 ## Approved refinement: compact Vessel rows with details in the menu
 
@@ -40,7 +40,7 @@ belongs in Details, while progress, errors and missing responsibility context
 remain visible when needed.
 
 Avatar placement and menu overlap belong to the separate
-[avatar behavior draft](SPEC-avatar-behavior.md). They are not part of this small
+[avatar behavior draft](../SPEC-avatar-behavior.md). They are not part of this small
 panel refinement. The reported stale window-action label remains an investigation
 note below, not an approved additional panel build slice.
 
