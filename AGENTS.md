@@ -104,13 +104,21 @@ work's purpose; they do not grant permission to merge. Existing fix, documentati
 and maintenance branch types remain available for those purposes. Do not rename
 active branches or worktrees merely to apply this convention.
 
-Development specifications belong at the repository root. Start at `SPEC.md`,
-which indexes the named module specifications alongside it. Keep `docs/` for
+New task specifications and modules belong at the selected task worktree root,
+with `SPEC.md` indexing that worktree's selected spec modules. Keep its plan and
+checklist in `tasks/plan.md` and `tasks/todo.md`. These task documents stay local
+and untracked; they do not belong in the primary checkout or implementation
+commits. After merge and accepted completion, preserve them in `spec-history/`
+at the canonical Obsidian project root before removing the worktree. Follow the
+[shared completion convention](/home/isaac/agent-skills/references/completed-work.md)
+for exact local exclusions, naming, collision checks and link repair. Preserve
+existing tracked documents until their migration is explicitly agreed. Keep `docs/` for
 technical documentation and guides. Use the canonical
 `spec-driven-development` skill for specifications, `planning-and-task-breakdown`
 for `tasks/plan.md` and its default `tasks/todo.md` task list, and the existing
 build/incremental implementation and Git skills for execution and version control.
-Keep those procedures unchanged for the first trial. Plan and implement one
+The local document convention overrides planning-document commits only; retain
+their review, implementation and verification steps. Plan and implement one
 capability at a time in the approved map order. The active plan and task list name
 that capability; slices deliver complete, testable behavior rather than technical
 layers. Later-capability notes are reference material, not an executable task queue.
@@ -119,9 +127,10 @@ human-facing project notes.
 
 Human-facing documentation lives at `/home/isaac/obsidian/Projects/voyagershellapp`.
 Read its `status.md` for project navigation. Use `working-docs` for walkthroughs,
-research, reviews and status/log maintenance there; link to the repository-owned
-specifications and plans rather than maintaining editable copies. Its existing
-explainer/, specs/, plans/ and research/ directories retain historical material;
+research, reviews and status/log maintenance there; link to the authoritative
+worktree-local specifications and plans rather than maintaining editable copies
+while work is active. Completed task records use `spec-history/` as described
+above. Its existing explainer/, specs/, plans/ and research/ directories retain historical material;
 this policy does not authorize a bulk migration of that history. Status and log
 have one owner at the documentation root. This explicit destination policy takes
 precedence over the current working-docs skill's broader placement defaults.
