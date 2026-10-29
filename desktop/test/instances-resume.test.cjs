@@ -163,3 +163,19 @@ test('completed Open remains successful when arranging its window fails', async 
   assert.equal(result.error, undefined);
   assert.match(result.warning, /Terminal opened.*could not be arranged/);
 });
+
+test('Retry inspects a lost reply without submitting a second check', async () => {
+  const { instanceReconnector } = require('../src/instances.cjs');
+  const calls = [];
+  const retry = instanceReconnector(async (...args) => {
+    calls.push(args);
+    if (args[0] === 'reconnect-instance') throw Error('Lost reply');
+    return receipt('retry', 'reconnect-instance', { state: 'pending' });
+  });
+  const result = await retry({ id: 'saved', generation: 2, request: 'retry' });
+  assert.equal(result.state, 'pending');
+  assert.deepEqual(calls, [
+    ['reconnect-instance', 'saved', 'retry', '2'],
+    ['operation', 'retry'],
+  ]);
+});

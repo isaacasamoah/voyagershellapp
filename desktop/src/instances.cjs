@@ -131,6 +131,41 @@ function instanceOpener(rpc, refresh, surface) {
     }
   };
 }
+function instanceReconnector(rpc) {
+  return async (input) => {
+    const { id, generation, request } = input || {};
+    if (
+      typeof id !== 'string' ||
+      !id ||
+      !Number.isSafeInteger(generation) ||
+      generation < 0 ||
+      typeof request !== 'string' ||
+      !request ||
+      Buffer.byteLength(request) > 128
+    )
+      throw Error('Choose a Vessel and its observed runtime.');
+    let result;
+    try {
+      result = await rpc('reconnect-instance', id, request, String(generation));
+    } catch (error) {
+      result = await rpc('operation', request).catch(() => null);
+      if (!matchesReceipt(result, 'reconnect-instance', id, request))
+        return {
+          error: `Connection check could not be confirmed. Keep this request and try again. ${error.message}`,
+        };
+    }
+    if (!matchesReceipt(result, 'reconnect-instance', id, request))
+      return { error: 'The connection result does not belong to this request.' };
+    if (['partial', 'failed', 'cancelled', 'uncertain'].includes(result.state))
+      return {
+        ...result,
+        error:
+          result.error || 'Connection could not be verified. Retry when the agent is available.',
+        retry_with_new_request: result.state !== 'uncertain',
+      };
+    return result;
+  };
+}
 function instanceResumer(rpc) {
   const attempts = new Map();
   return (input) => {
@@ -247,6 +282,7 @@ module.exports = {
   instanceCreator,
   historyReader,
   instanceResumer,
+  instanceReconnector,
   instanceOpener,
   matchesReceipt,
 };

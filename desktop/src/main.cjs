@@ -70,6 +70,7 @@ let busy = false;
 const dockAttempts = [];
 const recoveryAttempts = [];
 const createInstance = require('./instances.cjs').instanceCreator(rpc);
+const reconnectInstance = require('./instances.cjs').instanceReconnector(rpc);
 const resumeInstance = require('./instances.cjs').instanceResumer(rpc);
 const openInstance = require('./instances.cjs').instanceOpener(rpc, refresh, surface);
 const authorityActionsForInstance = authorityActions(rpc, () => sessions);
@@ -238,6 +239,7 @@ function sendState() {
         worker_state,
         lifecycle,
         resume,
+        recovery,
         window,
         terminal,
         removed_ms,
@@ -255,6 +257,7 @@ function sendState() {
         worker_state,
         lifecycle,
         resume,
+        recovery,
         window,
         terminal,
         removed_ms,
@@ -1065,6 +1068,13 @@ app.whenReady().then(async () => {
       return await resumeInstance(input);
     } finally {
       clearInterval(polling);
+      await refresh();
+    }
+  });
+  handle('reconnect-instance', [panelWin], async (input) => {
+    try {
+      return await reconnectInstance(input);
+    } finally {
       await refresh();
     }
   });

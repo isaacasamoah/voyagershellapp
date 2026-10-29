@@ -8,6 +8,7 @@ exports.run = async (
   { rpc, stateDir, refresh, getState, panelWin, avatarWin, inventory, screen, setExpanded },
   { wait, pageClick, input, delay },
 ) => {
+  const retryMode = process.env.VOYAGER_PROOF_RECONNECT_RETRY === '1';
   const viewerMode = process.env.VOYAGER_PROOF_RECONNECT_VIEWER;
   const { processIdentity } = require('../src/binding.cjs');
   const control = viewerMode
@@ -66,21 +67,62 @@ exports.run = async (
   assert.equal(receipt.process_identity, undefined);
   const request = 'active-service-restart';
   const started = performance.now();
-  await fs.writeFile(
-    path.join(stateDir, 'proof-service-control.json'),
-    JSON.stringify({
-      action: 'restart',
-      request,
-      ...(viewerMode === 'closed' ? { close_viewer: 'reconnect-old-viewer' } : {}),
-    }),
-  );
-  const restart = await wait(
-    async () =>
-      JSON.parse(
-        await fs.readFile(path.join(stateDir, 'proof-service-restarted.json')).catch(() => '{}'),
-      ),
-    (value) => value.request === request,
-  );
+  const serviceCommand = async (action, request, details = {}) => {
+    await fs.writeFile(
+      path.join(stateDir, 'proof-service-control.json'),
+      JSON.stringify({ action, request, ...details }),
+    );
+    return wait(
+      async () =>
+        JSON.parse(
+          await fs.readFile(path.join(stateDir, 'proof-service-restarted.json')).catch(() => '{}'),
+        ),
+      (r) => r.request === request,
+    );
+  };
+  const restart = await serviceCommand('restart', request, {
+    ...(retryMode ? { block_endpoint: id } : {}),
+    ...(viewerMode === 'closed' ? { close_viewer: 'reconnect-old-viewer' } : {}),
+  });
+  let retried;
+  if (retryMode) {
+    const failed = await wait(
+      row,
+      (r) => r.recovery?.retry_available,
+      'Automatic checks did not finish',
+      30000,
+    );
+    assert.equal(failed.lifecycle.runtime, 'unknown');
+    await refresh();
+    await setExpanded(true, { x: 180, y: 100 });
+    const retryButton = `retry-${id}`;
+    await wait(
+      () =>
+        panelWin.webContents.executeJavaScript(`(() => {
+      const button = document.getElementById('${retryButton}');
+      if (!button || !document.querySelector('#sessions').contains(button)) return false;
+      window.reconnectProofButton = button;
+      return true;
+    })()`),
+      Boolean,
+      'Retry connection was not shown in current Vessels',
+    );
+    await serviceCommand('restore-endpoint', 'restore-existing-endpoint');
+    await pageClick(panelWin, `menu-${id}`);
+    await pageClick(panelWin, retryButton);
+    retried = await wait(
+      async () => {
+        const request = await panelWin.webContents.executeJavaScript(
+          'window.reconnectProofButton.dataset.request',
+        );
+        return request ? rpc('operation', request) : null;
+      },
+      (r) => r?.state === 'completed',
+      'Panel Retry did not complete',
+    );
+    assert.equal(retried.action, 'reconnect-instance');
+    assert.equal(retried.runtime_generation, before.lifecycle.runtime_generation);
+  }
   const recovered = await wait(
     row,
     (r) => r.capture === 'connected',
@@ -241,6 +283,7 @@ exports.run = async (
     runtimeGeneration: before.lifecycle.runtime_generation,
     restart,
     readyMs,
+    retried,
     stopped,
     viewerRecovery,
     unrelatedControl: control,

@@ -288,7 +288,9 @@ fn main() -> Result<()> {
         [op, session, terminal] if op == "open" => {
             json!({"op":op,"session_id":session,"terminal":terminal})
         }
-        [op, session, id, generation] if op == "resume-instance" => {
+        [op, session, id, generation]
+            if ["resume-instance", "reconnect-instance"].contains(&op.as_str()) =>
+        {
             json!({"op":op,"session_id":session,"request_id":id,"expected_runtime_generation":generation.parse::<i64>()?})
         }
         [op, session]
@@ -332,6 +334,7 @@ fn main() -> Result<()> {
             launch PARENT_SESSION REQUEST_ID CWD PROMPT [--background] | attach SESSION_ID | attach-info SESSION_ID | stop-instance SESSION_ID [--runtime-only] [--request-id ID]\n\
             background SESSION_ID | remove SESSION_ID [--stop] | register-instance SESSION_ID | operation REQUEST_ID | list [--include-removed]\n\
             resume-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION\n\
+            reconnect-instance SESSION_ID REQUEST_ID OBSERVED_GENERATION\n\
             rank SESSION RANK [--request-id ID] | supervise SESSION SUPERVISOR|none [--request-id ID] | rename SESSION NAME [--request-id ID] | capabilities [SESSION]\n\
             fleets | create-fleet ID GOAL | rename-fleet FLEET NAME | move-vessel VESSEL FLEET|none | remove-fleet FLEET\n\
             test-grant SESSION REQUEST CHECKOUT | test-revoke SESSION REQUEST | test-start REQUEST manual|polish\n\

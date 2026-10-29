@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld(
     createInstance: (input) => ipcRenderer.invoke('create-instance', input),
     openInstance: (id, terminal, request) =>
       ipcRenderer.invoke('open-instance', id, terminal, request),
+    reconnectInstance: (input) => ipcRenderer.invoke('reconnect-instance', input),
     resumeInstance: (input) => ipcRenderer.invoke('resume-instance', input),
     instanceHistory: (id, cursor) => ipcRenderer.invoke('instance-history', id, cursor),
     surfaceInstance: (id) => ipcRenderer.invoke('surface-instance', id),

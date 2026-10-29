@@ -580,6 +580,7 @@ impl Runtime {
             "escalations" => self.escalations()?,
             "create" | "launch" => self.create_operation(&request)?,
             "resume-instance" => self.resume_instance(&request)?,
+            "reconnect-instance" => self.reconnect_instance(&request)?,
             "operation" => {
                 let id = string(&request, "request_id")?;
                 let (inputs, mut receipt) = if let Some(operation) = self.store.operation(id)? {

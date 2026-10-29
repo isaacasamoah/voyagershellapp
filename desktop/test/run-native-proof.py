@@ -41,6 +41,7 @@ service = subprocess.Popen([seed, '--state', str(state), 'serve'], env=env, stdo
 app = None
 verdict = None
 cleanup = []
+blocked_endpoint = None
 control_process = None
 if os.environ.get('VOYAGER_PROOF_RECONNECT_VIEWER'):
     control_process = subprocess.Popen(['/usr/bin/sleep', '600'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -60,8 +61,18 @@ try:
         control = state / 'proof-service-control.json'
         if control.exists():
             request = json.loads(control.read_text())
-            assert journey == 'reconnect' and request['action'] == 'restart'
-            for row in call('list'):
+            assert journey == 'reconnect'
+            if request['action'] == 'restore-endpoint':
+                assert blocked_endpoint is not None
+                saved, original = blocked_endpoint
+                saved.rename(original)
+                blocked_endpoint = None
+                control.unlink()
+                (state / 'proof-service-restarted.json').write_text(json.dumps({'request': request['request']}))
+                continue
+            assert request['action'] == 'restart'
+            rows = call('list')
+            for row in rows:
                 if row['ownership'] == 'managed' and row['lifecycle']['runtime'] == 'running':
                     info = call('attach-info', row['id'])
                     if info['pid'] not in owned:
@@ -73,6 +84,14 @@ try:
             previous = service.pid
             service.kill()
             service.wait(timeout=10)
+            if request.get('block_endpoint'):
+                selected = next(r for r in rows if r['id'] == request['block_endpoint'])
+                assert selected['ownership'] == 'managed' and selected['kind'] == 'codex'
+                original = Path(selected['server'])
+                assert original.parent.resolve().is_relative_to(state)
+                saved = original.with_suffix('.held')
+                original.rename(saved)
+                blocked_endpoint = (saved, original)
             if closing:
                 subprocess.run(['xdotool', 'windowclose', str(closing['window_id'])], check=True, timeout=5)
                 time.sleep(.1)
@@ -105,6 +124,8 @@ finally:
                 app.kill()
                 app.wait(timeout=5)
     clean('desktop', close_app)
+    if blocked_endpoint:
+        clean('restore-owned-endpoint', lambda: blocked_endpoint[0].rename(blocked_endpoint[1]))
     rows = clean('list-test-vessels', lambda: call('list', '--include-removed'))
     for row in rows or []:
         if row['ownership'] == 'managed' and row.get('worker_state') == 'running':

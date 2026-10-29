@@ -9,7 +9,7 @@ refinement on 27 October. K2 reached final re-review, which resolved both origin
 retained the intermittent native voice-start concern. Isaac accepted the viewer
 recovery on 27 October and explicitly deferred that voice investigation. This
 named acceptance decision permits merge and K3; it does not claim the voice fault
-is fixed. K3 remains unstarted. Earlier C1–C3 completion remains in Git history.
+is fixed. K3 is complete and independently approved on feat/reconnect-retry; PR60 awaits owner inspection. Earlier C1–C3 completion remains in Git history.
 
 The native GitHub stack contains [service restart](https://github.com/isaacasamoah/voyagershellapp/pull/55),
 [native capture loss](https://github.com/isaacasamoah/voyagershellapp/pull/56) and
@@ -66,18 +66,18 @@ owning lifecycle documentation. Depends on R03; completes K2.
 
 ### R05: expose retry through the existing owner boundary
 
-- [ ] Add the named owner Retry connection operation and CLI path, using the automatic verification routine and current observed generation.
-- [ ] Join an active attempt, permit a new check after a known failure, and cancel admission for a changed or removed record. Never replay uncertain work.
-- [ ] Prove transient failure, eventual recovery and concurrent/stale requests with the existing service fixture.
+- [x] Add the named owner Retry connection operation and CLI path, using the automatic verification routine and current observed generation.
+- [x] Join an active attempt, permit a new check after a known failure, and cancel admission for a changed or removed record. Never replay uncertain work.
+- [x] Prove transient failure, eventual recovery and concurrent/stale requests with the existing service fixture.
 
 Likely owners: src/service.rs, src/bin/voyager.rs and existing service tests.
 Depends on K1 and K2.
 
 ### R06: present recovery in the current interface
 
-- [ ] Add the thin named desktop call in the existing bridge and a menu Retry connection action. Keep progress subtle, keyboard accessible and local to the Vessel.
-- [ ] Keep recovering Vessels visible, preserve focus and avoid attention-only dead ends. Confirmed exits use Previous vessels and explicit Resume.
-- [ ] Keep normal native actions, current styling, free placement and the separate name-only-row request unchanged.
+- [x] Add the thin named desktop call in the existing bridge and a menu Retry connection action. Keep progress subtle, keyboard accessible and local to the Vessel.
+- [x] Keep recovering Vessels visible, preserve focus and avoid attention-only dead ends. Confirmed exits use Previous vessels and explicit Resume.
+- [x] Keep normal native actions, current styling, free placement and the separate name-only-row request unchanged.
 
 Likely owners: desktop/src/instances.cjs, main.cjs, preload.cjs, ui/renderer.js and
 ui/hierarchy.js. UI/bridge regressions stay in their existing fixtures. Depends
@@ -85,18 +85,18 @@ on R05. Keep bridge and rendering edits as small tasks inside this single PR.
 
 ### R07: complete native fallback proof and final review
 
-- [ ] Drive transient loss and Retry connection in the actual panel. Check accurate reasons, no extra prompts, focus, and recovery while the native agent is active.
-- [ ] Preserve all accepted Resume/panel journeys. Record timings, executable identities, whole acceptance inventory and verified cleanup.
-- [ ] Complete fresh review, one corrective pass/re-review at most, readable PR body and the build/skills walkthrough before owner inspection.
+- [x] Drive transient loss and Retry connection in the actual panel. Check accurate reasons, no extra prompts, focus, and recovery while the native agent is active.
+- [x] Preserve all accepted Resume/panel journeys. Record timings, executable identities, whole acceptance inventory and verified cleanup.
+- [x] Complete fresh review, one corrective pass/re-review at most, readable PR body and the build/skills walkthrough before owner inspection.
 
 Likely owners: the shared reconnect journey, existing renderer tests, README and
 owning lifecycle document. Depends on R06; completes K3.
 
 ## Final checkpoint
 
-- [ ] All approved acceptance journeys pass on one selected package and bundled service.
-- [ ] All Required findings resolved within the approved correction limit; no check or constraint weakened.
-- [ ] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.
+- [x] All approved acceptance journeys pass on one selected package and bundled service.
+- [x] All Required findings resolved within the approved correction limit; no check or constraint weakened.
+- [x] Main, installed app, owner's current runtime and The Climb remain untouched unless later explicitly authorized.
 
 ## K2 accepted with a deferred follow-up, 27 October
 
@@ -129,4 +129,18 @@ opened terminal. Preserve its uncertain receipt; do not replay the shortcut or
 claim the failure resolved. This is not an additional executable K3 task. K3
 retries connection verification, not native voice toggles or agent work.
 
-Merge is requested. Installation and owner-app restart remain separate decisions.
+The accepted K1/K2 PRs merged with Isaac's specific bypass approval. K3 is
+complete in [Retry connection](https://github.com/isaacasamoah/voyagershellapp/pull/60),
+which remains unmerged for owner inspection. Its single corrective pass repaired
+the desktop recovery projection and consolidated repeated native setup. Final
+fresh re-review has no Required finding. Rust tests, strict Clippy, formatting,
+106 desktop tests and GitHub checks pass. One selected package passes Retry with
+a surviving viewer, automatic recovery with a closed viewer, current-config Resume
+and the existing panel journey, with clean cleanup in all four cases. Its complete
+inventory is 9,463 maintained plus 1,284 temporary lines, 10,747 total, against
+10,749 exercised production lines. The review and all helpers are included.
+The prior native voice-start fault stays explicitly deferred, not fixed.
+
+The reconnect capability is complete. Isaac selected the small panel refinement
+next. Its canonical plan can now be activated on the panel branch. K3 merge,
+installation and owner-app restart remain separate decisions.
