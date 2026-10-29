@@ -25,8 +25,12 @@ The [tracer-bullet usability specifications](SPEC.md) cover conversation Resume,
 current-work presentation, voice handoffs and docking recovery. The specifications
 and build order are approved. The active [implementation plan](tasks/plan.md)
 refines the panel after completed reconnect work. This branch shows compact Vessel
-rows with metadata in Details. Direct rank and supervisor choices are next.
-Independent review and packaged verification passed for the compact rows.
+rows with metadata in Details. Independent review and packaged verification
+passed for the compact rows. The [direct rank and supervisor choices](https://github.com/isaacasamoah/voyagershellapp/pull/64)
+are implemented and pass code checks. An automated mouse-selection check left
+Controller Unassigned. Its cause remains unconfirmed. The owner deferred this
+specific check to manual testing and requested the combined candidate for that
+trial. Final owner acceptance remains pending.
 Owner acceptance, merge and installation remain separate decisions.
 
 ## Current build

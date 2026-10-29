@@ -25,8 +25,10 @@ independent of rank and docking. It expires on removal or service restart.
 
 Create a Captain and a Crew instance with **+**. Rank starts at Crew; choose
 Captain explicitly for the first. Assign Crew to the Captain using its Supervisor
-choice at creation or **Change assignment** afterward. Rank and assignment changes
-are available in the instance menu.
+choice at creation or the Supervisor choice in its menu afterward. Selecting a
+different rank or supervisor applies the change directly. While Voyager waits for
+the service, that choice is disabled. A refusal restores the confirmed value and
+shows the reason on the Vessel.
 
 Ask the Captain to use Voyager to give its Crew a small task. Ask an undocked
 Crew to instruct another instance and it should receive a permission refusal.
