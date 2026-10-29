@@ -91,6 +91,19 @@ services implicitly. Prove the installed executable, not just a checkout launch.
 
 Task worktrees belong in `.worktrees/`. Keep the selected revision stable until an intentional integration. Read the source and its applicable nested instructions before editing.
 
+For exploratory work whose inclusion in the product is undecided, use an
+`experiment/<name>` branch and `.worktrees/experiment-<name>`. Keep experiments
+separate from `main` until the user chooses to develop them as a feature. At that
+point, continue the selected work on `feature/<name>` in
+`.worktrees/feature-<name>`, preserving useful experiment history. New work already
+chosen as a feature starts with those feature names. Use the same descriptive,
+hyphenated name for the branch and worktree. For example,
+`experiment/preserve-voice-conversation` uses
+`.worktrees/experiment-preserve-voice-conversation`. These prefixes describe the
+work's purpose; they do not grant permission to merge. Existing fix, documentation
+and maintenance branch types remain available for those purposes. Do not rename
+active branches or worktrees merely to apply this convention.
+
 Development specifications belong at the repository root. Start at `SPEC.md`,
 which indexes the named module specifications alongside it. Keep `docs/` for
 technical documentation and guides. Use the canonical
