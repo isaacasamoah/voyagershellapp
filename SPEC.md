@@ -1,6 +1,6 @@
 # Tracer-bullet usability specification index
 
-Project: VoyagerShellApp. Updated 26 October 2026.
+Project: VoyagerShellApp. Updated 29 October 2026.
 State: The owner approved the capability boundaries, dependency direction, first scope and build order on 24 October 2026. The owner approved all four module specifications, then separately approved the docking plan and its D01-D04 build and review run. D01-D05 passed independent review and packaged verification. The owner accepted the updated trial and authorized merging docking, followed by the approved voice-handoff build. The owner approved building resume and panel in dependency order on 25 October 2026, with independent review and bounded correction passes. Merge, installation and runtime rollout remain separate decisions.
 
 ## This build branch
@@ -73,8 +73,29 @@ The capability boundaries, build order and four module specifications are approv
 
 This file is the repository entry point. The four adjacent module specifications own their respective contracts; this index does not duplicate them. Preserve the module boundaries when selecting work.
 
-Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The current `tasks/plan.md` and `tasks/todo.md` cover reconnection after owner specification approval. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. The owner approved the active reconnect plan. The later combined polish work remains queued for its review and specification cycle.
+Follow Specify, Plan, Tasks and Implement for each capability in the approved order. The current `tasks/plan.md` and `tasks/todo.md` cover reconnection after owner specification approval. Each task is a small complete behavior with implementation and verification, not a separate technical layer or another plan. [Later-capability notes](tasks/future-capability-notes.md) retain investigation for future planning; they are not an active task list. Follow the existing build and Git skills unchanged for the first trial. The owner approved the active reconnect plan.
+
+On 28 October Isaac requested a separate [structure and typed-contract brief](BRIEF-service-restructure.md).
+It starts with an inventory and preserves existing functionality, with the intent
+to restructure before returning to functional workstreams. It is design input for
+its own specification cycle, not an approved capability map or implementation plan.
+The existing capability specifications and reconnect task record remain intact.
 
 The source links in these specifications are pinned to the revision inspected when the drafts were prepared. They document the baseline, not newly completed runtime checks. Tests described here are acceptance requirements; completed evidence is recorded by the owning task list. Public operational contracts remain in the owning documents such as [lifecycle](docs/lifecycle.md), [voice](docs/voice.md) and [fleets](docs/fleets.md).
 
 Human-facing research and project navigation can link to these repository documents. Private incident logs, transcripts and account-local evidence remain outside committed source. Do not maintain a second editable specification elsewhere.
+
+## Separate restructure design and proposed module map
+
+The [restructure brief](BRIEF-service-restructure.md) records the 29 October
+native-client, administrator, skills and docking decisions. Its
+[proposed capability map](SPEC-service-restructure-map.md) starts with structural
+organization, then typed interfaces and native clients. The module map is for
+review; it does not approve module specifications or start an implementation plan.
+Existing functional specifications and their task records remain separate.
+
+The future docking design explicitly preserves a valid dock when its terminal
+leaves view, with an immediate persistent panel marker and conditional panel
+reappearance. This changes the target behavior for the restructure. The older
+approved docking specification still records the existing trial's historical
+undock-on-obscuration behavior; it must not be mistaken for the new design.

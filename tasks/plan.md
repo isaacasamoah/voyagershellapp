@@ -147,16 +147,14 @@ The whole-service BeautifulRust review is a separate proposal. Its unrelated
 cleanup, input, receipt-storage and wider type changes do not silently expand this
 plan. The current-generation credential correction is relevant to recovery.
 
-## Later combined polish review
+## Separate restructure work
 
-After proactive reconnect is accepted and merged, complete the JavaScript and
-TypeScript review alongside the existing whole-service Rust findings. Review
-service, Vessel, panel and avatar responsibilities together, including ETC, DRY,
-orthogonality, performance, typed boundaries and preservation of native behavior.
-Do not implement the wider Rust proposals before that review. Propose one
-coordinated polish/restructure specification, with an approved capability map and
-module specifications if distinct end-to-end capabilities warrant them. This is
-queued reference work, not an extension of the active reconnect build.
+On 28 October Isaac separated the polish/restructure direction into a
+[dedicated design brief](../BRIEF-service-restructure.md). It owns the capability
+inventory, simpler structure, TypeScript migration and typed-contract direction.
+The intended sequence is restructure with existing functionality preserved, then
+return to functional work. This reconnect plan and its task list retain their
+existing scope and unfinished work; the separate brief adds no reconnect tasks.
 
 ## Completion and rollout
 
