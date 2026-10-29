@@ -5,6 +5,12 @@ Module id: avatar-behavior. Isaac requested a separate specification on 27 Octob
 It is not an approved implementation plan or an instruction to alter the live app.
 The approved reconnect build finishes first, followed by the small panel changes.
 
+## Current status, 29 October 2026
+
+This is an unbuilt draft, not a completed feature. Preserve it as an input to
+the proposed restructure map, especially the menu-ordering and deliberate-placement
+requirements. Reconcile its older sequencing with the new brief during map review.
+
 ## Objective
 
 The owner can place the avatar freely without pulling the panel along, and use

@@ -2,18 +2,18 @@
 
 Selected order: finish the approved reconnect plan, then activate this panel plan
 at the canonical task paths on its own branch. Module: current-work-panel.
-N01 is complete on feat/compact-vessel-rows, based on the completed reconnect candidate. N02 is implemented and in owner testing. Isaac deferred the failed automated mouse-selection check to that manual trial; its cause remains unconfirmed.
+N01 is complete on feat/compact-vessel-rows, based on the completed reconnect candidate. N02 is implemented and owner-accepted on 29 October 2026. Isaac explicitly deferred the failed automated mouse-selection check to manual testing and subsequently accepted the changes. Its automated cause remains unconfirmed.
 
 - [x] N01: show name, applicable rank and existing status dot. Keep live name-click
   Open and explicit Resume. Put routine metadata in existing Details. Prove N1–N5.
 - [x] N01 checkpoint: checks, packaged proof, full line inventory, fresh review,
   the initial corrective pass and Isaac's explicitly approved additional pass and review.
   Final review has no Required code or proving finding.
-- [ ] N02: apply changed rank/assignment selections directly without Change
+- [x] N02: apply changed rank/assignment selections directly without Change
   buttons. Preserve service policy, pending requests and failure feedback. Prove N7.
-- [ ] N02 checkpoint: the same checks, native proof, full inventory, fresh review,
+- [x] N02 checkpoint: the same checks, native proof, full inventory, fresh review,
   at most one corrective pass and re-review pass. Record evidence before completion.
-- [ ] Handover: actual-status docs, plain-language PRs, skills report and candidate
+- [x] Handover: actual-status docs, plain-language PRs, skills report and candidate
   ready for Isaac. Merge and rollout remain separate decisions.
 
 Avatar behavior has its own spec draft. Stale window-action labels remain an
@@ -93,3 +93,13 @@ and service. That trial is now running. This named decision does not establish
 the cause of the failed check, change the general constraints or authorize
 another implementation pass. Owner observations and final acceptance remain
 pending. No merge or installation is authorized by this trial.
+
+## Closure, 29 October 2026
+
+The owner accepted the named feature stack, which is merged into main. The
+account-local main app and bundled service were installed, and the owner
+confirmed the panel and avatar visible. The existing failed automated mouse-only
+Controller receipt remains failed. The owner-approved manual deferral and
+acceptance close this task record without claiming a repaired automated check.
+[Direct-choice acceptance and integration](https://github.com/isaacasamoah/voyagershellapp/pull/64).
+No additional corrective product build or relaxed assertion is implied.
