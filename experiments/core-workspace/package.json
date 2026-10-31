@@ -1,0 +1,20 @@
+{
+  "name": "voyager-core-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test.cjs",
+    "format:check": "prettier --check '*.cjs' '*.js' '*.html' '*.css'",
+    "format": "prettier --write '*.cjs' '*.js' '*.html' '*.css'"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "electron": "44.10.0",
+    "prettier": "3.9.9"
+  }
+}

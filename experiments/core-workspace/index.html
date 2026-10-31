@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:;"
+    />
+    <title>Voyager</title>
+    <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <aside id="sidebar">
+      <div id="home-dock" class="home-dock">
+        <div id="avatar-home"></div>
+        <div class="wordmark">
+          <strong>Voyager</strong><span>Let's go together</span>
+        </div>
+      </div>
+      <button id="home" class="nav-home">
+        <span>⌂</span> Home <kbd>⌘ 1</kbd>
+      </button>
+      <div class="section-label">
+        <span>Realms</span
+        ><button id="add-realm" title="New realm" aria-label="New realm">
+          +
+        </button>
+      </div>
+      <nav id="realms" aria-label="Realms"></nav>
+      <div class="sidebar-bottom">
+        <button id="open-chat" class="conversation-link">
+          <span class="orbit-icon">◉</span> Talk with Voyager <kbd>⌘ J</kbd>
+        </button>
+        <button id="processes" class="process-link">
+          <span class="status-dot"></span
+          ><span id="process-count">Connecting</span><span>↗</span>
+        </button>
+        <div class="sidebar-foot">
+          <span>YOUR SPACE, YOUR WAY</span
+          ><button
+            id="quit"
+            title="Quit Voyager and stop its processes"
+            aria-label="Quit Voyager"
+          >
+            ⏻
+          </button>
+        </div>
+      </div>
+    </aside>
+    <main>
+      <header id="topbar">
+        <button
+          id="toggle-sidebar"
+          class="icon-button"
+          title="Toggle sidebar"
+          aria-label="Toggle sidebar"
+        >
+          ◧
+        </button>
+        <div id="dimension-avatar"></div>
+        <div id="breadcrumb">Voyager</div>
+        <div class="topbar-spacer"></div>
+        <span class="prototype-label">CORE WORKSPACE</span>
+        <button
+          id="chat-toggle"
+          class="icon-button"
+          title="Talk with Voyager"
+          aria-label="Toggle conversation"
+        >
+          ◌
+        </button>
+      </header>
+      <div id="dimensions-row">
+        <nav id="dimensions" aria-label="Dimensions"></nav>
+        <button
+          id="add-dimension"
+          aria-label="New dimension"
+          title="New dimension"
+        >
+          +
+        </button>
+        <div class="dimension-spacer"></div>
+        <button
+          id="split-horizontal"
+          title="Split side by side"
+          aria-label="Split side by side"
+        >
+          ◫</button
+        ><button
+          id="split-vertical"
+          title="Split top and bottom"
+          aria-label="Split top and bottom"
+        >
+          ⬒
+        </button>
+      </div>
+      <div id="content">
+        <section id="portals" aria-label="Portals">
+          <div class="loading">
+            Opening your workspace<span>Connecting to Herdr Core</span>
+          </div>
+        </section>
+        <aside id="chat" hidden>
+          <header>
+            <div><span class="status-dot"></span><strong>Voyager</strong></div>
+            <button id="close-chat" aria-label="Close conversation">×</button>
+          </header>
+          <div id="messages" role="log" aria-live="polite">
+            <div class="chat-intro">
+              <span class="intro-orbit">✧</span>
+              <h2>A little space to think.</h2>
+              <p>
+                Open a realm. Start something.<br />Or tell me where we're
+                going.
+              </p>
+            </div>
+          </div>
+          <div id="chat-state" role="status">Ready when you are</div>
+          <button id="reconnect" hidden>Reconnect Voyager</button>
+          <form id="composer">
+            <textarea
+              id="chat-text"
+              rows="2"
+              placeholder="What shall we work on?"
+              aria-label="Message Voyager"
+            ></textarea>
+            <div>
+              <button
+                type="button"
+                id="voice"
+                aria-label="Start voice"
+                title="Start voice"
+              >
+                ♩</button
+              ><span>Let’s go together</span
+              ><button type="submit" id="send" aria-label="Send message">
+                ↑
+              </button>
+            </div>
+          </form>
+        </aside>
+      </div>
+      <footer>
+        <span id="connection"><span class="status-dot"></span>Starting</span
+        ><span id="context">Shell workspace</span>
+        <div></div>
+        <span id="core-version"></span
+        ><button id="shortcuts" title="Keyboard shortcuts">⌘ K</button>
+      </footer>
+    </main>
+    <button id="avatar" title="Minimize Voyager" aria-label="Minimize Voyager">
+      <img src="../../desktop/assets/idle.png" alt="" /><span
+        class="status-dot"
+      ></span>
+    </button>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="dialog">
+      <form method="dialog">
+        <header>
+          <h2 id="dialog-title"></h2>
+          <button value="cancel" formnovalidate aria-label="Close dialog">
+            ×
+          </button>
+        </header>
+        <div id="dialog-body"></div>
+        <div id="dialog-actions"></div>
+      </form>
+    </dialog>
+    <audio id="voice-output" autoplay></audio>
+    <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="renderer.js"></script>
+    <script src="chat.js"></script>
+  </body>
+</html>
