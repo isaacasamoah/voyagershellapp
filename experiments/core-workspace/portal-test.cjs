@@ -158,6 +158,16 @@ test("generic portal updates honor avatar focus and layout restore does not rest
       (await (await fetch(snapshot.data.backend.url)).json()).message,
       updated.data.message,
     );
+    library.uninstall("backend-demo");
+    assert.equal(
+      (await core.rpc("terminal.get", { terminal: backend.terminal })).pid,
+      process.pid,
+    );
+    assert.equal(
+      (await (await fetch(snapshot.data.backend.url)).json()).message,
+      updated.data.message,
+    );
+    library.uninstall("backend-demo", true);
     await assert.rejects(
       host.call(
         { action: "source", type: "backend-demo", file: "view.html" },
