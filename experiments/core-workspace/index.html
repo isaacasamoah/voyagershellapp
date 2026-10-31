@@ -38,20 +38,11 @@
       <aside id="chat" hidden>
         <header>
           <div>
-            <span class="status-dot"></span
-            ><strong id="chat-focus">Whole workspace</strong>
+            <strong id="chat-focus">Whole workspace</strong>
           </div>
           <button id="close-chat" aria-label="Close conversation">×</button>
         </header>
-        <div id="messages" role="log" aria-live="polite">
-          <div class="chat-intro">
-            <span class="intro-orbit">✧</span>
-            <h2>A little space to think.</h2>
-            <p>
-              Open a realm. Start something.<br />Or tell me where we're going.
-            </p>
-          </div>
-        </div>
+        <div id="messages" role="log" aria-live="polite"></div>
         <div id="chat-state" role="status">Ready when you are</div>
         <button id="reconnect" hidden>Reconnect Voyager</button>
         <form id="composer">
@@ -73,31 +64,12 @@
         <span>⌂</span> Home <kbd>⌘ 1</kbd>
       </button>
       <div class="section-label">
-        <span>Realms</span
-        ><button id="add-realm" title="New realm" aria-label="New realm">
+        <span>Voyages</span
+        ><button id="add-realm" title="New Voyage" aria-label="New Voyage">
           +
         </button>
       </div>
-      <nav id="realms" aria-label="Realms"></nav>
-      <div class="sidebar-bottom">
-        <button id="open-chat" class="conversation-link">
-          <span class="orbit-icon">◉</span> Talk with Voyager <kbd>⌘ J</kbd>
-        </button>
-        <button id="processes" class="process-link">
-          <span class="status-dot"></span
-          ><span id="process-count">Connecting</span><span>↗</span>
-        </button>
-        <div class="sidebar-foot">
-          <span>YOUR SPACE, YOUR WAY</span
-          ><button
-            id="quit"
-            title="Quit Voyager and stop its processes"
-            aria-label="Quit Voyager"
-          >
-            ⏻
-          </button>
-        </div>
-      </div>
+      <nav id="realms" aria-label="Voyages"></nav>
     </aside>
     <main>
       <header id="topbar">
@@ -118,44 +90,16 @@
         >
           Whole workspace
         </button>
-        <span class="prototype-label">CORE WORKSPACE</span>
-        <div id="workspace-controls">
-          <button
-            id="chat-toggle"
-            class="icon-button"
-            title="Talk with Voyager"
-            aria-label="Toggle conversation"
-          >
-            ◌
-          </button>
-        </div>
+        <div id="workspace-controls"></div>
       </header>
       <div id="dimensions-row">
-        <nav id="dimensions" aria-label="Dimensions"></nav>
-        <button
-          id="add-dimension"
-          aria-label="New dimension"
-          title="New dimension"
-        >
+        <nav id="dimensions" aria-label="Fleets"></nav>
+        <button id="add-dimension" aria-label="New Fleet" title="New Fleet">
           +
         </button>
         <div class="dimension-spacer"></div>
-        <button id="new-portal" title="New portal" aria-label="New portal">
-          + Portal
-        </button>
-        <button
-          id="layouts"
-          title="Dimension layouts"
-          aria-label="Dimension layouts"
-        >
-          ⌑
-        </button>
-        <button
-          id="portal-packages"
-          title="Portal packages"
-          aria-label="Portal packages"
-        >
-          ◇
+        <button id="new-portal" title="New Vessel" aria-label="New Vessel">
+          + Vessel
         </button>
         <button
           id="split-horizontal"
@@ -172,7 +116,7 @@
         </button>
       </div>
       <div id="content">
-        <section id="portals" aria-label="Portals">
+        <section id="portals" aria-label="Vessels">
           <div class="loading">
             Opening your workspace<span>Connecting to Herdr Core</span>
           </div>

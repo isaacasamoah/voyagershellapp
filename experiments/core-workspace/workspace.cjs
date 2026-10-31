@@ -167,7 +167,7 @@ class Workspace {
     const [kind, key] = id.split(":");
     if (kind === "realm") {
       const realm = this.state.realms.find((item) => item.id === key);
-      return { kind, id, realm: key, label: `Realm · ${realm.name}` };
+      return { kind, id, realm: key, label: `Voyage · ${realm.name}` };
     }
     if (kind === "dimension") {
       const { realm, dimension } = this.dimension(key);
@@ -176,12 +176,12 @@ class Workspace {
         id,
         realm: realm.id,
         dimension: key,
-        label: `Dimension · ${dimension.name}`,
+        label: `Fleet · ${dimension.name}`,
       };
     }
     const member = this.state.members[key];
     if (member)
-      return { kind, id, terminal: key, ...member, label: `Portal · ${key}` };
+      return { kind, id, terminal: key, ...member, label: `Vessel · ${key}` };
     const { realm, dimension, portal } = this.portal(key);
     return {
       kind,
@@ -190,7 +190,7 @@ class Workspace {
       terminal: portal.terminal,
       realm: realm.id,
       dimension: dimension.id,
-      label: `Portal · ${portal.title}`,
+      label: `Vessel · ${portal.title}`,
     };
   }
 

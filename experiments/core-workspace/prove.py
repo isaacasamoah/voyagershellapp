@@ -30,6 +30,9 @@ parser.add_argument("--request-focus", action="store_true")
 parser.add_argument("--request-focus-voice", action="store_true")
 parser.add_argument("--portal-companion", action="store_true")
 parser.add_argument("--portal-boundaries", action="store_true")
+parser.add_argument("--ux", action="store_true")
+parser.add_argument("--quit", action="store_true")
+parser.add_argument("--startup-failure", action="store_true")
 parser.add_argument("--portals", action="store_true")
 parser.add_argument("--port", type=int, default=9473)
 args = parser.parse_args()
@@ -70,12 +73,27 @@ with sync_playwright() as playwright:
     page = next(
         page for page in browser.contexts[0].pages if page.url.endswith("/index.html")
     )
-    page.wait_for_function(
-        "() => typeof state !== 'undefined' && state?.realms?.length > 0"
-    )
-    page.wait_for_selector(".xterm-screen")
+    if not (args.quit or args.startup_failure):
+        page.wait_for_function(
+            "() => typeof state !== 'undefined' && state?.realms?.length > 0"
+        )
+        page.wait_for_selector(".xterm-screen")
+    if args.quit or args.startup_failure:
+        from proof_ux import native_quit
+
+        if args.startup_failure:
+            page.wait_for_function("() => document.querySelector('#portals').textContent.includes('ENOENT')")
+        processes = [] if args.startup_failure else page.evaluate("api.call('processes')")["terminals"]
+        native_quit(page, evidence, env, processes)
+        (evidence / ("startup-quit.json" if args.startup_failure else "quit.json")).write_text(
+            json.dumps({"nativeQuit": True, "startupFailure": args.startup_failure}, indent=2)
+        )
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    if args.ux:
+        from proof_ux import chrome_journey
+
+        chrome_journey(page, playwright, evidence, env)
     if args.portals:
         from proof_portals import portal_journey
 
@@ -371,4 +389,5 @@ with sync_playwright() as playwright:
         print(
             "Native realtime WebRTC negotiated and stopped. Human microphone and audibility remain unproved."
         )
-    browser.close()
+    if browser.is_connected():
+        browser.close()

@@ -697,3 +697,20 @@ dialog header button {
   padding: 6px 11px;
   color: #bdb1d0;
 }
+
+.realm-glyph:empty,
+.dimension-mark:empty {
+  width: 0;
+  min-width: 0;
+  margin: 0;
+}
+.portal-dock {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+#workspace-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

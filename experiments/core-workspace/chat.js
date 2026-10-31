@@ -7,7 +7,6 @@
     if (open && $("chat").hidden) focusReturn = document.activeElement;
     if (open && state && !state.sidebar) act("sidebar-show").catch(() => {});
     $("chat").hidden = !open;
-    $("chat-toggle").setAttribute("aria-pressed", String(open));
     if (open) $("chat-text").focus();
     else if (focusReturn?.isConnected)
       focusReturn.focus({ preventScroll: true });
@@ -74,9 +73,7 @@
     }
   });
 
-  $("open-chat").onclick = () => openChat(true);
   $("avatar-chat").onclick = () => openChat();
-  $("chat-toggle").onclick = () => openChat();
   $("close-chat").onclick = () => openChat(false);
   $("composer").onsubmit = async (event) => {
     event.preventDefault();

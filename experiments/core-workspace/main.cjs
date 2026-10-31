@@ -7,6 +7,7 @@ const {
   protocol,
   net,
   shell,
+  Menu,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -45,6 +46,40 @@ let portalHost;
 let companion;
 let ready;
 let quitting = false;
+let quitRequest;
+function quitVoyager() {
+  if (!quitRequest)
+    quitRequest = (async () => {
+      try {
+        await ready;
+      } catch (error) {
+        if (core?.child?.pid && !core.info)
+          throw Error(`Core startup outcome unconfirmed: ${error.message}`);
+      }
+      publish("connection", { phase: "stopping" });
+      companion?.close();
+      library?.close();
+      if (core?.info) await core.rpc("server.stop");
+      quitting = true;
+      core?.close();
+      app.quit();
+      return true;
+    })().catch((error) => {
+      publish("connection", {
+        phase: "disconnected",
+        error: `Quit outcome unconfirmed: ${error.message}`,
+      });
+      throw error;
+    });
+  return quitRequest;
+}
+app.on("before-quit", (event) => {
+  if (quitting) return;
+  event.preventDefault();
+  quitVoyager().catch((error) =>
+    publish("connection", { phase: "disconnected", error: error.message }),
+  );
+});
 const streams = new Map();
 const publish = (topic, value) => {
   for (const window of [win, desktop])
@@ -93,6 +128,14 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+      { role: "fileMenu" },
+      { role: "editMenu" },
+      { role: "windowMenu" },
+    ]),
+  );
   win = new BrowserWindow({
     width: 1450,
     height: 940,
@@ -468,16 +511,7 @@ app.whenReady().then(async () => {
       if (method === "voice") return companion.voice(input.sdp);
       return companion.stopVoice();
     }
-    if (method === "quit") {
-      quitting = true;
-      publish("connection", { phase: "stopping" });
-      companion?.close();
-      library.close();
-      await core.rpc("server.stop");
-      core.close();
-      app.quit();
-      return true;
-    }
+    if (method === "quit") return quitVoyager();
     throw Error("Unknown Voyager action.");
   });
   await desktop.loadFile(path.join(__dirname, "floating.html"));
