@@ -89,6 +89,7 @@ with sync_playwright() as playwright:
         )
         page.get_by_role("button", name="Toggle sidebar", exact=True).click()
         page.wait_for_selector("#dimension-avatar #avatar")
+        assert page.locator("#dimensions #dimension-avatar #avatar").count() == 1
         page.get_by_role(
             "button", name="Bring Voyager here", exact=True
         ).first.dblclick()

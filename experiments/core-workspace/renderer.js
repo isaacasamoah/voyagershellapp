@@ -4,6 +4,7 @@ let state;
 let focused;
 const terminals = new Map();
 const avatar = $("avatar");
+const dimensionDock = $("dimension-avatar");
 let toastTimer;
 
 function notify(message) {
@@ -345,6 +346,7 @@ async function render(value) {
     }),
   );
   $("breadcrumb").textContent = realm.name;
+  $("dimensions").querySelector(".dimension.active").before(dimensionDock);
   $("context").textContent =
     `${realm.cwd.replace(/^\/home\/isaac|^\/Users\/isaac/, "~")}  /  ${dimension.name}`;
   $("portals").replaceChildren(layoutView(dimension.root, dimension.id));
@@ -352,9 +354,9 @@ async function render(value) {
     state.dock === "home"
       ? $("avatar-home")
       : state.dock === "dimension"
-        ? $("dimension-avatar")
+        ? dimensionDock
         : document.querySelector(`[data-dock="${state.dock}"]`);
-  (dock || $("dimension-avatar")).append(avatar);
+  (dock || dimensionDock).append(avatar);
   avatar.classList.toggle("compact", state.dock !== "home");
   const visible = allLeaves(dimension.root);
   if (!visible.some((portal) => portal.id === focused))

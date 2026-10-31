@@ -293,6 +293,11 @@ main {
 #dimension-avatar:empty {
   display: none;
 }
+#dimensions > #dimension-avatar:not(:empty) {
+  display: flex;
+  align-items: center;
+  padding-left: 5px;
+}
 #dimensions-row {
   display: flex;
   align-items: center;
