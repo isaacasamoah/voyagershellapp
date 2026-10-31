@@ -1,6 +1,29 @@
-const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  screen,
+  protocol,
+  net,
+  shell,
+} = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const { pathToFileURL } = require("node:url");
+const { PortalLibrary } = require("./portal-library.cjs");
+const { PortalHost } = require("./portal-host.cjs");
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "voyager-portal",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 const { Core } = require("./core.cjs");
 const { Workspace } = require("./workspace.cjs");
 
@@ -17,6 +40,8 @@ let voiceStopSequence = 0;
 let voice = { pressed: false, connection: "closed", disabled: false };
 let core;
 let workspace;
+let library;
+let portalHost;
 let companion;
 let ready;
 let quitting = false;
@@ -62,6 +87,7 @@ app.on("second-instance", () => {
 });
 app.on("window-all-closed", () => {
   companion?.close();
+  library?.close();
   core?.close();
   app.quit();
 });
@@ -104,6 +130,22 @@ app.whenReady().then(async () => {
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
   }
+  win.webContents.on("will-frame-navigate", (event) => {
+    try {
+      const url = new URL(event.url);
+      const instance = workspace.portal(url.hostname).portal;
+      const definition = library.definition(instance.type || "terminal");
+      if (
+        event.isMainFrame ||
+        url.protocol !== "voyager-portal:" ||
+        url.pathname !== `/${definition.entry || "view.html"}` ||
+        url.searchParams.get("portal") !== instance.id
+      )
+        event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
+  });
   win.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
@@ -135,6 +177,55 @@ app.whenReady().then(async () => {
       error,
     }),
   );
+  library = new PortalLibrary(
+    path.join(profile, "portals"),
+    path.join(__dirname, "portal-defaults"),
+    core,
+    (value) => publish("portal-library", value),
+  );
+  protocol.handle("voyager-portal", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const instance = workspace.portal(url.hostname).portal;
+      if (
+        url.searchParams.has("portal") &&
+        url.searchParams.get("portal") !== instance.id
+      )
+        throw Error("Portal URL does not match its bound instance.");
+      const type = instance.type || "terminal";
+      const relative = decodeURIComponent(url.pathname.slice(1));
+      if (
+        relative === "_voyager/client.js" ||
+        relative === "_voyager/theme.css"
+      ) {
+        const file = relative.endsWith(".js")
+          ? "portal-client.js"
+          : "portal-theme.css";
+        return net.fetch(pathToFileURL(path.join(__dirname, file)).href);
+      }
+      const definition = library.definition(type);
+      const file = library.file(type, relative);
+      if (relative === (definition.entry || "view.html")) {
+        const extra =
+          '<link rel="stylesheet" href="/_voyager/theme.css"><script src="/_voyager/client.js"></script>';
+        const original = fs.readFileSync(file, "utf8");
+        const html = /<head[^>]*>/i.test(original)
+          ? original.replace(/<head[^>]*>/i, (match) => match + extra)
+          : extra + original;
+        return new Response(html, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "Content-Security-Policy":
+              "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: http://127.0.0.1:*; frame-src 'none'; object-src 'none'",
+          },
+        });
+      }
+      return net.fetch(pathToFileURL(file).href);
+    } catch (error) {
+      return new Response(error.message, { status: 404 });
+    }
+  });
   workspace = new Workspace(
     core,
     process.env.VOYAGER_WORKSPACE_CWD || path.resolve(__dirname, "../.."),
@@ -143,7 +234,10 @@ app.whenReady().then(async () => {
       present();
       companion?.refreshFocus();
     },
+    library,
   );
+  portalHost = new PortalHost(workspace, library);
+  workspace.portalHost = portalHost;
   ready = core.open().then(() => workspace.load());
   ready.catch((error) =>
     publish("connection", { phase: "disconnected", error: error.message }),
@@ -229,7 +323,19 @@ app.whenReady().then(async () => {
     }
     await ready;
     if (method === "boot")
-      return { state: workspace.state, core: core.info, session };
+      return {
+        state: workspace.state,
+        core: core.info,
+        session,
+        portals: library.catalog(),
+      };
+    if (method === "portal") return portalHost.call(input);
+    if (method === "portal-frame")
+      return portalHost.call(input, false, input.id);
+    if (method === "portal-folder") {
+      await shell.openPath(library.root);
+      return library.root;
+    }
     if (method === "focus") return workspace.focus();
     if (method === "voice-state") {
       voice = input;
@@ -366,6 +472,7 @@ app.whenReady().then(async () => {
       quitting = true;
       publish("connection", { phase: "stopping" });
       companion?.close();
+      library.close();
       await core.rpc("server.stop");
       core.close();
       app.quit();

@@ -1,5 +1,7 @@
 # Voyager Core workspace prototype
 
+The editable-portal experiment is available in the separate `Voyager · Portal preview` window. Live package installation, source edits, JSON updates, a Core-owned HTTP backend, layout restoration and reversible removal have native Linux evidence. A real companion updated and verified a whiteboard note. Thirteen tests and focused re-review pass. This is an inspection prototype; the inherited aggregate acceptance gate below remains open.
+
 Current status, 31 October 2026: the owner’s running viewer has the dark Voyager identity, sidebar text drawer and selected-only portal outline. Its eight Core shell PIDs and private Codex process were preserved. The native desktop-avatar and pinned-context candidate is still under verification. Its conservative proof inventory exceeds the mapped production lines and has unresolved classification gaps. Desktop drag tests did not establish a working cross-window route. Do not treat this candidate as accepted or replace an active viewer merely to load it.
 
 A separate window titled `Voyager · Focus preview` now runs the latest controls in
@@ -22,7 +24,7 @@ prototype process, not through an implicit restart of an active conversation.
 
 An isolated Electron workspace connected to Herdr Core's Rust runtime. Realms
 contain dimensions, and dimensions contain recursively split portals. Each portal
-displays a real Core-owned terminal. This experiment does not replace the installed
+displays a terminal or a local web package. A package may also start a Core-owned backend when the user opens that portal. This experiment does not replace the installed
 Voyager app or its service.
 
 Use Node 24, a working Linux desktop, `hc` 0.1.15 on PATH, and a signed-in `codex`
@@ -44,6 +46,104 @@ Use `VOYAGER_WORKSPACE_SESSION=voyager-another-name` for another isolated trial.
 `VOYAGER_WORKSPACE_CWD` selects the initial folder. `VOYAGER_HC` and
 `VOYAGER_CODEX_BIN` select executable paths. Starting again with the same desktop
 profile restores its existing window.
+
+## Editable portals
+
+This branch experiments with one repeatable package contract. Use **+ Portal**
+to choose Terminal, Codex, Claude, Notes, Whiteboard, Decision inbox, Workspace
+status, Orbit or Live backend. The native-agent choices run the ordinary CLI with
+its existing configuration. They do not add a second agent runtime or replay tasks.
+
+**Portal packages → Open folder** opens the current session's editable files:
+
+```text
+portals/
+  packages/<type>/portal.json
+  packages/<type>/view.html
+  packages/<type>/...assets or backend files
+  data/<portal-id>.json
+  layouts/<dimension-id>-<name>.json
+  .uninstalled/<type>/
+```
+
+A web package needs a manifest and an HTML entry. For example:
+
+```json
+{
+  "id": "project-notes",
+  "name": "Project notes",
+  "renderer": "web",
+  "entry": "view.html",
+  "seed": { "text": "" },
+  "contract": { "text": "The user's editable note" }
+}
+```
+
+Place that folder under `packages/` while the app runs. It appears in the picker.
+Edit its HTML, JavaScript or CSS and the applicable views reload in place. Invalid
+manifests retain the previous package. Invalid startup scripts retain the previous
+view and show an error. Hidden views remain attached until uninstall or app exit;
+backends do not restart when a view reloads. Existing shell PIDs are preserved.
+The prototype uses recursive file notifications, not a build step or marketplace.
+
+The app injects shared Voyager styling and a small browser interface:
+
+```js
+const snapshot = await portal.read();
+await portal.write({ text: "A new note" }, snapshot.version);
+portal.onChange(() => refresh());
+```
+
+`read` returns JSON data, a version and the package's state contract. `write`
+requires that version and refuses a stale save. Direct file edits trigger the
+same refresh. The file check and rename prevent partial JSON writes from this
+host; they are not a transaction against arbitrary simultaneous external writers.
+Invalid JSON reports an error while retaining the last valid state when available.
+
+A terminal package uses `renderer: "terminal"` and `argv`. A web package can also
+provide `argv` for a backend. `{package}` and `{data}` expand to its folder and
+instance data file. Core starts that command only on explicit portal creation or
+Start backend. The `backend-demo` package demonstrates a real HTTP process and
+shares its runtime-reported PID and address through data. Each portal's backend
+has its own Core terminal address. Closing its view and uninstalling its package
+leave that program running. Stop it explicitly from **Your processes**.
+
+Agents can edit package files directly. The avatar's named `voyager_portal` tool
+inspects and changes portal data inside its current focus. Source edits and
+uninstall/restore require whole-workspace focus because they affect all copies.
+A whiteboard exposes its nodes, coordinates and text rather than only pixels.
+A custom dashboard needs to expose similarly meaningful data and actions.
+HTML and JavaScript render in browser frames with separate origins per instance,
+without Node or desktop IPC access. Packages and their backend commands are trusted
+local code; this is not a security boundary for untrusted downloaded extensions.
+
+Drag portal titles to another header, or use **Move this portal** to choose a
+position. Dividers adjust the recursive split tree. **Dimension layouts** saves
+and restores that dimension's arrangement, including hidden portal identities.
+Restoration attaches existing addresses. An ended process stays ended. Home uses
+the same portal tree and layout controls, with whole-workspace context. Its status
+and orbit show actual Core process metadata. Its inbox stores structured decisions
+but does not deliver approvals to external systems.
+
+**Uninstall** moves a package to `.uninstalled/`, withdraws it from the picker and
+shows a missing-type message in existing portals. It keeps their data, layout
+references and backends. **Restore** moves it back and reopens those same views.
+To retire the prototype, use its power button to stop only its dedicated Core
+session, then archive its session profile. Original Voyager apps, other Core
+sessions and their configuration are separate. No system service is installed.
+
+This demonstrates terminal rendering and cooperating browser packages. A command
+that launches an arbitrary native GUI does not thereby become embeddable or
+semantically inspectable. Interactive walkthroughs can be package HTML entries;
+other renderers, a public extension API and production distribution remain future
+choices.
+
+The pattern comes from [Herdr's pinned pane model](https://github.com/herdrdev/herdr-app/blob/e3cdccc159644f1e3b23217588ab4f2b5b254af0/src/layout.rs),
+[mod discovery](https://github.com/herdrdev/herdr-app/blob/e3cdccc159644f1e3b23217588ab4f2b5b254af0/src/mods.rs)
+and [live reload](https://github.com/herdrdev/herdr-app/blob/e3cdccc159644f1e3b23217588ab4f2b5b254af0/src/window.rs).
+Herdr's app renders JavaScript through GPUI. This experiment implements its own
+HTML frame host using [Electron custom protocols](https://www.electronjs.org/docs/latest/api/protocol).
+It does not copy Herdr implementation code.
 
 ## Try the interface
 

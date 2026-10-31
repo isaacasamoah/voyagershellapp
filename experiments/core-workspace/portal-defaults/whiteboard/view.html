@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Whiteboard</title>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="eyebrow">WHITEBOARD</div>
+        <h1>Think out loud.</h1>
+      </div>
+      <button id="add">+ Note</button>
+    </header>
+    <div id="board" class="board" aria-label="Whiteboard"></div>
+    <div id="state" class="muted"></div>
+    <script>
+      let snapshot;
+      const board = document.querySelector("#board");
+      async function save() {
+        try {
+          snapshot = await portal.write(snapshot.data, snapshot.version);
+          document.querySelector("#state").textContent = "Saved";
+        } catch (error) {
+          document.querySelector("#state").textContent = error.message;
+        }
+      }
+      async function load() {
+        snapshot = await portal.read();
+        board.replaceChildren();
+        for (const item of snapshot.data.nodes || []) {
+          const card = document.createElement("button");
+          card.className = "note";
+          card.textContent = item.text;
+          card.style.left = item.x + "px";
+          card.style.top = item.y + "px";
+          card.style.borderColor = item.color || "#b07af5";
+          let drag;
+          card.onpointerdown = (e) => {
+            drag = { x: e.clientX, y: e.clientY, left: item.x, top: item.y };
+            card.setPointerCapture(e.pointerId);
+          };
+          card.onpointermove = (e) => {
+            if (!drag) return;
+            item.x = Math.max(0, drag.left + e.clientX - drag.x);
+            item.y = Math.max(0, drag.top + e.clientY - drag.y);
+            card.style.left = item.x + "px";
+            card.style.top = item.y + "px";
+          };
+          card.onpointerup = () => {
+            if (drag) {
+              drag = null;
+              save();
+            }
+          };
+          card.ondblclick = () => {
+            const text = prompt("Note", item.text);
+            if (text !== null) {
+              item.text = text;
+              card.textContent = text;
+              save();
+            }
+          };
+          board.append(card);
+        }
+      }
+      document.querySelector("#add").onclick = () => {
+        snapshot.data.nodes.push({
+          id: crypto.randomUUID(),
+          text: "New thought",
+          x: 30,
+          y: 35 + snapshot.data.nodes.length * 30,
+          color: "#59a5ff",
+        });
+        save().then(load);
+      };
+      portal.onChange(load);
+      load();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Decision inbox</title>
+  </head>
+  <body>
+    <div class="eyebrow">DECISIONS</div>
+    <h1>What needs you.</h1>
+    <div id="cards"></div>
+    <div id="state" class="muted"></div>
+    <script>
+      let snapshot;
+      async function load() {
+        snapshot = await portal.read();
+        const host = document.querySelector("#cards");
+        host.replaceChildren();
+        if (!snapshot.data.cards?.length) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent =
+            "Nothing waiting. An agent can leave a structured decision here.";
+          host.append(empty);
+        }
+        for (const item of snapshot.data.cards || []) {
+          const card = document.createElement("article");
+          const from = document.createElement("small");
+          from.textContent = item.from || "Workspace";
+          const title = document.createElement("h2");
+          title.textContent = item.title;
+          const detail = document.createElement("p");
+          detail.textContent = item.detail || "";
+          card.append(from, title, detail);
+          if (item.answer) {
+            const answer = document.createElement("p");
+            answer.className = "answer";
+            answer.textContent = item.answer;
+            card.append(answer);
+          } else
+            for (const choice of item.options || ["Approve", "Reject"]) {
+              const button = document.createElement("button");
+              button.textContent = choice;
+              button.onclick = async () => {
+                try {
+                  item.answer = choice;
+                  snapshot = await portal.write(
+                    snapshot.data,
+                    snapshot.version,
+                  );
+                  load();
+                } catch (error) {
+                  document.querySelector("#state").textContent = error.message;
+                }
+              };
+              card.append(button);
+            }
+          host.append(card);
+        }
+      }
+      portal.onChange(load);
+      load();
+    </script>
+  </body>
+</html>

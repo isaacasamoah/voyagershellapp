@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notes</title>
+  </head>
+  <body>
+    <div class="eyebrow">NOTES</div>
+    <input id="title" aria-label="Note title" /><textarea
+      id="text"
+      aria-label="Note text"
+    ></textarea>
+    <div id="state" class="muted"></div>
+    <script>
+      let snapshot;
+      async function load() {
+        snapshot = await portal.read();
+        document.querySelector("#title").value = snapshot.data.title || "";
+        document.querySelector("#text").value = snapshot.data.text || "";
+      }
+      async function save() {
+        try {
+          snapshot = await portal.write(
+            {
+              title: document.querySelector("#title").value,
+              text: document.querySelector("#text").value,
+            },
+            snapshot.version,
+          );
+          document.querySelector("#state").textContent = "Saved";
+        } catch (error) {
+          document.querySelector("#state").textContent = error.message;
+        }
+      }
+      document.querySelector("#title").onchange = save;
+      document.querySelector("#text").onchange = save;
+      portal.onChange(load);
+      load();
+    </script>
+  </body>
+</html>

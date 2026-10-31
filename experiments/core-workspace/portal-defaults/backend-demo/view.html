@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live backend</title>
+  </head>
+  <body>
+    <div class="eyebrow">CORE-OWNED APP</div>
+    <h1 id="message"></h1>
+    <p id="address" class="muted">Starting backend…</p>
+    <button id="ping">Ask the backend</button>
+    <pre id="reply"></pre>
+    <script>
+      let snapshot;
+      async function load() {
+        snapshot = await portal.read();
+        document.querySelector("#message").textContent = snapshot.data.message;
+        document.querySelector("#address").textContent =
+          snapshot.data.backend?.url || "Starting backend…";
+      }
+      document.querySelector("#ping").onclick = async () => {
+        try {
+          const result = await fetch(snapshot.data.backend.url).then((r) =>
+            r.json(),
+          );
+          document.querySelector("#reply").textContent = JSON.stringify(
+            result,
+            null,
+            2,
+          );
+        } catch (error) {
+          document.querySelector("#reply").textContent = error.message;
+        }
+      };
+      portal.onChange(load);
+      load();
+    </script>
+  </body>
+</html>

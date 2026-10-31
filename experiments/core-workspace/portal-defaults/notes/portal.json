@@ -1,0 +1,15 @@
+{
+  "id": "notes",
+  "name": "Notes",
+  "renderer": "web",
+  "entry": "view.html",
+  "description": "A small editable document. Agents can read or update title and text.",
+  "seed": {
+    "title": "Working notes",
+    "text": "A little space to think."
+  },
+  "contract": {
+    "title": "Heading",
+    "text": "Plain text notes"
+  }
+}

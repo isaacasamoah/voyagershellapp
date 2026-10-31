@@ -1,0 +1,10 @@
+{
+  "id": "workspace-status",
+  "name": "Workspace status",
+  "renderer": "web",
+  "entry": "view.html",
+  "workspace": true,
+  "workspaceActions": ["show"],
+  "description": "Live process metadata from Core. Only programs that report a status have agent-work status.",
+  "seed": {}
+}

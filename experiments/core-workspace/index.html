@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:;"
+      content="default-src 'self'; frame-src voyager-portal:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:;"
     />
     <title>Voyager</title>
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
@@ -140,6 +140,23 @@
           +
         </button>
         <div class="dimension-spacer"></div>
+        <button id="new-portal" title="New portal" aria-label="New portal">
+          + Portal
+        </button>
+        <button
+          id="layouts"
+          title="Dimension layouts"
+          aria-label="Dimension layouts"
+        >
+          ⌑
+        </button>
+        <button
+          id="portal-packages"
+          title="Portal packages"
+          aria-label="Portal packages"
+        >
+          ◇
+        </button>
         <button
           id="split-horizontal"
           title="Split side by side"
@@ -218,6 +235,7 @@
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script src="../../desktop/src/ui/astronaut.js"></script>
+    <script src="portal-frames.js"></script>
     <script src="renderer.js"></script>
     <script src="chat.js"></script>
     <script src="identity.js"></script>

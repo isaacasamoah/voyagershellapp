@@ -1,0 +1,7 @@
+{
+  "id": "claude",
+  "name": "Claude",
+  "renderer": "terminal",
+  "argv": ["claude"],
+  "description": "Start the installed Claude CLI with its existing configuration."
+}

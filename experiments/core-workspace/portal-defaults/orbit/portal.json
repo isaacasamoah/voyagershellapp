@@ -1,0 +1,9 @@
+{
+  "id": "orbit",
+  "name": "Orbit",
+  "renderer": "web",
+  "entry": "view.html",
+  "workspace": true,
+  "description": "A quiet map of real Core processes. Animation indicates a live process, not task progress.",
+  "seed": {}
+}

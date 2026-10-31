@@ -16,8 +16,9 @@ function replace(node, id, next) {
 }
 
 class Workspace {
-  constructor(core, cwd, publish) {
+  constructor(core, cwd, publish, library) {
     this.core = core;
+    this.library = library;
     this.cwd = cwd;
     this.publish = publish;
     this.version = 0;
@@ -33,6 +34,32 @@ class Workspace {
       sidebar: true,
       dock: "home",
     };
+    this.state.hidden ||= {};
+    if (this.library && !this.state.home) {
+      const portals = await Promise.all(
+        ["workspace-status", "inbox", "orbit"].map((type) =>
+          this.library.create(type, this.cwd),
+        ),
+      );
+      this.state.home = {
+        id: "home",
+        name: "Home",
+        root: {
+          id: randomUUID(),
+          axis: "horizontal",
+          ratio: 0.55,
+          children: [
+            portals[0],
+            {
+              id: randomUUID(),
+              axis: "vertical",
+              ratio: 0.6,
+              children: portals.slice(1),
+            },
+          ],
+        },
+      };
+    }
     this.indexProcesses();
     this.state.dock = this.dockId(this.state.dock);
     if (!this.state.realms.length)
@@ -40,7 +67,25 @@ class Workspace {
     return this.state;
   }
 
+  places() {
+    return [
+      ...this.state.realms.flatMap((realm) =>
+        realm.dimensions.map((dimension) => ({ realm, dimension })),
+      ),
+      ...(this.state.home
+        ? [
+            {
+              realm: { id: "workspace", name: "Workspace", cwd: this.cwd },
+              dimension: this.state.home,
+            },
+          ]
+        : []),
+    ];
+  }
+
   dimension(id) {
+    if (id === "home" && this.state.home)
+      return this.places().find((item) => item.dimension.id === id);
     for (const realm of this.state.realms) {
       const dimension = realm.dimensions.find((item) => item.id === id);
       if (dimension) return { realm, dimension };
@@ -49,20 +94,46 @@ class Workspace {
   }
 
   portal(id) {
-    for (const realm of this.state.realms) {
-      for (const dimension of realm.dimensions) {
-        const portal = leaves(dimension.root).find((item) => item.id === id);
-        if (portal) return { realm, dimension, portal };
-      }
+    for (const { realm, dimension } of this.places()) {
+      const portal = leaves(dimension.root).find(
+        (item) => item.id === id || item.terminal === id,
+      );
+      if (portal) return { realm, dimension, portal };
     }
+    const hidden =
+      this.state.hidden?.[id] ||
+      Object.values(this.state.hidden || {}).find(
+        (item) => item.portal.terminal === id,
+      );
+    if (hidden)
+      return {
+        ...this.dimension(hidden.dimension),
+        portal: hidden.portal,
+        hidden: true,
+      };
     throw Error("Portal no longer exists.");
+  }
+
+  containsPortal(id) {
+    const focus = this.focus();
+    const { realm, dimension, portal } = this.portal(id);
+    return (
+      focus.kind === "home" ||
+      (focus.kind === "portal"
+        ? focus.portal
+          ? focus.portal === portal.id
+          : focus.terminal === portal.terminal
+        : focus.kind === "realm"
+          ? focus.realm === realm.id
+          : focus.dimension === dimension.id)
+    );
   }
 
   indexProcesses() {
     this.state.members ||= {};
-    for (const realm of this.state.realms)
-      for (const dimension of realm.dimensions)
-        for (const portal of leaves(dimension.root))
+    for (const { realm, dimension } of this.places())
+      for (const portal of leaves(dimension.root))
+        if (portal.terminal)
           this.state.members[portal.terminal] = {
             realm: realm.id,
             dimension: dimension.id,
@@ -82,9 +153,11 @@ class Workspace {
         throw Error("Realm no longer exists.");
     } else if (id.startsWith("dimension:")) this.dimension(id.slice(10));
     else if (id.startsWith("portal:")) {
-      if (!this.state.members[id.slice(7)])
-        throw Error("Portal no longer exists.");
-    } else return `portal:${this.portal(id).portal.terminal}`;
+      if (!this.state.members[id.slice(7)]) this.portal(id.slice(7));
+    } else {
+      const portal = this.portal(id).portal;
+      return `portal:${portal.terminal || portal.id}`;
+    }
     return id;
   }
 
@@ -107,18 +180,33 @@ class Workspace {
       };
     }
     const member = this.state.members[key];
-    return { kind, id, terminal: key, ...member, label: `Portal · ${key}` };
+    if (member)
+      return { kind, id, terminal: key, ...member, label: `Portal · ${key}` };
+    const { realm, dimension, portal } = this.portal(key);
+    return {
+      kind,
+      id,
+      portal: portal.id,
+      terminal: portal.terminal,
+      realm: realm.id,
+      dimension: dimension.id,
+      label: `Portal · ${portal.title}`,
+    };
   }
 
   focusDescriptor() {
     const focus = this.focus();
-    const realm = this.state.realms.find((item) => item.id === focus.realm);
-    const dimension = realm?.dimensions.find(
-      (item) => item.id === focus.dimension,
-    );
+    const place = focus.dimension ? this.dimension(focus.dimension) : null;
+    const realm =
+      place?.realm || this.state.realms.find((item) => item.id === focus.realm);
+    const dimension = place?.dimension;
     const portal =
       dimension &&
-      leaves(dimension.root).find((item) => item.terminal === focus.terminal);
+      leaves(dimension.root).find((item) =>
+        focus.portal
+          ? item.id === focus.portal
+          : item.terminal === focus.terminal,
+      );
     return {
       ...focus,
       revision: this.version,
@@ -126,12 +214,13 @@ class Workspace {
         "Workspace",
         realm?.name,
         dimension?.name,
-        focus.terminal && (portal?.title || focus.terminal),
+        focus.kind === "portal" && (portal?.title || focus.label),
       ].filter(Boolean),
     };
   }
 
   includes(terminal) {
+    if (!terminal) return false;
     const focus = this.focus();
     const member = this.state.members[terminal];
     return (
@@ -147,6 +236,7 @@ class Workspace {
     return {
       authority: "owner",
       focus,
+      home: focus.kind === "home" ? this.state.home : undefined,
       realms: this.state.realms
         .filter((realm) => focus.kind === "home" || realm.id === focus.realm)
         .map((realm) => ({
@@ -162,7 +252,7 @@ class Workspace {
               id: dimension.id,
               name: dimension.name,
               portals: leaves(dimension.root).filter((portal) =>
-                this.includes(portal.terminal),
+                this.containsPortal(portal.id),
               ),
             })),
         })),
@@ -173,8 +263,18 @@ class Workspace {
     const focus = this.focus();
     if (focus.kind === "home" || kind === "dock" || kind === "sidebar") return;
     let allowed = false;
-    if (["split", "hide", "restart"].includes(kind))
-      allowed = this.includes(this.portal(input.id).portal.terminal);
+    if (["split", "hide", "restart", "show-portal", "move"].includes(kind))
+      allowed =
+        this.containsPortal(input.id) &&
+        (!input.target || this.containsPortal(input.target));
+    if (["portal", "layout-save", "layout-load", "ratio"].includes(kind)) {
+      const target = this.dimension(input.dimension);
+      allowed =
+        focus.kind !== "portal" &&
+        ((focus.kind === "realm" && focus.realm === target.realm.id) ||
+          (focus.kind === "dimension" &&
+            focus.dimension === target.dimension.id));
+    }
     if (kind === "show") {
       const member = this.state.members[input.terminal];
       allowed =
@@ -200,7 +300,8 @@ class Workspace {
       );
   }
 
-  async shell(cwd, title = "Shell", argv) {
+  async shell(cwd, title = "Shell", argv, type = "terminal") {
+    if (this.library && !argv) return this.library.create(type, cwd);
     const terminal = await this.core.rpc("terminal.run", {
       argv: argv || ["/bin/bash", "--noprofile", "--norc"],
       cwd,
@@ -269,12 +370,14 @@ class Workspace {
       realm.activeDimension = dimension.id;
       this.state.realms.push(realm);
       this.state.activeRealm = realm.id;
+      this.state.view = "dimension";
       return;
     }
     if (kind === "select-realm") {
       if (!this.state.realms.some((realm) => realm.id === id))
         throw Error("Realm no longer exists.");
       this.state.activeRealm = id;
+      this.state.view = "dimension";
       return;
     }
     if (kind === "dimension") {
@@ -289,12 +392,18 @@ class Workspace {
       };
       realm.dimensions.push(dimension);
       realm.activeDimension = dimension.id;
+      this.state.view = "dimension";
       return;
     }
     if (kind === "select-dimension") {
       const { realm } = this.dimension(id);
+      if (id === "home") {
+        this.state.view = "home";
+        return;
+      }
       this.state.activeRealm = realm.id;
       realm.activeDimension = id;
+      this.state.view = id === "home" ? "home" : "dimension";
       return;
     }
     if (kind === "split") {
@@ -303,6 +412,7 @@ class Workspace {
         input.cwd || realm.cwd,
         input.name || "Shell",
         input.argv,
+        input.type,
       );
       dimension.root = replace(dimension.root, id, {
         id: randomUUID(),
@@ -313,21 +423,136 @@ class Workspace {
       return;
     }
     if (kind === "hide") {
-      const { dimension } = this.portal(id);
+      const { realm, dimension, portal } = this.portal(id);
+      this.state.hidden ||= {};
+      this.state.hidden[id] = {
+        realm: realm.id,
+        dimension: dimension.id,
+        portal,
+      };
       dimension.root = replace(dimension.root, id, null);
       return;
     }
     if (kind === "restart") {
       const { realm, dimension } = this.portal(id);
       const previous = this.portal(id).portal;
+      if (!previous.terminal)
+        throw Error("This portal has no backend to start.");
       const status = await this.core.rpc("terminal.get", {
         terminal: previous.terminal,
       });
       if (status.state === "live") throw Error("This shell is still running.");
-      dimension.root = replace(dimension.root, id, await this.shell(realm.cwd));
+      const next = this.library
+        ? await this.library.startProcess(previous, realm.cwd)
+        : await this.shell(realm.cwd);
+      dimension.root = replace(dimension.root, id, next);
+      if (this.state.dock === `portal:${previous.terminal}`)
+        this.state.dock = `portal:${next.terminal}`;
+      return;
+    }
+    if (kind === "home") {
+      this.state.view = "home";
+      this.state.dock = "home";
+      this.state.sidebar = true;
+      return;
+    }
+    if (kind === "portal") {
+      const { realm, dimension } = this.dimension(input.dimension);
+      const portal = await this.library.create(input.type, realm.cwd);
+      dimension.root = dimension.root
+        ? {
+            id: randomUUID(),
+            axis: input.axis || "horizontal",
+            ratio: 0.5,
+            children: [dimension.root, portal],
+          }
+        : portal;
+      return;
+    }
+    if (kind === "show-portal") {
+      const { realm, dimension, portal, hidden } = this.portal(id);
+      if (hidden) {
+        dimension.root = dimension.root
+          ? {
+              id: randomUUID(),
+              axis: "horizontal",
+              ratio: 0.5,
+              children: [dimension.root, portal],
+            }
+          : portal;
+        delete this.state.hidden[portal.id];
+      }
+      if (dimension.id === "home") this.state.view = "home";
+      else {
+        this.state.activeRealm = realm.id;
+        realm.activeDimension = dimension.id;
+        this.state.view = "dimension";
+      }
+      return;
+    }
+    if (kind === "move") {
+      const source = this.portal(id);
+      const target = this.portal(input.target);
+      if (
+        source.hidden ||
+        target.hidden ||
+        source.dimension.id !== target.dimension.id ||
+        id === input.target
+      )
+        throw Error("Move portals within their current dimension.");
+      let root = replace(source.dimension.root, id, null);
+      const position = input.position || "right";
+      const before = ["left", "top"].includes(position);
+      const children = before
+        ? [source.portal, target.portal]
+        : [target.portal, source.portal];
+      source.dimension.root = replace(root, target.portal.id, {
+        id: randomUUID(),
+        axis: ["top", "bottom"].includes(position) ? "vertical" : "horizontal",
+        ratio: 0.5,
+        children,
+      });
+      return;
+    }
+    if (kind === "layout-save") {
+      const { dimension } = this.dimension(input.dimension);
+      this.library.saveLayout(name, dimension.id, dimension.root);
+      return;
+    }
+    if (kind === "layout-load") {
+      const { realm, dimension } = this.dimension(input.dimension);
+      const root = this.library.loadLayout(input.file, dimension.id);
+      const restored = leaves(root);
+      for (const portal of restored) {
+        let existing;
+        try {
+          existing = this.portal(portal.id);
+        } catch (error) {
+          if (!/no longer exists/.test(error.message)) throw error;
+        }
+        if (existing && existing.dimension.id !== dimension.id)
+          throw Error("A saved portal now belongs to another dimension.");
+      }
+      this.state.hidden ||= {};
+      for (const portal of leaves(dimension.root))
+        if (!restored.some((item) => item.id === portal.id))
+          this.state.hidden[portal.id] = {
+            realm: realm.id,
+            dimension: dimension.id,
+            portal,
+          };
+      for (const portal of restored) delete this.state.hidden[portal.id];
+      dimension.root = root;
       return;
     }
     if (kind === "show") {
+      const existing = this.places()
+        .flatMap(({ dimension }) => leaves(dimension.root))
+        .concat(
+          Object.values(this.state.hidden || {}).map((item) => item.portal),
+        )
+        .find((item) => item.terminal === input.terminal);
+      if (existing) return this.mutate("show-portal", { id: existing.id });
       const terminal = await this.core.rpc("terminal.get", {
         terminal: input.terminal,
       });
@@ -377,11 +602,13 @@ class Workspace {
       };
       realm.dimensions.push(dimension);
       realm.activeDimension = dimension.id;
+      this.state.view = "dimension";
       return;
     }
     if (kind === "ratio") {
       const { dimension } = this.dimension(input.dimension);
       function resize(node) {
+        if (!node) return;
         if (node.id === id)
           node.ratio = Math.max(0.15, Math.min(0.85, input.ratio));
         node.children?.forEach(resize);

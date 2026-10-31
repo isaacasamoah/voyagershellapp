@@ -1,0 +1,13 @@
+{
+  "id": "inbox",
+  "name": "Decision inbox",
+  "renderer": "web",
+  "entry": "view.html",
+  "description": "Decision cards recorded by the user or an agent. Buttons save the chosen response; they do not grant authority or deliver external approvals.",
+  "seed": {
+    "cards": []
+  },
+  "contract": {
+    "cards": "Array of {id,from,title,detail,options:[strings],answer?:string}. A human response sets answer."
+  }
+}

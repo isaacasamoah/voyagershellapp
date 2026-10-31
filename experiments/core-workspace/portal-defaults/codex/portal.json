@@ -1,0 +1,7 @@
+{
+  "id": "codex",
+  "name": "Codex",
+  "renderer": "terminal",
+  "argv": ["codex"],
+  "description": "Start the installed Codex CLI with its existing configuration."
+}

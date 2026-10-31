@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Workspace status</title>
+  </head>
+  <body>
+    <div class="eyebrow">YOUR WORKSPACE</div>
+    <h1>Here, together.</h1>
+    <div id="processes"></div>
+    <script>
+      async function load() {
+        const snapshot = await portal.read();
+        const host = document.querySelector("#processes");
+        host.replaceChildren();
+        for (const process of snapshot.workspace?.processes || []) {
+          const row = document.createElement("button");
+          row.className = "process";
+          const title = document.createElement("span");
+          title.textContent = process.title || process.name || process.address;
+          const state = document.createElement("small");
+          state.textContent = process.status || process.state;
+          row.append(title, state);
+          row.onclick = () =>
+            portal.action("show", { terminal: process.address });
+          host.append(row);
+        }
+        if (!host.children.length)
+          host.textContent = "No processes in this workspace.";
+      }
+      portal.onChange(load);
+      setInterval(load, 3000);
+      load();
+    </script>
+  </body>
+</html>

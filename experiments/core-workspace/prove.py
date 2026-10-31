@@ -25,8 +25,12 @@ parser.add_argument("--focus", action="store_true")
 parser.add_argument("--border", action="store_true")
 parser.add_argument("--controls", action="store_true")
 parser.add_argument("--preview", action="store_true")
+parser.add_argument("--portal-preview", action="store_true")
 parser.add_argument("--request-focus", action="store_true")
 parser.add_argument("--request-focus-voice", action="store_true")
+parser.add_argument("--portal-companion", action="store_true")
+parser.add_argument("--portal-boundaries", action="store_true")
+parser.add_argument("--portals", action="store_true")
 parser.add_argument("--port", type=int, default=9473)
 args = parser.parse_args()
 port = args.port
@@ -36,7 +40,9 @@ if args.desktop_env:
 env["VOYAGER_WORKSPACE_SESSION"] = args.session
 if args.launch:
     command = [
-        str(root / "node_modules/electron/dist/electron"),
+        env.get(
+            "VOYAGER_ELECTRON_BIN", str(root / "node_modules/electron/dist/electron")
+        ),
         str(root),
         "--ozone-platform=x11",
         f"--remote-debugging-port={port}",
@@ -70,6 +76,14 @@ with sync_playwright() as playwright:
     page.wait_for_selector(".xterm-screen")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    if args.portals:
+        from proof_portals import portal_journey
+
+        portal_journey(page, evidence, args.portal_companion)
+    if args.portal_boundaries:
+        from proof_portals import portal_boundaries
+
+        portal_boundaries(page, evidence)
     if args.request_focus or args.request_focus_voice:
         from proof_focus import request_focus_journey
 
@@ -77,10 +91,30 @@ with sync_playwright() as playwright:
             page, browser.contexts[0], evidence, args.request_focus_voice
         )
     if args.preview:
-        page.evaluate("document.title = 'Voyager · Focus preview'")
-        page.get_by_role("button", name="Dock Voyager in Voyager", exact=True).click()
-        page.wait_for_function("() => document.body.dataset.voyagerFocus === 'realm'")
-        page.screenshot(path=str(evidence / "controls-preview.png"))
+        if args.portal_preview:
+            page.evaluate("document.title = 'Voyager · Portal preview'")
+            page.locator("#home").click()
+            page.wait_for_function("() => state.view === 'home'")
+            page.wait_for_selector("iframe.portal-frame")
+            page.wait_for_timeout(400)
+        else:
+            page.evaluate("document.title = 'Voyager · Focus preview'")
+            page.get_by_role(
+                "button", name="Dock Voyager in Voyager", exact=True
+            ).click()
+            page.wait_for_function(
+                "() => document.body.dataset.voyagerFocus === 'realm'"
+            )
+        page.screenshot(
+            path=str(
+                evidence
+                / (
+                    "portals-preview.png"
+                    if args.portal_preview
+                    else "controls-preview.png"
+                )
+            )
+        )
     if args.controls:
         from proof_focus import controls_journey
 

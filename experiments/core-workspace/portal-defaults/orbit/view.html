@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Orbit</title>
+  </head>
+  <body>
+    <div class="eyebrow">IN ORBIT</div>
+    <h1>A little perspective.</h1>
+    <svg
+      id="sky"
+      viewBox="0 0 440 260"
+      role="img"
+      aria-label="Live process map"
+    ></svg>
+    <p class="muted">Live processes, not completion estimates.</p>
+    <script>
+      async function load() {
+        const snapshot = await portal.read();
+        const sky = document.querySelector("#sky");
+        sky.replaceChildren();
+        const ns = "http://www.w3.org/2000/svg";
+        const ring = document.createElementNS(ns, "ellipse");
+        ring.setAttribute("cx", "220");
+        ring.setAttribute("cy", "130");
+        ring.setAttribute("rx", "170");
+        ring.setAttribute("ry", "85");
+        ring.setAttribute("fill", "none");
+        ring.setAttribute("stroke", "#ffffff12");
+        sky.append(ring);
+        const items = snapshot.workspace?.processes || [];
+        items.forEach((item, index) => {
+          const a = (index / Math.max(1, items.length)) * Math.PI * 2;
+          const group = document.createElementNS(ns, "g");
+          const dot = document.createElementNS(ns, "circle");
+          dot.setAttribute("cx", 220 + Math.cos(a) * 170);
+          dot.setAttribute("cy", 130 + Math.sin(a) * 85);
+          dot.setAttribute("r", "5");
+          dot.setAttribute(
+            "fill",
+            item.state === "live" ? "#94bda0" : "#878994",
+          );
+          const text = document.createElementNS(ns, "text");
+          text.setAttribute("x", 220 + Math.cos(a) * 170 + 9);
+          text.setAttribute("y", 134 + Math.sin(a) * 85);
+          text.setAttribute("fill", "#92939e");
+          text.setAttribute("font-size", "10");
+          text.textContent = item.address;
+          group.append(dot, text);
+          sky.append(group);
+        });
+      }
+      portal.onChange(load);
+      setInterval(load, 3000);
+      load();
+    </script>
+  </body>
+</html>

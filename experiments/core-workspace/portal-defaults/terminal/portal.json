@@ -1,0 +1,7 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "renderer": "terminal",
+  "argv": ["/bin/bash", "--noprofile", "--norc"],
+  "description": "An ordinary shell in the selected realm."
+}

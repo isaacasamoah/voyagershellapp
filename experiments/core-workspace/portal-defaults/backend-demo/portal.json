@@ -1,0 +1,15 @@
+{
+  "id": "backend-demo",
+  "name": "Live backend",
+  "renderer": "web",
+  "entry": "view.html",
+  "argv": ["node", "{package}/backend.cjs", "{data}"],
+  "description": "A real local HTTP app owned by Core. Updating message changes both this view and the backend response.",
+  "seed": {
+    "message": "Hello from your portal."
+  },
+  "contract": {
+    "message": "Message returned by the live HTTP backend",
+    "backend": "Runtime-reported {pid,url}, written once by the backend"
+  }
+}

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("voyager", {
     if (
       ![
         "workspace",
+        "portal-library",
         "terminal",
         "connection",
         "conversation",

@@ -90,7 +90,10 @@
       };
     const realm = hit?.closest(".realm");
     if (realm) return { id: `realm:${realm.dataset.realm}`, node: realm };
-    const portal = hit?.closest(".portal");
+    const frame = hit?.closest(".portal-frame");
+    const portal = frame
+      ? document.querySelector(`[data-portal="${frame.dataset.portal}"].portal`)
+      : hit?.closest(".portal");
     if (portal)
       return {
         id: portal.querySelector(".portal-dock").dataset.dock,

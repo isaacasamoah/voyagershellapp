@@ -630,3 +630,70 @@ dialog header button {
 }
 @media (prefers-reduced-motion: no-preference) {
 }
+
+.web-portal {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.portal-frame {
+  position: fixed;
+  border: 0;
+  background: #111316;
+  z-index: 2;
+}
+.portal-frame[hidden] {
+  display: none;
+}
+.portal-error {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  background: #25212d;
+  border: 1px solid #ae91c647;
+  border-radius: 6px;
+  color: #e0c9e4;
+  padding: 10px;
+  z-index: 3;
+  font-size: 12px;
+}
+.resizing .portal-frame,
+.moving-portal .portal-frame {
+  pointer-events: none;
+}
+.portal-header.drop-here {
+  background: #a383d325;
+}
+.portal-title[draggable] {
+  cursor: grab;
+}
+.field select {
+  display: block;
+  width: 100%;
+  margin-top: 9px;
+  padding: 11px;
+  background: #111316;
+  color: #d4d5dc;
+  border: 1px solid #43414a;
+  border-radius: 6px;
+}
+.dialog-hint {
+  font-size: 12px;
+  color: #9997a7;
+  line-height: 1.6;
+}
+.nav-home.active {
+  color: #d1c2f1;
+  background: #aa89e114;
+}
+#new-portal {
+  font: inherit;
+  font-size: 11px;
+  padding: 6px 11px;
+  color: #bdb1d0;
+}

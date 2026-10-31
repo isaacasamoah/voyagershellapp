@@ -1,0 +1,134 @@
+:root {
+  color-scheme: dark;
+  font:
+    13px/1.6 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: #d4d5dc;
+  background: #111316;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 24px;
+}
+h1 {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  font-weight: 400;
+  margin: 8px 0 24px;
+}
+h2 {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 8px 0;
+}
+p {
+  white-space: pre-wrap;
+}
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #ffffff12;
+  background: #ffffff03;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  background: #b07af50c;
+  border-color: #b07af54a;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid #b07af5;
+  outline-offset: 2px;
+}
+input,
+textarea {
+  display: block;
+  width: 100%;
+}
+input {
+  font-size: 20px;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+}
+textarea {
+  min-height: 180px;
+  resize: vertical;
+  line-height: 1.8;
+  border: none;
+  background: transparent;
+  padding: 16px 0;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.eyebrow {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #92939e;
+}
+.muted,
+small {
+  color: #878994;
+  font-size: 11px;
+}
+article {
+  border: 1px solid #ffffff10;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+article button {
+  margin: 4px 8px 0 0;
+}
+.answer {
+  color: #94bda0;
+}
+.board {
+  position: relative;
+  height: calc(100vh - 150px);
+  min-height: 180px;
+  background-image: radial-gradient(#ffffff18 1px, transparent 1px);
+  background-size: 20px 20px;
+  overflow: hidden;
+}
+.note {
+  position: absolute;
+  width: 170px;
+  min-height: 70px;
+  text-align: left;
+  border-width: 0 0 0 2px;
+  padding: 12px;
+  background: #1b1e24;
+  touch-action: none;
+}
+.process {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  margin: 8px 0;
+}
+svg {
+  width: 100%;
+  max-height: 300px;
+}
+pre {
+  white-space: pre-wrap;
+  color: #a8bdcd;
+  font-size: 11px;
+}

@@ -1,0 +1,21 @@
+{
+  "id": "whiteboard",
+  "name": "Whiteboard",
+  "renderer": "web",
+  "entry": "view.html",
+  "description": "A vector board whose cards and positions are readable and editable by agents.",
+  "seed": {
+    "nodes": [
+      {
+        "id": "idea",
+        "text": "What are we exploring?",
+        "x": 24,
+        "y": 50,
+        "color": "#b07af5"
+      }
+    ]
+  },
+  "contract": {
+    "nodes": "Array of {id,text,x,y,color}. Positions use pixels inside the board."
+  }
+}

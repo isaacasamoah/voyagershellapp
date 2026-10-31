@@ -8,6 +8,7 @@ const dimensionDock = $("dimension-avatar");
 let toastTimer;
 let floatingAvatar = false;
 let renderVersion = 0;
+let portalTypes = [];
 const voiceControl = $("voice");
 
 function notify(message) {
@@ -61,9 +62,10 @@ function active() {
   const realm = state.realms.find((item) => item.id === state.activeRealm);
   return {
     realm,
-    dimension: realm.dimensions.find(
-      (item) => item.id === realm.activeDimension,
-    ),
+    dimension:
+      state.view === "home"
+        ? state.home
+        : realm.dimensions.find((item) => item.id === realm.activeDimension),
   };
 }
 
@@ -160,7 +162,8 @@ async function attachVisible() {
   const { dimension } = active();
   for (const portal of allLeaves(dimension.root)) {
     const view = terminals.get(portal.terminal);
-    if (!view.node.isConnected || view.attached || view.connecting) continue;
+    if (!view || !view.node.isConnected || view.attached || view.connecting)
+      continue;
     view.connecting = true;
     try {
       if (!view.opened) {
@@ -201,43 +204,77 @@ function showEnded(id, reason = "This process has ended.") {
 }
 
 function portalView(portal) {
-  terminals.get(portal.terminal).portal = portal.id;
+  const terminalView = terminals.get(portal.terminal);
+  if (terminalView) terminalView.portal = portal.id;
   const wrapper = element("section", "portal");
   wrapper.dataset.portal = portal.id;
   wrapper.setAttribute("aria-label", `${portal.title} portal`);
   wrapper.addEventListener("pointerdown", () => focusPortal(portal.id));
   const head = element("header", "portal-header");
   const holder = element("div", "portal-dock");
-  holder.dataset.dock = `portal:${portal.terminal}`;
+  holder.dataset.dock = `portal:${portal.terminal || portal.id}`;
   const spot = button("Bring Voyager here", "◇", () => {}, "dock-spot");
   spot.ondblclick = () =>
-    act("dock", { id: `portal:${portal.terminal}` }).catch(() => {});
+    act("dock", { id: `portal:${portal.terminal || portal.id}` }).catch(
+      () => {},
+    );
   spot.onkeydown = (event) => {
     if (event.key === "Enter")
-      act("dock", { id: `portal:${portal.terminal}` }).catch(() => {});
+      act("dock", { id: `portal:${portal.terminal || portal.id}` }).catch(
+        () => {},
+      );
   };
   holder.append(spot);
   head.append(
     holder,
     element("span", "portal-title", portal.title),
-    element("span", "terminal-id", portal.terminal),
+    element("span", "terminal-id", portal.terminal || portal.type),
   );
   const actions = element("div", "portal-actions");
   actions.append(
     button("Split this portal side by side", "◫", () =>
-      act("split", { id: portal.id }),
+      choosePortal(portal.id),
     ),
     button("Split this portal top and bottom", "⬒", () =>
-      act("split", { id: portal.id, axis: "vertical" }),
+      choosePortal(portal.id, "vertical"),
     ),
+    button("Move this portal", "↗", () => movePortal(portal)),
     button("Hide this portal, keep process running", "×", () =>
       act("hide", { id: portal.id }),
     ),
   );
+  const title = head.querySelector(".portal-title");
+  title.draggable = true;
+  title.title = "Drag to another portal header to move beside it";
+  title.ondragstart = (event) => {
+    event.dataTransfer.setData("application/x-voyager-portal", portal.id);
+    document.body.classList.add("moving-portal");
+  };
+  title.ondragend = () => document.body.classList.remove("moving-portal");
+  head.ondragover = (event) => {
+    if (event.dataTransfer.types.includes("application/x-voyager-portal")) {
+      event.preventDefault();
+      head.classList.add("drop-here");
+    }
+  };
+  head.ondragleave = () => head.classList.remove("drop-here");
+  head.ondrop = (event) => {
+    event.preventDefault();
+    head.classList.remove("drop-here");
+    const id = event.dataTransfer.getData("application/x-voyager-portal");
+    if (id && id !== portal.id)
+      act("move", { id, target: portal.id, position: "right" }).catch(() => {});
+  };
   head.append(actions);
   const anchor = element("div", "portal-avatar-anchor");
-  anchor.dataset.avatarPortal = portal.terminal;
-  wrapper.append(head, terminals.get(portal.terminal).node, anchor);
+  anchor.dataset.avatarPortal = portal.terminal || portal.id;
+  const definition = window.portalFrames.definition(portal.type || "terminal");
+  const body =
+    definition?.renderer === "terminal" && terminalView
+      ? terminalView.node
+      : element("div", "web-portal");
+  if (body.classList.contains("web-portal")) body.dataset.webPortal = portal.id;
+  wrapper.append(head, body, anchor);
   return wrapper;
 }
 
@@ -247,6 +284,7 @@ function layoutView(node, dimensionId) {
     empty.append(
       element("h2", "", "Room for something new."),
       element("p", "", "Your processes keep running when a view closes."),
+      button("New portal", "Open a portal", () => choosePortal()),
       button("Show running processes", "Open a process", showProcesses),
     );
     return empty;
@@ -300,6 +338,7 @@ function layoutView(node, dimensionId) {
       first.style.flex = `${ratio} 1 0`;
       second.style.flex = `${1 - ratio} 1 0`;
       fitVisible();
+      window.portalFrames.position();
     };
     divider.onpointerup = () => {
       divider.onpointermove = null;
@@ -337,13 +376,14 @@ function presentFocus(focus) {
   $("scope-label").textContent =
     `${focus.label}${avatar.dataset.outOfView === "true" ? " · Go there ↗" : ""}`;
   $("scope-label").onclick = () => {
-    if (focus.terminal)
+    if (focus.portal) act("show-portal", { id: focus.portal }).catch(() => {});
+    else if (focus.terminal)
       act("show", { terminal: focus.terminal }).catch(() => {});
     else if (focus.dimension)
       act("select-dimension", { id: focus.dimension }).catch(() => {});
     else if (focus.realm)
       act("select-realm", { id: focus.realm }).catch(() => {});
-    else act("dock", { id: "home" }).catch(() => {});
+    else act("home").catch(() => {});
   };
   $("avatar-chat").title = `Text chat · ${focus.label}`;
   $("chat-toggle").title = `Text chat · ${focus.label}`;
@@ -373,7 +413,13 @@ async function render(value) {
   state = value;
   const { realm, dimension } = active();
   for (const portal of allLeaves(dimension.root))
-    if (!terminals.has(portal.terminal)) await createTerminal(portal);
+    if (
+      portal.terminal &&
+      window.portalFrames.definition(portal.type || "terminal")?.renderer ===
+        "terminal" &&
+      !terminals.has(portal.terminal)
+    )
+      await createTerminal(portal);
   if (version !== renderVersion) return;
   document.body.classList.toggle("sidebar-collapsed", !state.sidebar);
   $("realms").replaceChildren(
@@ -382,7 +428,7 @@ async function render(value) {
         item.name,
         "",
         () => act("select-realm", { id: item.id }),
-        `realm ${item.id === realm.id ? "active" : ""}`,
+        `realm ${state.view !== "home" && item.id === realm.id ? "active" : ""}`,
       );
       node.dataset.realm = item.id;
       node.append(
@@ -449,11 +495,24 @@ async function render(value) {
       return row;
     }),
   );
-  $("breadcrumb").textContent = realm.name;
-  $("dimensions").querySelector(".dimension.active").before(dimensionDock);
+  $("breadcrumb").textContent = state.view === "home" ? "Home" : realm.name;
+  $("home").classList.toggle("active", state.view === "home");
+  const selectedTab = $("dimensions").querySelector(".dimension.active");
+  if (selectedTab) selectedTab.before(dimensionDock);
+  else $("dimensions").prepend(dimensionDock);
   $("context").textContent =
     `${realm.cwd.replace(/^\/home\/isaac|^\/Users\/isaac/, "~")}  /  ${dimension.name}`;
   $("portals").replaceChildren(layoutView(dimension.root, dimension.id));
+  const everyPortal = state.realms
+    .flatMap((realm) =>
+      realm.dimensions.flatMap((dimension) => allLeaves(dimension.root)),
+    )
+    .concat(
+      allLeaves(state.home?.root),
+      Object.values(state.hidden || {}).map((item) => item.portal),
+    )
+    .map((portal) => ({ ...portal, type: portal.type || "terminal" }));
+  window.portalFrames.sync(everyPortal);
   const [scope, key] = state.dock.split(":");
   const dock =
     state.dock === "home"
@@ -489,10 +548,16 @@ function ask(title, fields, submit = "Create") {
   $("dialog-body").replaceChildren(
     ...fields.map((field) => {
       const label = element("label", "field", field.label);
-      const input = element("input");
+      const input = element(field.options ? "select" : "input");
+      if (field.options)
+        for (const option of field.options) {
+          const node = element("option", "", option.label);
+          node.value = option.value;
+          input.append(node);
+        }
       Object.assign(input, {
         name: field.name,
-        value: field.value || "",
+        value: field.value || field.options?.[0]?.value || "",
         placeholder: field.placeholder || "",
         required: true,
       });
@@ -575,6 +640,186 @@ async function showProcesses() {
   $("dialog").showModal();
 }
 
+async function choosePortal(id, axis = "horizontal") {
+  const values = await ask(
+    "Open a portal",
+    [
+      {
+        name: "type",
+        label: "What would you like here?",
+        value: "terminal",
+        options: portalTypes.map((type) => ({
+          value: type.id,
+          label: type.name,
+        })),
+      },
+    ],
+    "Open",
+  );
+  if (values)
+    await act(id ? "split" : "portal", {
+      id,
+      dimension: active().dimension.id,
+      type: values.type,
+      axis,
+    });
+}
+
+async function movePortal(portal) {
+  const targets = allLeaves(active().dimension.root).filter(
+    (item) => item.id !== portal.id,
+  );
+  if (!targets.length)
+    return notify("Open another portal to move this one beside it.");
+  const values = await ask(
+    "Move this portal",
+    [
+      {
+        name: "target",
+        label: "Beside",
+        options: targets.map((item) => ({ value: item.id, label: item.title })),
+      },
+      {
+        name: "position",
+        label: "Place",
+        options: ["left", "right", "top", "bottom"].map((value) => ({
+          value,
+          label: value,
+        })),
+      },
+    ],
+    "Move",
+  );
+  if (values) await act("move", { id: portal.id, ...values });
+}
+
+async function showLayouts() {
+  const catalog = await call("portal", { action: "catalog" });
+  const dimension = active().dimension;
+  $("dialog-title").textContent = `${dimension.name} layouts`;
+  const rows = catalog.layouts
+    .filter((item) => item.owner === dimension.id || item.error)
+    .map((item) => {
+      const row = element("div", "process-row");
+      row.append(
+        element(
+          "span",
+          "",
+          item.error ? `${item.file}: ${item.error}` : item.name,
+        ),
+      );
+      if (!item.error)
+        row.append(
+          button("Restore this layout", "Restore", async () => {
+            $("dialog").close();
+            await act("layout-load", {
+              dimension: dimension.id,
+              file: item.file,
+            });
+          }),
+        );
+      return row;
+    });
+  const save = button(
+    "Save current layout",
+    "Save current layout…",
+    async () => {
+      $("dialog").close();
+      const values = await ask(
+        "Save this layout",
+        [{ name: "name", label: "Layout name", value: dimension.name }],
+        "Save",
+      );
+      if (values) {
+        await act("layout-save", {
+          dimension: dimension.id,
+          name: values.name,
+        });
+        notify("Layout saved. Processes keep their identities.");
+      }
+    },
+  );
+  for (const item of Object.values(state.hidden || {}).filter(
+    (item) => item.dimension === dimension.id,
+  )) {
+    const row = element("div", "process-row");
+    row.append(
+      element("span", "", `${item.portal.title} · hidden`),
+      button("Reopen this portal", "Reopen", async () => {
+        $("dialog").close();
+        await act("show-portal", { id: item.portal.id });
+      }),
+    );
+    rows.push(row);
+  }
+  $("dialog-body").replaceChildren(
+    element(
+      "p",
+      "dialog-hint",
+      "Restores this dimension's arrangement. Running processes stay running; ended processes stay ended.",
+    ),
+    ...rows,
+  );
+  $("dialog-actions").replaceChildren(save);
+  $("dialog").showModal();
+}
+
+async function showPackages() {
+  const catalog = await call("portal", { action: "catalog" });
+  $("dialog-title").textContent = "Portal packages";
+  const rows = catalog.types.map((type) => {
+    const row = element("div", "process-row");
+    const text = element("div");
+    text.append(
+      element("strong", "", type.name),
+      element("small", "", type.error || type.description || type.renderer),
+    );
+    row.append(
+      text,
+      button(`Uninstall ${type.name}`, "Uninstall", async () => {
+        await call("portal", { action: "uninstall", type: type.id });
+        $("dialog").close();
+        await showPackages();
+      }),
+    );
+    return row;
+  });
+  for (const type of catalog.removed) {
+    const row = element("div", "process-row");
+    row.append(
+      element("span", "", `${type} · uninstalled`),
+      button(`Restore ${type}`, "Restore", async () => {
+        await call("portal", { action: "restore", type });
+        $("dialog").close();
+        await showPackages();
+      }),
+    );
+    rows.push(row);
+  }
+  $("dialog-body").replaceChildren(
+    element(
+      "p",
+      "dialog-hint",
+      "Trusted local packages. Edit these files while Voyager runs. Uninstall keeps portal data, layouts and processes for restoration.",
+    ),
+    ...rows,
+  );
+  $("dialog-actions").replaceChildren(
+    button("Open package folder", "Open folder", () => call("portal-folder")),
+  );
+  $("dialog").showModal();
+}
+
+$("new-portal").onclick = () => choosePortal().catch(() => {});
+$("layouts").onclick = () => showLayouts().catch(() => {});
+$("portal-packages").onclick = () => showPackages().catch(() => {});
+api.on("portal-library", (event) => {
+  portalTypes = event.types;
+  window.portalFrames.changed(event);
+  if (!state) return;
+  render(state).catch((error) => notify(error.message));
+});
+
 api.on("workspace", (value) =>
   render(value).catch((error) => notify(error.message)),
 );
@@ -602,7 +847,7 @@ api.on("connection", (value) => {
   $("connection").dataset.phase = value.phase;
   if (value.error) notify(value.error);
 });
-$("home").onclick = () => act("dock", { id: "home" }).catch(() => {});
+$("home").onclick = () => act("home").catch(() => {});
 $("toggle-sidebar").onclick = () => act("sidebar").catch(() => {});
 $("add-realm").onclick = async () => {
   const values = await ask("A new realm", [
@@ -640,13 +885,18 @@ document.addEventListener("keydown", (event) => {
     actions[event.code]();
   }
 });
-new ResizeObserver(() => requestAnimationFrame(fitVisible)).observe(
-  $("portals"),
-);
+new ResizeObserver(() =>
+  requestAnimationFrame(() => {
+    fitVisible();
+    window.portalFrames.position();
+  }),
+).observe($("portals"));
 call("boot")
   .then(async (boot) => {
     $("connection").innerHTML = '<span class="status-dot"></span>Running';
     $("core-version").textContent = `Herdr Core ${boot.core.version}`;
+    portalTypes = boot.portals;
+    window.portalFrames.catalog(portalTypes);
     await render(boot.state);
     const refresh = async () => {
       try {
@@ -654,6 +904,30 @@ call("boot")
         const live = result.terminals.filter(
           (terminal) => terminal.state === "live",
         );
+        for (const portal of allLeaves(active().dimension.root)) {
+          const node = document.querySelector(
+            `.portal[data-portal="${portal.id}"]`,
+          );
+          const terminal = result.terminals.find(
+            (item) => item.address === portal.terminal,
+          );
+          const actions = node?.querySelector(".portal-actions");
+          const ended =
+            portal.terminal &&
+            window.portalFrames.definition(portal.type)?.renderer === "web" &&
+            terminal?.state !== "live";
+          const existing = actions?.querySelector(".start-backend");
+          if (ended && actions && !existing)
+            actions.prepend(
+              button(
+                "Start this portal's backend",
+                "Start backend",
+                () => act("restart", { id: portal.id }),
+                "start-backend",
+              ),
+            );
+          if (!ended) existing?.remove();
+        }
         $("process-count").textContent =
           `${live.length} ${live.length === 1 ? "process" : "processes"} running`;
       } catch (error) {
