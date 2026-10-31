@@ -72,9 +72,15 @@ test("a failed layout save cannot leak into a later saved action", async () => {
     "/tmp",
     () => assert.fail("uncommitted state published"),
   );
-  workspace.state = { sidebar: true, dock: "home" };
+  workspace.state = {
+    sidebar: true,
+    dock: "home",
+    activeRealm: "r",
+    realms: [{ id: "r", activeDimension: "d", dimensions: [] }],
+  };
   await assert.rejects(workspace.action("sidebar"), /save unconfirmed/);
-  assert.deepEqual(workspace.state, { sidebar: true, dock: "home" });
+  assert.equal(workspace.state.sidebar, true);
+  assert.equal(workspace.state.dock, "home");
   await assert.rejects(
     workspace.action("dock", { id: "home" }),
     /save unconfirmed/,
@@ -84,7 +90,18 @@ test("a failed layout save cannot leak into a later saved action", async () => {
 
 test("known chat rejection releases busy, uncertain delivery stays gated without replay", async () => {
   const events = [];
-  const companion = new Companion(null, "/tmp", (event) => events.push(event));
+  const companion = new Companion(
+    {
+      focusDescriptor: () => ({
+        kind: "home",
+        id: "home",
+        revision: 0,
+        path: ["Workspace"],
+      }),
+    },
+    "/tmp",
+    (event) => events.push(event),
+  );
   let calls = 0;
   companion.rpc = async () => {
     calls++;
@@ -128,4 +145,142 @@ test("late frames after detach are discarded rather than retained as a future at
   core.consume();
   assert.equal(core.early.size, 0);
   assert.equal(core.channels.size, 0);
+});
+
+test("avatar focus follows exact realm, dimension and process, including hidden views", async () => {
+  const workspace = new Workspace(null, "/tmp", () => {});
+  workspace.state = {
+    dock: "home",
+    realms: [
+      {
+        id: "r",
+        name: "Studio",
+        dimensions: [
+          { id: "d", name: "Code", root: { id: "p", terminal: "t1" } },
+          { id: "e", name: "Notes", root: { id: "q", terminal: "t2" } },
+        ],
+      },
+    ],
+  };
+  workspace.indexProcesses();
+  workspace.state.dock = workspace.dockId("dimension:d");
+  assert.equal(workspace.includes("t1"), true);
+  assert.equal(workspace.includes("t2"), false);
+  assert.equal(workspace.context().realms[0].dimensions.length, 1);
+  assert.throws(() => workspace.checkAction("split", { id: "q" }), /Outside/);
+  assert.throws(() => workspace.dockId("realm:missing"), /no longer exists/);
+  workspace.state.dock = workspace.dockId("p");
+  workspace.state.realms[0].dimensions[0].root = null;
+  workspace.indexProcesses();
+  assert.equal(workspace.includes("t1"), true);
+  assert.equal(workspace.includes("t2"), false);
+  workspace.state.dock = workspace.dockId("realm:r");
+  assert.equal(workspace.includes("t2"), true);
+  workspace.state.dock = "home";
+  assert.equal(workspace.includes("t2"), true);
+});
+
+test("showing a hidden focused process preserves its dimension and process", async () => {
+  const workspace = new Workspace(
+    {
+      rpc: async (method) =>
+        method === "terminal.get"
+          ? { address: "t1", name: "Shell" }
+          : { version: 2 },
+    },
+    "/tmp",
+    () => {},
+  );
+  workspace.state = {
+    dock: "dimension:d",
+    activeRealm: "r",
+    members: { t1: { realm: "r", dimension: "d" } },
+    realms: [
+      {
+        id: "r",
+        name: "Studio",
+        activeDimension: "d",
+        dimensions: [{ id: "d", name: "Code", root: null }],
+      },
+    ],
+  };
+  await workspace.action("show", { terminal: "t1" }, true);
+  assert.equal(workspace.state.realms[0].dimensions.length, 1);
+  assert.equal(workspace.state.realms[0].dimensions[0].root.terminal, "t1");
+  assert.deepEqual(workspace.state.members.t1, { realm: "r", dimension: "d" });
+});
+
+test("each request carries explicit focus while human text stays unchanged", async () => {
+  const workspace = new Workspace(null, "/tmp", () => {});
+  workspace.version = 7;
+  workspace.state = {
+    dock: "home",
+    realms: [
+      {
+        id: "r",
+        name: "Studio",
+        dimensions: [
+          {
+            id: "d",
+            name: "Code",
+            root: { id: "p", terminal: "t1", title: "Shell" },
+          },
+        ],
+      },
+    ],
+  };
+  workspace.indexProcesses();
+  const companion = new Companion(workspace, "/tmp", () => {});
+  companion.thread = "same-thread";
+  const calls = [];
+  companion.rpc = async (method, params) => {
+    calls.push({ method, params });
+    return {};
+  };
+  for (const dock of ["home", "realm:r", "dimension:d", "portal:t1"]) {
+    workspace.state.dock = dock;
+    companion.busy = false;
+    await companion.send("What is here?");
+    const request = calls.at(-1);
+    assert.equal(request.params.threadId, "same-thread");
+    assert.deepEqual(request.params.input, [
+      { type: "text", text: "What is here?" },
+    ]);
+    const text = request.params.additionalContext["voyager.focus"].value;
+    assert.ok(text.includes(JSON.stringify(dock)));
+    assert.ok(text.includes('"revision":7'));
+  }
+  await companion.voice("test-sdp");
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.method === "thread/realtime/start" &&
+        call.params.initialItems[0].role === "developer",
+    ),
+  );
+  workspace.state.dock = "realm:r";
+  await companion.refreshFocus();
+  const update = calls.at(-1);
+  assert.equal(update.method, "thread/realtime/appendText");
+  assert.equal(update.params.role, "developer");
+  assert.ok(update.params.text.includes('"path":["Workspace","Studio"]'));
+  assert.equal(calls.filter((call) => call.method === "turn/start").length, 4);
+  const acknowledged = calls.length;
+  workspace.version++;
+  await companion.refreshFocus();
+  assert.equal(calls.length, acknowledged);
+  workspace.state.dock = "home";
+  let failures = 0;
+  companion.rpc = async () => {
+    failures++;
+    throw Error("context outcome unconfirmed");
+  };
+  await companion.refreshFocus();
+  companion.busy = false;
+  await assert.rejects(
+    companion.send("Stay here"),
+    /context outcome unconfirmed/,
+  );
+  await companion.refreshFocus();
+  assert.equal(failures, 1);
 });

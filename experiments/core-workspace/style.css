@@ -73,47 +73,6 @@ kbd {
   flex-direction: column;
   padding: 0 12px;
 }
-.home-dock {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 112px;
-  padding: 12px 1px 8px;
-}
-#avatar-home {
-  width: 68px;
-  flex-shrink: 0;
-}
-.wordmark strong {
-  display: block;
-  font-size: 19px;
-  font-weight: 500;
-  letter-spacing: -0.5px;
-}
-.wordmark span {
-  display: block;
-  color: #9895a6;
-  font-size: 10px;
-  margin-top: 5px;
-}
-#avatar {
-  position: relative;
-  flex-shrink: 0;
-  width: 68px;
-  height: 78px;
-  border: none;
-  background: none;
-  padding: 0;
-  overflow: visible;
-}
-#avatar:hover {
-  filter: brightness(1.14);
-}
-#avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
 .status-dot {
   display: inline-block;
   width: 6px;
@@ -121,25 +80,6 @@ kbd {
   border-radius: 50%;
   background: #94bda0;
   flex-shrink: 0;
-}
-#avatar > .status-dot {
-  position: absolute;
-  right: 6px;
-  bottom: 7px;
-  border: 2px solid var(--sidebar);
-  width: 9px;
-  height: 9px;
-}
-#avatar.compact {
-  width: 34px;
-  height: 34px;
-}
-#avatar.compact > .status-dot {
-  right: 0;
-  bottom: 0;
-  width: 7px;
-  height: 7px;
-  border-width: 1px;
 }
 .nav-home {
   display: flex;
@@ -571,147 +511,6 @@ footer button {
 .sidebar-collapsed #sidebar {
   display: none;
 }
-#chat {
-  width: 330px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  background: #15171b;
-}
-#chat > header {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 19px;
-  flex-shrink: 0;
-}
-#chat > header > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-#chat strong {
-  font-weight: 500;
-  font-size: 12px;
-}
-#chat > header button {
-  color: #96919f;
-  font-size: 18px;
-}
-#messages {
-  flex: 1;
-  overflow: auto;
-  padding: 0 20px;
-  scrollbar-width: thin;
-}
-.chat-intro {
-  margin-top: 85px;
-}
-.intro-orbit {
-  color: #b9a3d1;
-  font-size: 28px;
-}
-.chat-intro h2 {
-  font-size: 20px;
-  line-height: 1.5;
-  font-weight: 400;
-  letter-spacing: -0.4px;
-  color: #d2c9e3;
-}
-.chat-intro p {
-  font-size: 12px;
-  color: #94909f;
-  line-height: 1.9;
-}
-.message {
-  font-size: 12px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 22px 0;
-}
-.message::before {
-  content: "VOYAGER";
-  display: block;
-  font-size: 8px;
-  letter-spacing: 1px;
-  color: #a89abc;
-  margin-bottom: 5px;
-}
-.message.user {
-  color: #b6b2c1;
-}
-.message.user::before {
-  content: "YOU";
-  color: #93909d;
-}
-.tool-line {
-  font:
-    9px "DejaVu Sans Mono",
-    monospace;
-  color: #a49aaf;
-  margin: 9px 0;
-}
-#chat-state {
-  font-size: 10px;
-  color: #a39ba9;
-  min-height: 23px;
-  padding: 2px 20px 7px;
-}
-#composer {
-  margin: 0 13px 14px;
-  border: 1px solid #ffffff12;
-  border-radius: 8px;
-  background: #1b1c22;
-}
-#composer:focus-within {
-  border-color: #c4b5fd44;
-}
-#chat-text {
-  resize: none;
-  background: transparent;
-  border: 0;
-  width: 100%;
-  color: #d0cadc;
-  padding: 14px 12px 5px;
-  font-size: 12px;
-  line-height: 1.6;
-  outline: none;
-}
-#chat-text::placeholder {
-  color: #928b9c;
-}
-#composer > div {
-  display: flex;
-  align-items: center;
-  padding: 3px 8px 7px;
-  gap: 8px;
-}
-#composer > div > span {
-  font-size: 9px;
-  color: #928b9c;
-  flex: 1;
-}
-#voice {
-  font-size: 18px;
-  padding: 3px 6px;
-  color: #b5a4c8;
-}
-#voice[aria-pressed="true"] {
-  color: #bcddc0;
-  background: #a1c99c16;
-}
-#send {
-  width: 25px;
-  height: 25px;
-  padding: 0;
-  background: #c4b5fd;
-  color: #25202c;
-  border-radius: 5px;
-  font-size: 18px;
-}
 #toast {
   position: fixed;
   bottom: 42px;
@@ -825,15 +624,9 @@ dialog header button {
   .wordmark strong {
     font-size: 17px;
   }
-  #chat {
-    width: 290px;
-  }
   .prototype-label {
     display: none;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  #avatar {
-    transition: filter 150ms;
-  }
 }

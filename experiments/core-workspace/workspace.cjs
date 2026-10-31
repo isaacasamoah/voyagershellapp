@@ -33,6 +33,8 @@ class Workspace {
       sidebar: true,
       dock: "home",
     };
+    this.indexProcesses();
+    this.state.dock = this.dockId(this.state.dock);
     if (!this.state.realms.length)
       await this.action("realm", { name: "Voyager", cwd: this.cwd });
     return this.state;
@@ -56,6 +58,148 @@ class Workspace {
     throw Error("Portal no longer exists.");
   }
 
+  indexProcesses() {
+    this.state.members ||= {};
+    for (const realm of this.state.realms)
+      for (const dimension of realm.dimensions)
+        for (const portal of leaves(dimension.root))
+          this.state.members[portal.terminal] = {
+            realm: realm.id,
+            dimension: dimension.id,
+          };
+  }
+
+  dockId(id) {
+    if (id === "home") return id;
+    if (id === "dimension") {
+      const realm = this.state.realms.find(
+        (item) => item.id === this.state.activeRealm,
+      );
+      return `dimension:${realm.activeDimension}`;
+    }
+    if (id.startsWith("realm:")) {
+      if (!this.state.realms.some((realm) => `realm:${realm.id}` === id))
+        throw Error("Realm no longer exists.");
+    } else if (id.startsWith("dimension:")) this.dimension(id.slice(10));
+    else if (id.startsWith("portal:")) {
+      if (!this.state.members[id.slice(7)])
+        throw Error("Portal no longer exists.");
+    } else return `portal:${this.portal(id).portal.terminal}`;
+    return id;
+  }
+
+  focus() {
+    const id = this.state.dock;
+    if (id === "home") return { kind: "home", id, label: "Whole workspace" };
+    const [kind, key] = id.split(":");
+    if (kind === "realm") {
+      const realm = this.state.realms.find((item) => item.id === key);
+      return { kind, id, realm: key, label: `Realm · ${realm.name}` };
+    }
+    if (kind === "dimension") {
+      const { realm, dimension } = this.dimension(key);
+      return {
+        kind,
+        id,
+        realm: realm.id,
+        dimension: key,
+        label: `Dimension · ${dimension.name}`,
+      };
+    }
+    const member = this.state.members[key];
+    return { kind, id, terminal: key, ...member, label: `Portal · ${key}` };
+  }
+
+  focusDescriptor() {
+    const focus = this.focus();
+    const realm = this.state.realms.find((item) => item.id === focus.realm);
+    const dimension = realm?.dimensions.find(
+      (item) => item.id === focus.dimension,
+    );
+    const portal =
+      dimension &&
+      leaves(dimension.root).find((item) => item.terminal === focus.terminal);
+    return {
+      ...focus,
+      revision: this.version,
+      path: [
+        "Workspace",
+        realm?.name,
+        dimension?.name,
+        focus.terminal && (portal?.title || focus.terminal),
+      ].filter(Boolean),
+    };
+  }
+
+  includes(terminal) {
+    const focus = this.focus();
+    const member = this.state.members[terminal];
+    return (
+      focus.kind === "home" ||
+      (focus.kind === "portal"
+        ? focus.terminal === terminal
+        : !!member && member[focus.kind] === focus[focus.kind])
+    );
+  }
+
+  context() {
+    const focus = this.focus();
+    return {
+      authority: "owner",
+      focus,
+      realms: this.state.realms
+        .filter((realm) => focus.kind === "home" || realm.id === focus.realm)
+        .map((realm) => ({
+          id: realm.id,
+          name: realm.name,
+          cwd: realm.cwd,
+          dimensions: realm.dimensions
+            .filter(
+              (dimension) =>
+                !focus.dimension || dimension.id === focus.dimension,
+            )
+            .map((dimension) => ({
+              id: dimension.id,
+              name: dimension.name,
+              portals: leaves(dimension.root).filter((portal) =>
+                this.includes(portal.terminal),
+              ),
+            })),
+        })),
+    };
+  }
+
+  checkAction(kind, input) {
+    const focus = this.focus();
+    if (focus.kind === "home" || kind === "dock" || kind === "sidebar") return;
+    let allowed = false;
+    if (["split", "hide", "restart"].includes(kind))
+      allowed = this.includes(this.portal(input.id).portal.terminal);
+    if (kind === "show") {
+      const member = this.state.members[input.terminal];
+      allowed =
+        this.includes(input.terminal) &&
+        member?.realm === this.state.activeRealm &&
+        (focus.kind === "realm" ||
+          this.state.realms.find((realm) => realm.id === member.realm)
+            ?.activeDimension === member.dimension);
+    }
+    if (["dimension", "select-realm"].includes(kind))
+      allowed =
+        focus.kind === "realm" &&
+        (input.id || this.state.activeRealm) === focus.realm;
+    if (["select-dimension", "rename"].includes(kind))
+      allowed =
+        input.id === focus.realm ||
+        input.id === focus.dimension ||
+        (focus.kind === "realm" &&
+          this.dimension(input.id).realm.id === focus.realm);
+    if (!allowed)
+      throw Error(
+        `Outside Voyager's current focus (${focus.label}). Ask the owner before changing focus.`,
+      );
+  }
+
   async shell(cwd, title = "Shell", argv) {
     const terminal = await this.core.rpc("terminal.run", {
       argv: argv || ["/bin/bash", "--noprofile", "--norc"],
@@ -73,13 +217,15 @@ class Workspace {
     return { id: randomUUID(), terminal: terminal.address, title };
   }
 
-  action(kind, input = {}) {
+  action(kind, input = {}, scoped = false) {
     const next = this.queue.then(async () => {
       if (this.blocked) throw this.blocked;
       const candidate = Object.create(this);
       candidate.state = structuredClone(this.state);
       try {
+        if (scoped) candidate.checkAction(kind, input);
         await candidate.mutate(kind, input);
+        candidate.indexProcesses();
       } catch (error) {
         if (/unconfirmed|disconnected|closed/.test(error.message))
           this.blocked = error;
@@ -195,6 +341,27 @@ class Workspace {
           return;
         }
       }
+      const member = this.state.members[terminal.address];
+      const focus = this.focus();
+      if (focus.kind !== "home" && member) {
+        const { realm, dimension } = this.dimension(member.dimension);
+        const portal = {
+          id: randomUUID(),
+          title: terminal.name || "Shell",
+          terminal: terminal.address,
+        };
+        dimension.root = dimension.root
+          ? {
+              id: randomUUID(),
+              axis: "horizontal",
+              ratio: 0.5,
+              children: [dimension.root, portal],
+            }
+          : portal;
+        this.state.activeRealm = realm.id;
+        realm.activeDimension = dimension.id;
+        return;
+      }
       const realm = this.state.realms.find(
         (item) => item.id === this.state.activeRealm,
       );
@@ -237,14 +404,17 @@ class Workspace {
       return;
     }
     if (kind === "dock") {
-      if (!["home", "dimension"].includes(id)) this.portal(id);
-      this.state.dock = id;
+      this.state.dock = this.dockId(id);
       if (id === "home") this.state.sidebar = true;
+      return;
+    }
+    if (kind === "sidebar-show") {
+      this.state.sidebar = true;
       return;
     }
     if (kind === "sidebar") {
       this.state.sidebar = !this.state.sidebar;
-      this.state.dock = this.state.sidebar ? "home" : "dimension";
+      this.state.dock = this.state.sidebar ? "home" : this.dockId("dimension");
       return;
     }
     throw Error("Unknown workspace action.");

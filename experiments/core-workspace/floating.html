@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:;"
+    />
+    <title>Voyager avatar</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="identity.css" />
+    <link rel="stylesheet" href="floating.css" />
+  </head>
+  <body>
+    <div id="voyager-avatar" data-place="desktop">
+      <button
+        id="avatar"
+        draggable="true"
+        title="Open workspace. Pull to move or dock."
+        aria-label="Open Voyager workspace"
+      >
+        <img
+          id="astronaut-back"
+          src="../../desktop/assets/idle.png"
+          alt=""
+          draggable="false"
+        />
+        <img
+          id="astronaut-front"
+          src="../../desktop/assets/idle.png"
+          alt=""
+          draggable="false"
+        />
+        <span class="status-dot" aria-hidden="true"></span>
+      </button>
+      <button
+        id="voice"
+        type="button"
+        aria-label="Start voice"
+        title="Start voice"
+        aria-pressed="false"
+      >
+        <svg viewBox="0 0 20 16" aria-hidden="true">
+          <path d="M2 6v4M6 3v10M10 1v14M14 3v10M18 6v4" />
+        </svg>
+      </button>
+    </div>
+    <span id="chat-state" role="status"></span
+    ><audio id="voice-output" autoplay></audio>
+    <script src="floating.js"></script>
+    <script src="voice.js"></script>
+    <script src="../../desktop/src/ui/astronaut.js"></script>
+    <script src="avatar-art.js"></script>
+  </body>
+</html>

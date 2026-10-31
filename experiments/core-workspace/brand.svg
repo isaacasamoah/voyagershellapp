@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 120" aria-hidden="true">
+          <defs>
+            <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff5f56" />
+              <stop offset="20%" stop-color="#f7a34b" />
+              <stop offset="40%" stop-color="#f4e04d" />
+              <stop offset="60%" stop-color="#5ec98f" />
+              <stop offset="80%" stop-color="#59a5ff" />
+              <stop offset="100%" stop-color="#b07af5" />
+            </linearGradient>
+            <path id="upper-arc" d="M 29 111 A 83 83 0 0 1 195 111" fill="none" />
+          </defs>
+          <g
+            font-family="VoyagerMono,ui-monospace,monospace"
+            font-size="22"
+            font-weight="900"
+            letter-spacing="2.8"
+          >
+            <g transform="translate(1.8,2.2)">
+              <text fill="#12071f">
+                <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">
+                  VOYAGER
+                </textPath>
+              </text>
+            </g>
+            <g transform="translate(.8,1)">
+              <text fill="#2a1245">
+                <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">
+                  VOYAGER
+                </textPath>
+              </text>
+            </g>
+            <text fill="url(#rainbow)" stroke="#fff7e6" stroke-width=".2">
+              <textPath href="#upper-arc" startOffset="50%" text-anchor="middle">VOYAGER</textPath>
+            </text>
+          </g>
+        </svg>

@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("voyager", {
         "connection",
         "conversation",
         "native-window",
+        "avatar-state",
+        "voice-toggle",
+        "voice-reset",
       ].includes(topic)
     )
       throw Error("Unknown Voyager event.");

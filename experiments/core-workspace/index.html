@@ -10,15 +10,65 @@
     <title>Voyager</title>
     <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="identity.css" />
   </head>
   <body>
     <aside id="sidebar">
       <div id="home-dock" class="home-dock">
+        <img id="home-brand" src="brand.svg" alt="Voyager" />
         <div id="avatar-home"></div>
-        <div class="wordmark">
-          <strong>Voyager</strong><span>Let's go together</span>
+        <p id="home-tagline">Let's Go Together</p>
+        <div id="home-controls" aria-label="Voyager conversation controls">
+          <button
+            id="avatar-chat"
+            type="button"
+            aria-label="Text chat"
+            title="Text chat"
+            aria-expanded="false"
+          >
+            <svg viewBox="0 0 20 18" aria-hidden="true">
+              <path
+                d="M4 2h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"
+              />
+              <path d="M6 6h8M6 9h5" />
+            </svg>
+          </button>
         </div>
       </div>
+      <aside id="chat" hidden>
+        <header>
+          <div>
+            <span class="status-dot"></span
+            ><strong id="chat-focus">Whole workspace</strong>
+          </div>
+          <button id="close-chat" aria-label="Close conversation">×</button>
+        </header>
+        <div id="messages" role="log" aria-live="polite">
+          <div class="chat-intro">
+            <span class="intro-orbit">✧</span>
+            <h2>A little space to think.</h2>
+            <p>
+              Open a realm. Start something.<br />Or tell me where we're going.
+            </p>
+          </div>
+        </div>
+        <div id="chat-state" role="status">Ready when you are</div>
+        <button id="reconnect" hidden>Reconnect Voyager</button>
+        <form id="composer">
+          <textarea
+            id="chat-text"
+            rows="2"
+            placeholder="What shall we work on?"
+            aria-label="Message Voyager"
+          ></textarea>
+          <div>
+            <span>Let's go together</span
+            ><button type="submit" id="send" aria-label="Send message">
+              ↑
+            </button>
+          </div>
+        </form>
+      </aside>
       <button id="home" class="nav-home">
         <span>⌂</span> Home <kbd>⌘ 1</kbd>
       </button>
@@ -62,15 +112,23 @@
         <div id="dimension-avatar"></div>
         <div id="breadcrumb">Voyager</div>
         <div class="topbar-spacer"></div>
-        <span class="prototype-label">CORE WORKSPACE</span>
         <button
-          id="chat-toggle"
-          class="icon-button"
-          title="Talk with Voyager"
-          aria-label="Toggle conversation"
+          id="scope-label"
+          title="Voyager acts with your authority in this context"
         >
-          ◌
+          Whole workspace
         </button>
+        <span class="prototype-label">CORE WORKSPACE</span>
+        <div id="workspace-controls">
+          <button
+            id="chat-toggle"
+            class="icon-button"
+            title="Talk with Voyager"
+            aria-label="Toggle conversation"
+          >
+            ◌
+          </button>
+        </div>
       </header>
       <div id="dimensions-row">
         <nav id="dimensions" aria-label="Dimensions"></nav>
@@ -102,45 +160,6 @@
             Opening your workspace<span>Connecting to Herdr Core</span>
           </div>
         </section>
-        <aside id="chat" hidden>
-          <header>
-            <div><span class="status-dot"></span><strong>Voyager</strong></div>
-            <button id="close-chat" aria-label="Close conversation">×</button>
-          </header>
-          <div id="messages" role="log" aria-live="polite">
-            <div class="chat-intro">
-              <span class="intro-orbit">✧</span>
-              <h2>A little space to think.</h2>
-              <p>
-                Open a realm. Start something.<br />Or tell me where we're
-                going.
-              </p>
-            </div>
-          </div>
-          <div id="chat-state" role="status">Ready when you are</div>
-          <button id="reconnect" hidden>Reconnect Voyager</button>
-          <form id="composer">
-            <textarea
-              id="chat-text"
-              rows="2"
-              placeholder="What shall we work on?"
-              aria-label="Message Voyager"
-            ></textarea>
-            <div>
-              <button
-                type="button"
-                id="voice"
-                aria-label="Start voice"
-                title="Start voice"
-              >
-                ♩</button
-              ><span>Let’s go together</span
-              ><button type="submit" id="send" aria-label="Send message">
-                ↑
-              </button>
-            </div>
-          </form>
-        </aside>
       </div>
       <footer>
         <span id="connection"><span class="status-dot"></span>Starting</span
@@ -150,11 +169,38 @@
         ><button id="shortcuts" title="Keyboard shortcuts">⌘ K</button>
       </footer>
     </main>
-    <button id="avatar" title="Minimize Voyager" aria-label="Minimize Voyager">
-      <img src="../../desktop/assets/idle.png" alt="" /><span
-        class="status-dot"
-      ></span>
-    </button>
+    <div id="voyager-avatar" data-place="home">
+      <button
+        id="avatar"
+        title="Minimize Voyager. Pull to move."
+        aria-label="Minimize Voyager"
+      >
+        <img
+          id="astronaut-back"
+          src="../../desktop/assets/idle.png"
+          alt=""
+          draggable="false"
+        />
+        <img
+          id="astronaut-front"
+          src="../../desktop/assets/idle.png"
+          alt=""
+          draggable="false"
+        />
+        <span class="status-dot" aria-hidden="true"></span>
+      </button>
+      <button
+        id="voice"
+        type="button"
+        aria-label="Start voice"
+        title="Start voice"
+        aria-pressed="false"
+      >
+        <svg viewBox="0 0 20 16" aria-hidden="true">
+          <path d="M2 6v4M6 3v10M10 1v14M14 3v10M18 6v4" />
+        </svg>
+      </button>
+    </div>
     <div id="toast" role="status" hidden></div>
     <dialog id="dialog">
       <form method="dialog">
@@ -171,7 +217,10 @@
     <audio id="voice-output" autoplay></audio>
     <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="../../desktop/src/ui/astronaut.js"></script>
     <script src="renderer.js"></script>
     <script src="chat.js"></script>
+    <script src="identity.js"></script>
+    <script src="avatar-art.js"></script>
   </body>
 </html>

@@ -1,15 +1,18 @@
 (() => {
-  let peer;
-  let microphone;
-  let startingVoice = false;
   let sending = false;
-  let voiceRequested = false;
   const messages = new Map();
+  let focusReturn;
 
   function openChat(open = $("chat").hidden) {
+    if (open && $("chat").hidden) focusReturn = document.activeElement;
+    if (open && state && !state.sidebar) act("sidebar-show").catch(() => {});
     $("chat").hidden = !open;
     $("chat-toggle").setAttribute("aria-pressed", String(open));
     if (open) $("chat-text").focus();
+    else if (focusReturn?.isConnected)
+      focusReturn.focus({ preventScroll: true });
+    $("avatar-chat").setAttribute("aria-expanded", String(open));
+    window.voyagerIdentity?.positionChat();
     requestAnimationFrame(fitVisible);
   }
 
@@ -26,28 +29,8 @@
       if (messages.size > 100) messages.delete(messages.keys().next().value);
     }
     node.textContent = text;
+    window.voyagerIdentity?.positionChat();
     $("messages").scrollTop = $("messages").scrollHeight;
-  }
-
-  function releaseVoice() {
-    microphone?.getTracks().forEach((track) => track.stop());
-    microphone = null;
-    peer?.close();
-    peer = null;
-    $("voice").setAttribute("aria-pressed", "false");
-    $("voice").setAttribute("aria-label", "Start voice");
-    $("voice").title = "Start voice";
-    $("voice").dataset.connection = "closed";
-  }
-
-  async function stopProviderVoice() {
-    if (!voiceRequested) return;
-    voiceRequested = false;
-    try {
-      await call("voice-stop");
-    } catch (error) {
-      $("chat-state").textContent = `Voice stop unconfirmed. ${error.message}`;
-    }
   }
 
   api.on("conversation", async (event) => {
@@ -82,8 +65,6 @@
     if (event.type === "error") {
       $("chat-state").textContent = event.text;
       $("send").disabled = true;
-      releaseVoice();
-      await stopProviderVoice();
       $("reconnect").hidden = false;
     }
     if (event.type === "refused") {
@@ -91,27 +72,10 @@
       $("send").disabled = false;
       $("chat-state").textContent = event.text;
     }
-    if (event.type === "sdp" && peer) {
-      try {
-        await peer.setRemoteDescription({ type: "answer", sdp: event.sdp });
-        $("voice").setAttribute("aria-pressed", "true");
-        $("voice").setAttribute("aria-label", "Stop voice");
-        $("voice").title = "Stop voice";
-        $("chat-state").textContent = "Connecting audio…";
-      } catch (error) {
-        releaseVoice();
-        notify(error.message);
-        await stopProviderVoice();
-      }
-    }
-    if (event.type === "voice-error" || event.type === "voice-closed") {
-      voiceRequested = false;
-      releaseVoice();
-      $("chat-state").textContent = event.text || "Voice stopped";
-    }
   });
 
   $("open-chat").onclick = () => openChat(true);
+  $("avatar-chat").onclick = () => openChat();
   $("chat-toggle").onclick = () => openChat();
   $("close-chat").onclick = () => openChat(false);
   $("composer").onsubmit = async (event) => {
@@ -139,65 +103,22 @@
       $("composer").requestSubmit();
     }
   };
-  $("voice").onclick = async () => {
-    if (startingVoice) return;
-    if (peer) {
-      releaseVoice();
-      await stopProviderVoice();
-      return;
-    }
-    startingVoice = true;
-    $("voice").disabled = true;
-    $("chat-state").textContent = "Connecting voice…";
-    try {
-      microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
-      peer = new RTCPeerConnection();
-      peer.ontrack = (event) => {
-        $("voice-output").srcObject = event.streams[0];
-      };
-      peer.onconnectionstatechange = () => {
-        if (peer) $("voice").dataset.connection = peer.connectionState;
-        if (peer?.connectionState === "connected")
-          $("chat-state").textContent = "Voice connected";
-        if (
-          peer &&
-          ["failed", "disconnected", "closed"].includes(peer.connectionState)
-        ) {
-          releaseVoice();
-          stopProviderVoice();
-          $("chat-state").textContent = "Voice disconnected";
-        }
-      };
-      microphone
-        .getTracks()
-        .forEach((track) => peer.addTrack(track, microphone));
-      peer.createDataChannel("oai-events");
-      await peer.setLocalDescription(await peer.createOffer());
-      if (peer.iceGatheringState !== "complete")
-        await new Promise((resolve) => {
-          const timeout = setTimeout(resolve, 1800);
-          peer.addEventListener("icegatheringstatechange", () => {
-            if (peer?.iceGatheringState === "complete") {
-              clearTimeout(timeout);
-              resolve();
-            }
-          });
-        });
-      voiceRequested = true;
-      await call("voice", { sdp: peer.localDescription.sdp });
-    } catch (error) {
-      releaseVoice();
-      $("chat-state").textContent = error.message;
-      await stopProviderVoice();
-    } finally {
-      startingVoice = false;
-      $("voice").disabled = false;
-    }
-  };
+  $("voice").onclick = () => call("voice-toggle").catch(() => {});
+  api.on("avatar-state", (event) => {
+    $("voyager-avatar").hidden = event.floating;
+    $("voice").setAttribute("aria-pressed", String(event.voice.pressed));
+    $("voice").setAttribute(
+      "aria-label",
+      event.voice.pressed ? "Stop voice" : "Start voice",
+    );
+    $("voice").title = $("voice").getAttribute("aria-label");
+    $("voice").dataset.connection = event.voice.connection;
+    $("voice").disabled = event.voice.disabled;
+    if (event.voice.text) $("chat-state").textContent = event.voice.text;
+  });
   $("reconnect").onclick = async () => {
-    releaseVoice();
-    await stopProviderVoice();
     try {
+      await call("voice-reset");
       await call("chat-reset");
       sending = false;
       $("send").disabled = false;
@@ -208,5 +129,5 @@
       $("chat-state").textContent = error.message;
     }
   };
-  window.addEventListener("beforeunload", releaseVoice);
+  window.voyagerChat = { open: openChat };
 })();

@@ -3,9 +3,12 @@ const $ = (id) => document.getElementById(id);
 let state;
 let focused;
 const terminals = new Map();
-const avatar = $("avatar");
+const avatar = $("voyager-avatar");
 const dimensionDock = $("dimension-avatar");
 let toastTimer;
+let floatingAvatar = false;
+let renderVersion = 0;
+const voiceControl = $("voice");
 
 function notify(message) {
   $("toast").textContent = message;
@@ -205,11 +208,13 @@ function portalView(portal) {
   wrapper.addEventListener("pointerdown", () => focusPortal(portal.id));
   const head = element("header", "portal-header");
   const holder = element("div", "portal-dock");
-  holder.dataset.dock = portal.id;
+  holder.dataset.dock = `portal:${portal.terminal}`;
   const spot = button("Bring Voyager here", "◇", () => {}, "dock-spot");
-  spot.ondblclick = () => act("dock", { id: portal.id }).catch(() => {});
+  spot.ondblclick = () =>
+    act("dock", { id: `portal:${portal.terminal}` }).catch(() => {});
   spot.onkeydown = (event) => {
-    if (event.key === "Enter") act("dock", { id: portal.id }).catch(() => {});
+    if (event.key === "Enter")
+      act("dock", { id: `portal:${portal.terminal}` }).catch(() => {});
   };
   holder.append(spot);
   head.append(
@@ -230,7 +235,9 @@ function portalView(portal) {
     ),
   );
   head.append(actions);
-  wrapper.append(head, terminals.get(portal.terminal).node);
+  const anchor = element("div", "portal-avatar-anchor");
+  anchor.dataset.avatarPortal = portal.terminal;
+  wrapper.append(head, terminals.get(portal.terminal).node, anchor);
   return wrapper;
 }
 
@@ -306,11 +313,68 @@ function layoutView(node, dimensionId) {
   return split;
 }
 
+function presentFocus(focus) {
+  if (!state || !focus) return;
+  document.body.dataset.voyagerFocus = focus.kind;
+  document.body.dataset.voyagerFloating = String(floatingAvatar);
+  const id = focus.id;
+  for (const node of document.querySelectorAll(".realm, .dimension")) {
+    const scope = node.dataset.realm ? "realm" : "dimension";
+    const focusedHere = `${scope}:${node.dataset[scope]}` === id;
+    node.closest(".scope-row").classList.toggle("voyager-focused", focusedHere);
+    node
+      .closest(".scope-row")
+      .querySelector(".scope-dock")
+      .setAttribute("aria-pressed", String(focusedHere));
+  }
+  for (const node of document.querySelectorAll(".portal")) {
+    const here = node.querySelector(".portal-dock").dataset.dock === id;
+    node.classList.toggle("voyager-focused", here);
+    node.querySelector(".dock-spot").setAttribute("aria-pressed", String(here));
+  }
+  $("home").setAttribute("aria-pressed", String(focus.kind === "home"));
+  $("chat-focus").textContent = focus.label;
+  $("scope-label").textContent =
+    `${focus.label}${avatar.dataset.outOfView === "true" ? " · Go there ↗" : ""}`;
+  $("scope-label").onclick = () => {
+    if (focus.terminal)
+      act("show", { terminal: focus.terminal }).catch(() => {});
+    else if (focus.dimension)
+      act("select-dimension", { id: focus.dimension }).catch(() => {});
+    else if (focus.realm)
+      act("select-realm", { id: focus.realm }).catch(() => {});
+    else act("dock", { id: "home" }).catch(() => {});
+  };
+  $("avatar-chat").title = `Text chat · ${focus.label}`;
+  $("chat-toggle").title = `Text chat · ${focus.label}`;
+  $("chat-text").placeholder =
+    focus.kind === "home"
+      ? "What shall we work on?"
+      : `Message Voyager · ${focus.label}`;
+  const fullAvatar =
+    avatar.dataset.place === "portal" && avatar.dataset.outOfView !== "true";
+  const host = fullAvatar
+    ? avatar
+    : state.sidebar
+      ? $("home-controls")
+      : $("workspace-controls");
+  if (voiceControl.parentElement !== host) host.prepend(voiceControl);
+  voiceControl.hidden = floatingAvatar;
+}
+
+api.on("avatar-state", (event) => {
+  floatingAvatar = event.floating;
+  presentFocus(event.focus);
+});
+
 async function render(value) {
+  const version = ++renderVersion;
+  window.voyagerIdentity?.beforeLayout();
   state = value;
   const { realm, dimension } = active();
   for (const portal of allLeaves(dimension.root))
     if (!terminals.has(portal.terminal)) await createTerminal(portal);
+  if (version !== renderVersion) return;
   document.body.classList.toggle("sidebar-collapsed", !state.sidebar);
   $("realms").replaceChildren(
     ...state.realms.map((item, index) => {
@@ -320,13 +384,33 @@ async function render(value) {
         () => act("select-realm", { id: item.id }),
         `realm ${item.id === realm.id ? "active" : ""}`,
       );
+      node.dataset.realm = item.id;
       node.append(
         element("span", "realm-glyph", ["◈", "▧", "◇", "▱"][index % 4]),
         element("span", "realm-name", item.name),
         element("span", "realm-count", String(item.dimensions.length)),
       );
       node.ondblclick = () => rename(item);
-      return node;
+      const spot = element("button", "scope-dock", "◇");
+      spot.type = "button";
+      const scope = node.classList.contains("realm") ? "realm" : "dimension";
+      spot.title = `Dock Voyager in ${item.name}`;
+      spot.setAttribute("aria-label", spot.title);
+      const summon = (event) => {
+        event.stopPropagation();
+        act("dock", { id: `${scope}:${item.id}` }).catch(() => {});
+      };
+      spot.onclick = summon;
+      spot.ondblclick = (event) => event.stopPropagation();
+      spot.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          summon(event);
+        }
+      };
+      const row = element("div", "scope-row");
+      row.append(node, spot);
+      return row;
     }),
   );
   $("dimensions").replaceChildren(
@@ -337,12 +421,32 @@ async function render(value) {
         () => act("select-dimension", { id: item.id }),
         `dimension ${item.id === dimension.id ? "active" : ""}`,
       );
+      node.dataset.dimension = item.id;
       node.append(
         element("span", "dimension-mark", "⌑"),
         element("span", "", item.name),
       );
       node.ondblclick = () => rename(item);
-      return node;
+      const spot = element("button", "scope-dock", "◇");
+      spot.type = "button";
+      const scope = node.classList.contains("realm") ? "realm" : "dimension";
+      spot.title = `Dock Voyager in ${item.name}`;
+      spot.setAttribute("aria-label", spot.title);
+      const summon = (event) => {
+        event.stopPropagation();
+        act("dock", { id: `${scope}:${item.id}` }).catch(() => {});
+      };
+      spot.onclick = summon;
+      spot.ondblclick = (event) => event.stopPropagation();
+      spot.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          summon(event);
+        }
+      };
+      const row = element("div", "scope-row");
+      row.append(node, spot);
+      return row;
     }),
   );
   $("breadcrumb").textContent = realm.name;
@@ -350,14 +454,29 @@ async function render(value) {
   $("context").textContent =
     `${realm.cwd.replace(/^\/home\/isaac|^\/Users\/isaac/, "~")}  /  ${dimension.name}`;
   $("portals").replaceChildren(layoutView(dimension.root, dimension.id));
+  const [scope, key] = state.dock.split(":");
   const dock =
     state.dock === "home"
       ? $("avatar-home")
-      : state.dock === "dimension"
-        ? dimensionDock
-        : document.querySelector(`[data-dock="${state.dock}"]`);
+      : scope === "realm"
+        ? document.querySelector(`[data-realm="${key}"] .realm-glyph`)
+        : scope === "dimension"
+          ? document.querySelector(`[data-dimension="${key}"] .dimension-mark`)
+          : document.querySelector(`[data-avatar-portal="${key}"]`);
   (dock || dimensionDock).append(avatar);
-  avatar.classList.toggle("compact", state.dock !== "home");
+  avatar.dataset.outOfView = String(!dock);
+  avatar.dataset.place =
+    scope === "portal" && dock
+      ? "portal"
+      : state.dock === "home"
+        ? "home"
+        : "dimension";
+  const focus = await call("focus");
+  if (version !== renderVersion) return;
+  presentFocus(focus);
+  $("avatar").title =
+    `${focus.label}. Click to minimize. Pull to change focus.`;
+  window.voyagerIdentity?.place();
   const visible = allLeaves(dimension.root);
   if (!visible.some((portal) => portal.id === focused))
     focused = visible[0]?.id;
@@ -483,7 +602,6 @@ api.on("connection", (value) => {
   $("connection").dataset.phase = value.phase;
   if (value.error) notify(value.error);
 });
-$("avatar").onclick = () => call("minimize").catch(() => {});
 $("home").onclick = () => act("dock", { id: "home" }).catch(() => {});
 $("toggle-sidebar").onclick = () => act("sidebar").catch(() => {});
 $("add-realm").onclick = async () => {

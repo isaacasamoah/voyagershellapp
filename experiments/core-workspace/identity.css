@@ -1,0 +1,488 @@
+.home-dock {
+  position: relative;
+  flex-shrink: 0;
+  margin: 12px 0 14px;
+  width: 200px;
+  height: 202px;
+  align-self: center;
+  background: transparent;
+}
+#home-brand {
+  position: absolute;
+  width: 100%;
+  height: 107px;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+#avatar-home {
+  position: absolute;
+  left: 50%;
+  top: 47px;
+  transform: translateX(-50%);
+}
+#home-tagline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 35px;
+  margin: 0;
+  text-align: center;
+  font:
+    10px ui-monospace,
+    monospace;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  background: linear-gradient(90deg, #f7a34b, #f4e04d 50%, #59a5ff);
+  background-clip: text;
+  color: transparent;
+}
+#voyager-avatar {
+  --avatar-size: 94px;
+  position: relative;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  flex-shrink: 0;
+  z-index: 5;
+  user-select: none;
+}
+#avatar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px solid #ffffff24;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #30343bd9, #1c2027b8 50%, #252831cc);
+  box-shadow:
+    inset 0 1px 0 #ffffff18,
+    inset 0 -1px 0 #ffffff0a;
+  backdrop-filter: blur(24px) saturate(1.4);
+  cursor: grab;
+  touch-action: none;
+}
+#avatar img {
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+  pointer-events: none;
+  animation: voyager-float 8s ease-in-out infinite;
+}
+#astronaut-front {
+  opacity: 0;
+}
+#avatar > .status-dot {
+  position: absolute;
+  right: 6%;
+  bottom: 17%;
+  width: 5px;
+  height: 5px;
+}
+#voyager-avatar[data-place="home"] #avatar {
+  border-color: #ffffff0e;
+  background: linear-gradient(145deg, #24283080, #16181c40);
+  box-shadow: inset 0 1px #ffffff08;
+}
+#voyager-avatar[data-place="dimension"] {
+  --avatar-size: 38px;
+}
+.portal-avatar-anchor {
+  position: absolute;
+  left: 50%;
+  top: 67%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+}
+#voyager-avatar[data-place="portal"] {
+  pointer-events: none;
+}
+#voyager-avatar[data-place="portal"] #avatar {
+  opacity: 0.3;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+#voyager-avatar[data-place="portal"] button {
+  pointer-events: none;
+}
+#voyager-avatar[data-place="portal"][data-hovered="true"] #avatar {
+  opacity: 1;
+}
+#voyager-avatar[data-place="portal"] #voice:not([aria-pressed="true"]),
+#voyager-avatar[data-place="portal"] #avatar-chat:not([aria-expanded="true"]) {
+  opacity: 0.2;
+}
+#voyager-avatar[data-place="portal"][data-hovered="true"] #voice {
+  opacity: 1;
+}
+#home-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+#home-controls > button,
+#workspace-controls > #voice {
+  position: static;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+#workspace-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#voyager-avatar[data-place="portal"][data-hovered="true"] button {
+  pointer-events: auto;
+}
+#voyager-avatar[data-dragging="true"] {
+  position: fixed;
+  z-index: 50;
+  transform: none;
+  opacity: 1;
+  pointer-events: none;
+}
+#voyager-avatar[data-dragging="true"] button {
+  pointer-events: none !important;
+}
+#voyager-avatar[data-dragging="true"] #avatar {
+  cursor: grabbing;
+  opacity: 1;
+  border-color: #ffffff24;
+  background: linear-gradient(145deg, #30343bd9, #1c2027b8 50%, #252831cc);
+  box-shadow:
+    inset 0 1px 0 #ffffff18,
+    inset 0 -1px 0 #ffffff0a;
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+[data-dock-target="true"] {
+  outline: 1px solid #b3d2e5;
+  outline-offset: -2px;
+}
+#voice,
+#avatar-chat {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #989ba9;
+  z-index: 6;
+}
+#voice {
+  left: 1%;
+  bottom: 12%;
+}
+#avatar-chat {
+  left: calc(50% - 10px);
+  bottom: -4px;
+}
+#voice svg,
+#avatar-chat svg {
+  width: 14px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#voice:hover,
+#avatar-chat:hover {
+  background: #ffffff0e;
+  color: #e0ddf0;
+}
+#voice[aria-pressed="true"] {
+  color: #a5dfc2;
+  background: #73c89c20;
+}
+#avatar-chat[aria-expanded="true"] {
+  color: #c4b5fd;
+  background: #b8a4fa18;
+}
+#sidebar {
+  width: 280px;
+}
+#home-dock {
+  flex-shrink: 0;
+}
+#chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 210px;
+  max-height: min(380px, 40vh);
+  height: 380px;
+  margin: -8px 0 14px;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  border: 1px solid #ffffff0c;
+  border-radius: 10px;
+  background: #10121580;
+  overflow: hidden;
+  transition:
+    max-height 220ms ease,
+    opacity 180ms ease,
+    transform 220ms ease,
+    margin 220ms ease,
+    visibility 220ms;
+}
+#chat[hidden] {
+  display: flex !important;
+  visibility: hidden;
+  min-height: 0;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  margin: 0;
+  border-width: 0;
+  pointer-events: none;
+}
+#scope-label {
+  font-size: 10px;
+  color: var(--muted);
+  max-width: 30vw;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#chat > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #7a9bac25;
+}
+#chat > header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+#chat strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+#chat > header button {
+  color: #989ba9;
+  font-size: 18px;
+}
+#messages {
+  flex: 1;
+  overflow: auto;
+  padding: 0 17px;
+  scrollbar-width: thin;
+  scrollbar-color: #7a9bac40 transparent;
+}
+.chat-intro {
+  padding: 24px 0;
+}
+.intro-orbit {
+  color: #989ba9;
+  font-size: 22px;
+}
+.chat-intro h2 {
+  font-size: 15px;
+  font-weight: 400;
+  margin: 12px 0 8px;
+  color: var(--text);
+}
+.chat-intro p {
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.message {
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 16px 0;
+}
+.message::before {
+  content: "VOYAGER";
+  display: block;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: #b3acc5;
+  margin-bottom: 5px;
+}
+.message.user {
+  color: #bcbcc9;
+}
+.message.user::before {
+  content: "YOU";
+  color: #989ba9;
+}
+.tool-line {
+  font-size: 9px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+#chat-state {
+  color: var(--muted);
+  font-size: 9px;
+  padding: 3px 17px 8px;
+}
+#composer {
+  margin: 0 12px 12px;
+  border: 1px solid #ffffff14;
+  border-radius: 12px;
+  background: #ffffff03;
+}
+#composer:focus-within {
+  border-color: #989ba999;
+}
+#chat-text {
+  width: 100%;
+  resize: none;
+  background: none;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  padding: 12px 11px 5px;
+  font-size: 11px;
+  line-height: 1.7;
+}
+#chat-text::placeholder {
+  color: #989ba9;
+}
+#composer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px 8px;
+}
+#composer > div > span {
+  font-size: 9px;
+  color: #989ba9;
+}
+#send {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 7px;
+  font-size: 16px;
+  color: #d4c8fa;
+  background: #c4b5fd18;
+}
+#send:hover {
+  background: #c4b5fd30;
+}
+@keyframes voyager-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #avatar img {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #chat {
+    transition: none;
+  }
+}
+
+.scope-dock {
+  margin-left: auto;
+  color: #a49ab6;
+  opacity: 0.5;
+  padding: 4px;
+  border-radius: 4px;
+}
+.scope-row:hover .scope-dock,
+.scope-row:focus-within .scope-dock {
+  opacity: 1;
+}
+.scope-dock:hover {
+  background: #c4b5fd16;
+  color: var(--accent);
+}
+.realm-glyph:has(#voyager-avatar),
+.dimension-mark:has(#voyager-avatar) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  font-size: 0;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+.realm:has(#voyager-avatar) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+#realms {
+  min-height: 48px;
+  scrollbar-width: thin;
+}
+
+.scope-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+#dimensions > .scope-row {
+  flex-shrink: 0;
+}
+.scope-row > .realm,
+.scope-row > .dimension {
+  padding-right: 32px;
+}
+.scope-row > .scope-dock {
+  position: absolute;
+  right: 4px;
+  margin: 0;
+}
+#voyager-avatar[data-out-of-view="true"] {
+  visibility: hidden;
+}
+#dimension-avatar:has([data-out-of-view="true"]) {
+  display: none;
+}
+
+.scope-row.voyager-focused > .realm,
+.scope-row.voyager-focused > .dimension {
+  background: #b07af512;
+  box-shadow: inset 2px 0 #b07af575;
+}
+.scope-row.voyager-focused > .scope-dock {
+  opacity: 1;
+  color: #c4b5fd;
+}
+.portal.voyager-focused > .portal-header > .portal-dock > .dock-spot {
+  color: #c4b5fd;
+}
+.portal.voyager-focused > .portal-header > .portal-title::after {
+  content: " · Voyager";
+  color: #aaa2ba;
+  font-size: 9px;
+}
+#home[aria-pressed="true"] {
+  color: #c7bddc;
+}

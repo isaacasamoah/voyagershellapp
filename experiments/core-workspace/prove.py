@@ -19,8 +19,17 @@ parser.add_argument("--journey", action="store_true")
 parser.add_argument("--chat", action="store_true")
 parser.add_argument("--extras", action="store_true")
 parser.add_argument("--voice", action="store_true")
+parser.add_argument("--identity", action="store_true")
+parser.add_argument("--refresh", action="store_true")
+parser.add_argument("--focus", action="store_true")
+parser.add_argument("--border", action="store_true")
+parser.add_argument("--controls", action="store_true")
+parser.add_argument("--preview", action="store_true")
+parser.add_argument("--request-focus", action="store_true")
+parser.add_argument("--request-focus-voice", action="store_true")
+parser.add_argument("--port", type=int, default=9473)
 args = parser.parse_args()
-port = 9473
+port = args.port
 env = dict(os.environ)
 if args.desktop_env:
     env.update(json.loads(Path(args.desktop_env).read_text())[1]["env"])
@@ -32,9 +41,12 @@ if args.launch:
         "--ozone-platform=x11",
         f"--remote-debugging-port={port}",
         "--remote-debugging-address=127.0.0.1",
-        "--use-fake-ui-for-media-stream",
-        "--use-fake-device-for-media-stream",
     ]
+    if not args.preview:
+        command += [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+        ]
     with (evidence / "native.log").open("w") as log:
         process = subprocess.Popen(
             command, env=env, stdout=log, stderr=log, start_new_session=True
@@ -49,13 +61,38 @@ if args.launch:
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
-    page = browser.contexts[0].pages[0]
+    page = next(
+        page for page in browser.contexts[0].pages if page.url.endswith("/index.html")
+    )
     page.wait_for_function(
         "() => typeof state !== 'undefined' && state?.realms?.length > 0"
     )
     page.wait_for_selector(".xterm-screen")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    if args.request_focus or args.request_focus_voice:
+        from proof_focus import request_focus_journey
+
+        request_focus_journey(
+            page, browser.contexts[0], evidence, args.request_focus_voice
+        )
+    if args.preview:
+        page.evaluate("document.title = 'Voyager · Focus preview'")
+        page.get_by_role("button", name="Dock Voyager in Voyager", exact=True).click()
+        page.wait_for_function("() => document.body.dataset.voyagerFocus === 'realm'")
+        page.screenshot(path=str(evidence / "controls-preview.png"))
+    if args.controls:
+        from proof_focus import controls_journey
+
+        controls_journey(page, browser.contexts[0], evidence)
+    if args.border:
+        from proof_focus import portal_border
+
+        portal_border(page, evidence)
+    if args.refresh:
+        from proof_identity import refresh_viewer
+
+        refresh_viewer(page, evidence)
     if args.journey:
         page.locator(".xterm-helper-textarea").first.click()
         page.keyboard.type("printf 'VOYAGER_PORTAL_ONE\\n'")
@@ -88,18 +125,24 @@ with sync_playwright() as playwright:
             "() => document.querySelectorAll('.portal').length === 3"
         )
         page.get_by_role("button", name="Toggle sidebar", exact=True).click()
-        page.wait_for_selector("#dimension-avatar #avatar")
-        assert page.locator("#dimensions #dimension-avatar #avatar").count() == 1
+        page.wait_for_selector("#dimensions .dimension #avatar")
+        assert page.locator("#dimensions .dimension #avatar").count() == 1
+        if not page.locator("#chat").is_hidden():
+            page.get_by_role("button", name="Close conversation", exact=True).click()
         page.get_by_role(
             "button", name="Bring Voyager here", exact=True
         ).first.dblclick()
-        page.wait_for_selector(".portal-dock #avatar")
+        page.wait_for_selector(".portal-avatar-anchor #avatar")
         page.keyboard.press("Control+1")
         page.wait_for_selector("#avatar-home #avatar")
         page.get_by_role("button", name="Toggle conversation", exact=True).click()
         page.screenshot(path=str(evidence / "workspace.png"))
         page.get_by_role("button", name="Minimize Voyager", exact=True).click()
-        assert page.evaluate("window.voyager.call('window-state')")["minimized"]
+        page.wait_for_function(
+            "async () => (await window.voyager.call('window-state')).minimized",
+            polling=100,
+            timeout=5000,
+        )
         identity = json.loads((evidence / "launch.json").read_text())
         windows = subprocess.check_output(
             [
@@ -123,7 +166,11 @@ with sync_playwright() as playwright:
         assert f"= {identity['pid']}" in properties and '"Voyager"' in properties
         subprocess.run(["xdotool", "windowmap", windows[0]], env=env, check=True)
         subprocess.run(["xdotool", "windowactivate", windows[0]], env=env, check=True)
-        assert not page.evaluate("window.voyager.call('window-state')")["minimized"]
+        page.wait_for_function(
+            "async () => !(await window.voyager.call('window-state')).minimized",
+            polling=100,
+            timeout=5000,
+        )
         page.get_by_role("button", name="New realm", exact=True).click()
         page.get_by_label("Name", exact=True).fill("Studio")
         page.get_by_role("button", name="Create", exact=True).click()
@@ -202,6 +249,14 @@ with sync_playwright() as playwright:
         print(
             "Rename, hide/show without process loss, explicit stop and explicit new shell passed."
         )
+    if args.focus:
+        from proof_focus import focus_journey
+
+        focus_journey(page, browser.contexts[0], evidence, env)
+    if args.identity:
+        from proof_identity import identity_journey
+
+        identity_journey(page, evidence, env)
     if args.chat:
         if page.locator("#chat").is_hidden():
             page.get_by_role("button", name="Toggle conversation", exact=True).click()
@@ -230,6 +285,11 @@ with sync_playwright() as playwright:
     if args.voice:
         if page.locator("#chat").is_hidden():
             page.get_by_role("button", name="Toggle conversation", exact=True).click()
+        avatar_bounds = page.locator("#voyager-avatar").bounding_box()
+        page.mouse.move(
+            avatar_bounds["x"] + avatar_bounds["width"] / 2,
+            avatar_bounds["y"] + avatar_bounds["height"] / 2,
+        )
         page.get_by_role("button", name="Start voice", exact=True).click()
         page.wait_for_function(
             "() => document.querySelector('#voice').getAttribute('aria-pressed') === 'true'",
@@ -239,10 +299,29 @@ with sync_playwright() as playwright:
             "() => document.querySelector('#voice').dataset.connection === 'connected'",
             timeout=30000,
         )
+        if not page.locator("#chat").is_hidden():
+            page.get_by_role("button", name="Close conversation", exact=True).click()
+        page.get_by_role(
+            "button", name="Bring Voyager here", exact=True
+        ).first.dblclick()
+        page.wait_for_selector(".portal-avatar-anchor #voice")
+        assert page.locator("#voice").get_attribute("data-connection") == "connected"
+        assert (
+            page.locator("#voice").evaluate("(e)=>getComputedStyle(e).opacity") == "1"
+        )
         page.screenshot(path=str(evidence / "voice.png"))
+        avatar_bounds = page.locator("#voyager-avatar").bounding_box()
+        page.mouse.move(
+            avatar_bounds["x"] + avatar_bounds["width"] / 2,
+            avatar_bounds["y"] + avatar_bounds["height"] / 2,
+        )
         page.get_by_role("button", name="Stop voice", exact=True).click()
         page.wait_for_function(
             "() => document.querySelector('#voice').getAttribute('aria-pressed') === 'false'"
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#chat-state').textContent === 'Voice stopped'",
+            timeout=20000,
         )
         (evidence / "voice.json").write_text(
             json.dumps(
