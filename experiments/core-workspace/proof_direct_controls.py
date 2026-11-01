@@ -1,44 +1,25 @@
-import json
-
 from playwright.sync_api import expect
 from proof_picker import picker_rejection
+from proof_common import content_directory, processes, recorder, settled
 
 
-def direct_controls_journey(page, evidence, resume=False):
-    if not resume:
-        page.get_by_role("button", name="New Voyage", exact=True).click()
-        page.get_by_label("Name", exact=True).fill("Direct controls")
-        page.get_by_role("button", name="Create", exact=True).click()
-        page.wait_for_function(
-            "() => active().realm.name === 'Direct controls' && document.querySelector('.dimension.active')?.dataset.dimension === active().dimension.id && document.querySelectorAll('.portal').length===1"
-        )
-    passed = (
-        json.loads((evidence / "direct-controls.json").read_text())["passed"]
-        if resume
-        else []
+def direct_controls_journey(page, evidence):
+    page.get_by_role("button", name="New Voyage", exact=True).click()
+    page.get_by_label("Name", exact=True).fill("Direct controls")
+    page.get_by_role("button", name="Create", exact=True).click()
+    page.wait_for_function(
+        "() => active().realm.name === 'Direct controls' && document.querySelector('.dimension.active')?.dataset.dimension === active().dimension.id && document.querySelectorAll('.portal').length===1"
     )
+    record = recorder(evidence, "direct-controls")
     picker = page.locator("#content-picker")
     page.keyboard.press("Escape")
     cdp = page.context.new_cdp_session(page)
     cdp.send("Input.setInterceptDrags", {"enabled": False})
 
-    def record(name):
-        passed.append(name)
-        (evidence / "direct-controls.json").write_text(
-            json.dumps({"passed": passed, "modelRequests": 0}, indent=2)
-        )
-        print(name, flush=True)
-
-    def snapshot():
-        return {
-            p["address"]: p["pid"]
-            for p in page.evaluate("api.call('processes')")["terminals"]
-        }
-
     def wrapper(id):
         return page.locator(f'.portal[data-portal="{id}"]')
 
-    def drag(source, target, x, y, expected, cancel=False):
+    def drag(source, target, x, y, expected, cancel=False, during=None):
         head = wrapper(source).locator(".portal-title")
         rect = head.bounding_box()
         dest = wrapper(target).bounding_box()
@@ -57,6 +38,8 @@ def direct_controls_journey(page, evidence, resume=False):
                     "data-drop-position", expected
                 )
             page.screenshot(path=str(evidence / f"drag-{expected}.png"))
+            if during:
+                during()
             if cancel:
                 page.keyboard.press("Escape")
             page.mouse.up()
@@ -110,51 +93,48 @@ def direct_controls_journey(page, evidence, resume=False):
     first = page.evaluate(
         "allLeaves(active().dimension.root).find(p => p.type === 'terminal')"
     )
-    if not resume:
-        assert (
-            page.locator(
-                '#new-portal,#split-horizontal,#split-vertical,[aria-label="Move this Vessel"]'
-            ).count()
-            == 0
-        )
-        first = page.evaluate("allLeaves(active().dimension.root)[0]")
-        realm = page.locator(f'[data-realm="{page.evaluate("state.activeRealm")}"]')
-        realm.focus()
-        page.keyboard.press("Shift+Enter")
-        page.wait_for_function("() => state.dock.startsWith('realm:')")
-        fleet = page.locator("[data-dimension]").first
-        fleet.focus()
-        page.keyboard.press("Shift+Enter")
-        page.wait_for_function("() => state.dock.startsWith('dimension:')")
-        wrapper(first["id"]).locator(".portal-header").focus()
-        page.keyboard.press("Shift+Enter")
-        page.wait_for_function(
-            "id => state.dock === `portal:${id}`", arg=first["terminal"]
-        )
-        avatar = page.locator("#avatar").bounding_box()
-        home = page.locator("#home-dock").bounding_box()
-        page.mouse.move(avatar["x"] + 47, avatar["y"] + 47, steps=4)
-        page.mouse.down()
-        page.mouse.move(home["x"] + 100, home["y"] + 100, steps=15)
-        page.mouse.up()
-        page.wait_for_function("() => state.dock === 'home'")
-        record(
-            "Voyage, Fleet and Vessel keyboard docking plus avatar drag to Home work before failure tests"
-        )
-        select_text(first["id"])
-        actions = wrapper(first["id"]).locator(".portal-actions")
-        center = wrapper(first["id"]).bounding_box()
-        page.mouse.move(
-            center["x"] + center["width"] / 2, center["y"] + center["height"] / 2
-        )
-        expect(actions).to_have_css("opacity", "0")
-        page.mouse.move(center["x"] + center["width"] - 45, center["y"] + 15)
-        expect(actions).to_have_css("opacity", "1")
-        page.keyboard.press("Control+Shift+O")
-        picker = page.locator("#content-picker")
-        expect(picker).to_be_visible()
-        picker.get_by_role("button", name="Notes", exact=True).click()
-        page.wait_for_selector("iframe.portal-frame:not([hidden])")
+    assert (
+        page.locator(
+            '#new-portal,#split-horizontal,#split-vertical,[aria-label="Move this Vessel"]'
+        ).count()
+        == 0
+    )
+    first = page.evaluate("allLeaves(active().dimension.root)[0]")
+    realm = page.locator(f'[data-realm="{page.evaluate("state.activeRealm")}"]')
+    realm.focus()
+    page.keyboard.press("Shift+Enter")
+    page.wait_for_function("() => state.dock.startsWith('realm:')")
+    fleet = page.locator("[data-dimension]").first
+    fleet.focus()
+    page.keyboard.press("Shift+Enter")
+    page.wait_for_function("() => state.dock.startsWith('dimension:')")
+    wrapper(first["id"]).locator(".portal-header").focus()
+    page.keyboard.press("Shift+Enter")
+    page.wait_for_function("id => state.dock === `portal:${id}`", arg=first["terminal"])
+    avatar = page.locator("#avatar").bounding_box()
+    home = page.locator("#home-dock").bounding_box()
+    page.mouse.move(avatar["x"] + 47, avatar["y"] + 47, steps=4)
+    page.mouse.down()
+    page.mouse.move(home["x"] + 100, home["y"] + 100, steps=15)
+    page.mouse.up()
+    page.wait_for_function("() => state.dock === 'home'")
+    record(
+        "Voyage, Fleet and Vessel keyboard docking plus avatar drag to Home work before failure tests"
+    )
+    select_text(first["id"])
+    actions = wrapper(first["id"]).locator(".portal-actions")
+    center = wrapper(first["id"]).bounding_box()
+    page.mouse.move(
+        center["x"] + center["width"] / 2, center["y"] + center["height"] / 2
+    )
+    expect(actions).to_have_css("opacity", "0")
+    page.mouse.move(center["x"] + center["width"] - 45, center["y"] + 15)
+    expect(actions).to_have_css("opacity", "1")
+    page.keyboard.press("Control+Shift+O")
+    picker = page.locator("#content-picker")
+    expect(picker).to_be_visible()
+    picker.get_by_role("button", name="Notes", exact=True).click()
+    page.wait_for_selector("iframe.portal-frame:not([hidden])")
     notes = page.evaluate(
         "allLeaves(active().dimension.root).find(p=>p.type==='notes')"
     )
@@ -174,7 +154,7 @@ def direct_controls_journey(page, evidence, resume=False):
         expect(edit).to_have_value(value)
 
     edit_note("Preserve this content through direct dragging")
-    before = snapshot()
+    before = processes(page)
     layout = page.evaluate("JSON.stringify(active().dimension.root)")
     drag(first["id"], notes["id"], 0.75, 0.5, "right", cancel=True)
     assert page.evaluate("JSON.stringify(active().dimension.root)") == layout
@@ -192,11 +172,11 @@ def direct_controls_journey(page, evidence, resume=False):
     page.wait_for_function(
         "id => active().dimension.root.children[1].id===id", arg=first["id"]
     )
-    assert snapshot() == before
+    assert processes(page) == before
     assert page.evaluate("state.dock") == f"portal:{first['terminal']}"
     drag(first["id"], notes["id"], 0.5, 0.8, "bottom")
     page.wait_for_function("() => active().dimension.root.axis==='vertical'")
-    assert snapshot() == before
+    assert processes(page) == before
     edit.click()
     expect(edit).to_have_value("Preserve this content through direct dragging")
     select_text(first["id"])
@@ -263,7 +243,60 @@ def direct_controls_journey(page, evidence, resume=False):
     )
     page.locator("[data-dimension]").first.click()
     page.wait_for_selector("iframe.portal-frame:not([hidden])")
-    assert snapshot().items() >= before.items()
+    assert processes(page).items() >= before.items()
+    origin = page.evaluate("({realm:active().realm.id,fleet:active().dimension.id})")
+    destination = page.evaluate("state.realms.find(r => r.id !== state.activeRealm)")
+
+    def carry(realm, fleet):
+        wrapper(notes["id"]).locator(".portal-header").focus()
+        page.keyboard.press("Space")
+        page.locator(f'[data-realm="{realm}"]').focus()
+        page.keyboard.press("Enter")
+        page.wait_for_function("id => state.activeRealm === id", arg=realm)
+        page.locator(f'[data-dimension="{fleet}"]').focus()
+        page.keyboard.press("Enter")
+        settled(page)
+        expect(edit).to_have_value("Preserve this content through direct dragging")
+
+    before_carry = processes(page)
+    carry(destination["id"], destination["activeDimension"])
+    carry(origin["realm"], origin["fleet"])
+    assert processes(page) == before_carry
+    record(
+        "Keyboard carry across Voyages and back preserves exact content and process identity"
+    )
+    datafile = content_directory(evidence) / "data" / (notes["id"] + ".json")
+    original = datafile.read_bytes()
+    layout = page.evaluate("JSON.stringify(state)")
+
+    def refresh_catalogue():
+        datafile.write_bytes(original)
+        page.wait_for_function(
+            "() => !document.body.classList.contains('moving-portal') && !organisation.canDrop()"
+        )
+
+    page.evaluate("""() => {
+      window.watchAct = act;
+      window.watchMoves = 0;
+      act = (...args) => {
+        if (args[0] === "move") window.watchMoves++;
+        return window.watchAct(...args);
+      };
+    }""")
+    try:
+        drag(first["id"], notes["id"], 0.75, 0.5, "right", during=refresh_catalogue)
+        assert page.evaluate("window.watchMoves") == 0
+        assert page.evaluate("JSON.stringify(state)") == layout
+        assert datafile.read_bytes() == original
+        assert processes(page) == before_carry
+    finally:
+        page.evaluate("() => { act = window.watchAct; }")
+    edit.click()
+    expect(edit).to_have_value("Preserve this content through direct dragging")
+    select_text(first["id"])
+    record(
+        "Actual watcher refresh cancels an active pointer drag without late movement or data loss"
+    )
     split = wrapper(first["id"]).get_by_role(
         "button", name="Split this Vessel side by side", exact=True
     )

@@ -2,94 +2,66 @@ import json
 from pathlib import Path
 
 from playwright.sync_api import expect
+from proof_common import content_directory, open_picker, processes, recorder, settled
 
 
-def picker_journey(page, evidence, reject=True, resume=False):
+def picker_journey(page, evidence, reject=True):
     picker = page.locator("#content-picker")
     opener = page.locator(
         '.portal-header [aria-label="Split this Vessel side by side"]'
     ).first
 
-    def processes():
-        return {
-            p["address"]: p["pid"]
-            for p in page.evaluate("api.call('processes')")["terminals"]
-        }
+    initial = processes(page)
+    record = recorder(evidence, "picker")
 
-    def settled():
-        page.wait_for_function("""() => {
-          const ids = [...document.querySelectorAll('.portal')].map(n => n.dataset.portal);
-          return document.querySelector('.dimension.active')?.dataset.dimension === active().dimension.id
-            && allLeaves(active().dimension.root).every(p => ids.includes(p.id));
-        }""")
+    def same_processes(page):
+        assert processes(page) == initial
 
-    initial = processes()
-    results = (
-        json.loads((evidence / "picker.json").read_text())["passed"] if resume else []
+    open_picker(page, opener)
+    bounds, origin = picker.bounding_box(), opener.bounding_box()
+    assert abs(bounds["y"] - origin["y"] - origin["height"]) <= 12
+    page.keyboard.press("Escape")
+    expect(opener).to_be_focused()
+    same_processes(page)
+    record("Picker opens beside the control; Escape returns focus and creates nothing")
+    open_picker(page, opener)
+    page.get_by_role("button", name="Text chat", exact=True).click()
+    expect(picker).to_be_hidden()
+    expect(page.locator("#chat")).to_be_visible()
+    page.get_by_role("button", name="Close conversation", exact=True).click()
+    same_processes(page)
+    record(
+        "Outside click follows the requested control without stealing focus or creating content"
     )
-
-    def record(name):
-        results.append(name)
-        (evidence / "picker.json").write_text(
-            json.dumps({"passed": results, "modelRequests": 0}, indent=2)
-        )
-        print(name, flush=True)
-
-    def open_picker():
-        opener.focus()
-        opener.click()
-        expect(picker).to_be_visible()
-        assert not page.locator("#dialog").is_visible()
-
-    def same_processes():
-        assert processes() == initial
-
-    if not resume:
-        open_picker()
-        bounds, origin = picker.bounding_box(), opener.bounding_box()
-        assert abs(bounds["y"] - origin["y"] - origin["height"]) <= 12
-        page.keyboard.press("Escape")
-        expect(opener).to_be_focused()
-        same_processes()
-        record(
-            "Picker opens beside the control; Escape returns focus and creates nothing"
-        )
-        open_picker()
-        page.get_by_role("button", name="Text chat", exact=True).click()
-        expect(picker).to_be_hidden()
-        expect(page.locator("#chat")).to_be_visible()
-        page.get_by_role("button", name="Close conversation", exact=True).click()
-        same_processes()
-        record(
-            "Outside click follows the requested control without stealing focus or creating content"
-        )
-        open_picker()
-        page.evaluate(
-            "window.oldPickerChoice = document.querySelector('#content-picker button')"
-        )
-        page.get_by_role("button", name="New Fleet", exact=True).click()
-        page.wait_for_function("() => active().realm.dimensions.length === 2")
-        settled()
-        expect(picker).to_be_hidden()
-        initial = processes()
-        page.evaluate("window.oldPickerChoice.click()")
-        same_processes()
-        open_picker()
-        expect(picker).to_contain_text(page.evaluate("active().dimension.name"))
-        page.keyboard.press("ArrowDown")
-        expect(picker.locator("button").nth(1)).to_be_focused()
-        picker.get_by_role("button", name="Notes", exact=True).focus()
-        page.keyboard.press("Enter")
-        page.wait_for_selector(".portal-frame")
-        assert page.evaluate(
-            "allLeaves(active().dimension.root).some(p => p.type === 'notes')"
-        )
-        notes = page.locator(".portal").filter(has=page.locator(".web-portal")).first
-        page.locator("iframe.portal-frame").content_frame.locator("body").click()
-        same_processes()
-        record(
-            "Fleet navigation invalidates old choices and keyboard activation creates Notes in the new Fleet"
-        )
+    open_picker(page, opener)
+    page.evaluate(
+        "window.oldPickerChoice = document.querySelector('#content-picker button')"
+    )
+    page.get_by_role("button", name="New Fleet", exact=True).click()
+    page.wait_for_function("() => active().realm.dimensions.length === 2")
+    settled(page)
+    expect(picker).to_be_hidden()
+    initial = processes(page)
+    page.evaluate("window.oldPickerChoice.click()")
+    same_processes(page)
+    open_picker(page, opener)
+    expect(picker).to_contain_text(page.evaluate("active().dimension.name"))
+    page.keyboard.press("ArrowDown")
+    expect(picker.locator("button").nth(1)).to_be_focused()
+    picker.get_by_role("button", name="Notes", exact=True).focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".portal-frame")
+    assert page.evaluate(
+        "allLeaves(active().dimension.root).some(p => p.type === 'notes')"
+    )
+    notes = page.locator(".portal").filter(has=page.locator(".web-portal")).first
+    page.locator("iframe.portal-frame:not([hidden])").content_frame.locator(
+        "body"
+    ).click()
+    same_processes(page)
+    record(
+        "Fleet navigation invalidates old choices and keyboard activation creates Notes in the new Fleet"
+    )
     notes = page.locator(".portal").filter(has=page.locator(".web-portal")).first
     split = notes.get_by_role(
         "button", name="Split this Vessel top and bottom", exact=True
@@ -104,15 +76,10 @@ def picker_journey(page, evidence, reject=True, resume=False):
     opener.click()
     page.evaluate("window.oldPickerChoice.click()")
     expect(picker).to_be_visible()
-    same_processes()
+    same_processes(page)
     page.keyboard.press("Escape")
     record("A new opener invalidates the old Split selection")
-    profile = (
-        Path.home()
-        / ".config"
-        / json.loads((evidence / "launch.json").read_text())["session"]
-    )
-    types = profile / "portals" / "packages"
+    types = content_directory(evidence) / "packages"
     assert types.exists(), str(types)
     package = types / "picker-trial"
     package.mkdir()
@@ -126,7 +93,7 @@ def picker_journey(page, evidence, reject=True, resume=False):
     (package / "view.html").write_text(
         "<!doctype html><title>Picker trial</title><p>Live type</p>"
     )
-    open_picker()
+    open_picker(page, opener)
     (package / "portal.json").write_text(json.dumps(manifest))
     choice = picker.get_by_role("button", name="Picker trial", exact=True)
     expect(choice).to_be_visible()
@@ -138,7 +105,7 @@ def picker_journey(page, evidence, reject=True, resume=False):
     expect(choice).to_have_count(0)
     page.evaluate("window.removedChoice.click()")
     expect(picker).to_be_visible()
-    same_processes()
+    same_processes(page)
     page.keyboard.press("Escape")
     expect(opener).to_be_focused()
     record(
@@ -153,7 +120,7 @@ def picker_journey(page, evidence, reject=True, resume=False):
         "window.singleChoice = document.querySelector('#content-picker [data-type=\"terminal\"]'); singleChoice.click(); singleChoice.click()"
     )
     page.wait_for_function("() => allLeaves(active().dimension.root).length === 3")
-    current = processes()
+    current = processes(page)
     assert len(current) == len(initial) + 1
     assert page.evaluate("active().dimension.root.axis") == "horizontal"
     page.screenshot(path=str(evidence / "picker.png"))
@@ -162,19 +129,52 @@ def picker_journey(page, evidence, reject=True, resume=False):
     )
     opener.focus()
     opener.click()
-    page.locator("iframe.portal-frame").content_frame.locator("body").click()
+    page.locator("iframe.portal-frame:not([hidden])").content_frame.locator(
+        "body"
+    ).click()
     expect(picker).to_be_hidden()
     record("Clicking embedded web content dismisses the picker")
+    moved_id = notes.get_attribute("data-portal")
+    open_picker(page, split)
+    page.evaluate(
+        "window.movedSourceChoice = document.querySelector('#content-picker button')"
+    )
+    notes.locator(".portal-header").focus()
+    page.keyboard.press("Space")
+    target = page.locator("[data-dimension]:not(.active)").first
+    target.focus()
+    page.keyboard.press("Enter")
+    settled(page)
+    page.wait_for_function(
+        "id => allLeaves(active().dimension.root).some(p => p.id === id)", arg=moved_id
+    )
+    expect(picker).to_be_hidden()
+    layout = page.evaluate("JSON.stringify(state)")
+    page.evaluate("""() => {
+      window.movedSourceAct = act;
+      window.movedSourceDispatches = 0;
+      act = (...args) => {
+        window.movedSourceDispatches++;
+        return window.movedSourceAct(...args);
+      };
+    }""")
+    try:
+        page.evaluate("window.movedSourceChoice.click()")
+        assert page.evaluate("window.movedSourceDispatches") == 0
+        assert page.evaluate("JSON.stringify(state)") == layout
+        assert processes(page) == current
+    finally:
+        page.evaluate("() => { act = window.movedSourceAct; }")
+    record(
+        "Moving the source invalidates its retained Split choice without an action or process"
+    )
     if reject:
         picker_rejection(page, evidence, opener)
 
 
 def picker_rejection(page, evidence, opener=None):
     picker = page.locator("#content-picker")
-    current = {
-        p["address"]: p["pid"]
-        for p in page.evaluate("api.call('processes')")["terminals"]
-    }
+    current = processes(page)
     page.keyboard.press("Escape")
     if opener is None:
         opener = page.locator(
@@ -211,10 +211,7 @@ const {Core}=require('./core.cjs');
     expect(page.locator("#toast")).to_contain_text("Layout save unconfirmed")
     page.wait_for_timeout(500)
     assert page.evaluate("window.pickerDispatches") == 1
-    assert {
-        p["address"]: p["pid"]
-        for p in page.evaluate("api.call('processes')")["terminals"]
-    } == current
+    assert processes(page) == current
     page.evaluate("() => { act = window.priorAct; }")
     (evidence / "picker-rejection.json").write_text(
         json.dumps(

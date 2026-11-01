@@ -32,17 +32,24 @@ parser.add_argument("--portal-companion", action="store_true")
 parser.add_argument("--portal-boundaries", action="store_true")
 parser.add_argument("--ux", action="store_true")
 parser.add_argument("--picker", action="store_true")
-parser.add_argument("--picker-from-catalogue", action="store_true")
 parser.add_argument("--direct-controls", action="store_true")
-parser.add_argument("--direct-from-placement", action="store_true")
 parser.add_argument("--picker-rejection", action="store_true")
 parser.add_argument("--organisation", action="store_true")
-parser.add_argument("--organisation-stage", choices=["all", "placement", "finish"], default="all")
+parser.add_argument(
+    "--organisation-stage", choices=["all", "placement", "finish"], default="all"
+)
 parser.add_argument("--quit", action="store_true")
 parser.add_argument("--startup-failure", action="store_true")
 parser.add_argument("--portals", action="store_true")
+parser.add_argument("--evidence", type=Path)
 parser.add_argument("--port", type=int, default=9473)
 args = parser.parse_args()
+if args.evidence:
+    evidence = args.evidence
+    if args.launch:
+        evidence.mkdir(parents=True, exist_ok=False)
+    elif not evidence.is_dir():
+        raise RuntimeError("Existing candidate evidence is required")
 port = args.port
 env = dict(os.environ)
 if args.desktop_env:
@@ -89,11 +96,21 @@ with sync_playwright() as playwright:
         from proof_ux import native_quit
 
         if args.startup_failure:
-            page.wait_for_function("() => document.querySelector('#portals').textContent.includes('ENOENT')")
-        processes = [] if args.startup_failure else page.evaluate("api.call('processes')")["terminals"]
+            page.wait_for_function(
+                "() => document.querySelector('#portals').textContent.includes('ENOENT')"
+            )
+        processes = (
+            []
+            if args.startup_failure
+            else page.evaluate("api.call('processes')")["terminals"]
+        )
         native_quit(page, evidence, env, processes)
-        (evidence / ("startup-quit.json" if args.startup_failure else "quit.json")).write_text(
-            json.dumps({"nativeQuit": True, "startupFailure": args.startup_failure}, indent=2)
+        (
+            evidence / ("startup-quit.json" if args.startup_failure else "quit.json")
+        ).write_text(
+            json.dumps(
+                {"nativeQuit": True, "startupFailure": args.startup_failure}, indent=2
+            )
         )
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -105,14 +122,14 @@ with sync_playwright() as playwright:
         from proof_picker import picker_rejection
 
         picker_rejection(page, evidence)
-    if args.picker or args.picker_from_catalogue:
+    if args.picker:
         from proof_picker import picker_journey
 
-        picker_journey(page, evidence, reject=not args.direct_controls, resume=args.picker_from_catalogue)
-    if args.direct_controls or args.direct_from_placement:
+        picker_journey(page, evidence, reject=not args.direct_controls)
+    if args.direct_controls:
         from proof_direct_controls import direct_controls_journey
 
-        direct_controls_journey(page, evidence, resume=args.direct_from_placement)
+        direct_controls_journey(page, evidence)
     if args.ux:
         from proof_ux import chrome_journey
 
@@ -412,5 +429,6 @@ with sync_playwright() as playwright:
         print(
             "Native realtime WebRTC negotiated and stopped. Human microphone and audibility remain unproved."
         )
+    assert not errors, errors
     if browser.is_connected():
         browser.close()
