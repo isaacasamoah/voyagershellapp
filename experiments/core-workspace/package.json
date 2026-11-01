@@ -11,7 +11,8 @@
     "contract:generate": "node contract-build.cjs --write",
     "contract:check": "node contract-build.cjs --check",
     "contract:build": "node contract-build.cjs --build",
-    "pretest": "npm run contract:build"
+    "pretest": "npm run contract:build && npm run typecheck",
+    "typecheck": "tsc --noEmit --strict --lib es2022 contract/generated/request.d.ts contract/generated/response.d.ts generated/validate.d.cts"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",
@@ -20,7 +21,6 @@
   },
   "devDependencies": {
     "electron": "44.10.0",
-    "esbuild": "0.25.12",
     "json-schema-to-typescript": "16.0.0",
     "prettier": "3.9.9",
     "typescript": "5.9.3"

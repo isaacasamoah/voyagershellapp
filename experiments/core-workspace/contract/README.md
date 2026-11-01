@@ -25,6 +25,8 @@ The [Serde container attributes](https://serde.rs/container-attrs.html) define t
 
 The companion Node build runs the locked Rust exporter. `npm run contract:generate` updates the committed TypeScript declarations. `npm run contract:check` rejects declaration drift without writing files. `npm run contract:build` first checks drift, then emits fresh JSON schemas and standalone Ajv validators into ignored generated/. No hand-written wire schema is maintained alongside Rust.
 
+`npm run typecheck` checks the generated declarations and validator type guards with strict TypeScript and no emitted code. Compilation of an application consumer belongs in its integration increment.
+
 The validator build uses strict validation without type coercion or removing unknown fields. Package state schemas remain a separate application responsibility. Generated validation and declarations describe legal shapes; they do not grant caller authority, bind a frame or prove a write completed. The application integration is still a later increment.
 
-The tooling pins Ajv 8.20.0, json-schema-to-typescript 16.0.0, TypeScript 5.9.3 and esbuild 0.25.12 in package-lock.json. Ajv's [standalone validation](https://ajv.js.org/standalone.html) supports generating validators during the build; the application can bundle that output without compiling the wire schema in the browser. Compiler-generated files are build outputs, not extra authored production counted to enlarge the proving-code budget.
+The tooling pins Ajv 8.20.0, json-schema-to-typescript 16.0.0, TypeScript 5.9.3 in package-lock.json. Ajv's [standalone validation](https://ajv.js.org/standalone.html) supports generating validators during the build; the application can bundle that output without compiling the wire schema in the browser. Compiler-generated files are build outputs, not extra authored production counted to enlarge the proving-code budget.
