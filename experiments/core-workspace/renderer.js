@@ -246,15 +246,12 @@ function portalView(portal) {
     ),
   );
   const title = head.querySelector(".portal-title");
-  title.draggable = true;
-  title.title = "Drag to another Vessel header to move beside it";
-  title.ondragstart = (event) => {
-    event.dataTransfer.setData("application/x-voyager-portal", portal.id);
-    document.body.classList.add("moving-portal");
-  };
-  title.ondragend = () => document.body.classList.remove("moving-portal");
+  window.organisation.vessel(head, title, portal);
   head.ondragover = (event) => {
-    if (event.dataTransfer.types.includes("application/x-voyager-portal")) {
+    if (
+      window.organisation.canDrop() &&
+      event.dataTransfer.types.includes("application/x-voyager-portal")
+    ) {
       event.preventDefault();
       head.classList.add("drop-here");
     }
@@ -264,7 +261,7 @@ function portalView(portal) {
     event.preventDefault();
     head.classList.remove("drop-here");
     const id = event.dataTransfer.getData("application/x-voyager-portal");
-    if (id && id !== portal.id)
+    if (window.organisation.canDrop() && id && id !== portal.id)
       act("move", { id, target: portal.id, position: "right" }).catch(() => {});
   };
   head.append(actions);
@@ -420,6 +417,15 @@ async function render(value) {
     )
       await createTerminal(portal);
   if (version !== renderVersion) return;
+  const previousFocus = document.activeElement;
+  const navigationFocus = previousFocus.closest(
+    "[data-realm],[data-dimension]",
+  );
+  const focusSelector = navigationFocus?.dataset.realm
+    ? `[data-realm="${CSS.escape(navigationFocus.dataset.realm)}"]`
+    : navigationFocus?.dataset.dimension
+      ? `[data-dimension="${CSS.escape(navigationFocus.dataset.dimension)}"]`
+      : null;
   document.body.classList.toggle("sidebar-collapsed", !state.sidebar);
   $("realms").replaceChildren(
     ...state.realms.map((item, index) => {
@@ -436,7 +442,7 @@ async function render(value) {
         element("span", "realm-name", item.name),
         element("span", "realm-count", String(item.dimensions.length)),
       );
-      node.ondblclick = () => rename(item);
+      window.organisation.navigation(node, item, "realm");
       const row = element("div", "scope-row");
       row.append(node);
       return row;
@@ -454,9 +460,9 @@ async function render(value) {
       keyboardDock(node, `dimension:${item.id}`);
       node.append(
         element("span", "dimension-mark"),
-        element("span", "", item.name),
+        element("span", "dimension-name", item.name),
       );
-      node.ondblclick = () => rename(item);
+      window.organisation.navigation(node, item, "dimension");
       const row = element("div", "scope-row");
       row.append(node);
       return row;
@@ -470,6 +476,11 @@ async function render(value) {
   $("context").textContent =
     `${realm.cwd.replace(/^\/home\/isaac|^\/Users\/isaac/, "~")}  /  ${dimension.name}`;
   $("portals").replaceChildren(layoutView(dimension.root, dimension.id));
+  if (document.activeElement === document.body)
+    (previousFocus.isConnected
+      ? previousFocus
+      : focusSelector && document.querySelector(focusSelector)
+    )?.focus({ preventScroll: true });
   const everyPortal = state.realms
     .flatMap((realm) =>
       realm.dimensions.flatMap((dimension) => allLeaves(dimension.root)),
@@ -558,15 +569,6 @@ function ask(title, fields, submit = "Create") {
   });
 }
 
-async function rename(item) {
-  const values = await ask(
-    "Give it a name",
-    [{ name: "name", label: "Name", value: item.name }],
-    "Save",
-  );
-  if (values) await act("rename", { id: item.id, name: values.name });
-}
-
 async function showProcesses() {
   const result = await call("processes");
   $("dialog-title").textContent = "Your processes";
@@ -633,18 +635,33 @@ async function choosePortal(id, axis = "horizontal") {
 }
 
 async function movePortal(portal) {
-  const targets = allLeaves(active().dimension.root).filter(
-    (item) => item.id !== portal.id,
+  const targets = state.realms.flatMap((realm) =>
+    realm.dimensions.flatMap((dimension) => [
+      ...(dimension.id !== active().dimension.id
+        ? [
+            {
+              value: `dimension:${dimension.id}`,
+              label: `${realm.name} / ${dimension.name}`,
+            },
+          ]
+        : []),
+      ...allLeaves(dimension.root)
+        .filter((item) => item.id !== portal.id)
+        .map((item) => ({
+          value: `portal:${item.id}`,
+          label: `${realm.name} / ${dimension.name} / ${item.title}`,
+        })),
+    ]),
   );
   if (!targets.length)
-    return notify("Open another Vessel to move this one beside it.");
+    return notify("Open another Fleet or Vessel to move into.");
   const values = await ask(
     "Move this Vessel",
     [
       {
         name: "target",
-        label: "Beside",
-        options: targets.map((item) => ({ value: item.id, label: item.title })),
+        label: "Destination",
+        options: targets,
       },
       {
         name: "position",
@@ -657,7 +674,14 @@ async function movePortal(portal) {
     ],
     "Move",
   );
-  if (values) await act("move", { id: portal.id, ...values });
+  if (values)
+    await act("move", {
+      id: portal.id,
+      ...(values.target.startsWith("dimension:")
+        ? { dimension: values.target.slice(10) }
+        : { target: values.target.slice(7) }),
+      position: values.position,
+    });
 }
 
 $("new-portal").onclick = () => choosePortal().catch(() => {});

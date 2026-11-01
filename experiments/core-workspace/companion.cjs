@@ -5,7 +5,7 @@ const tools = [
   {
     name: "voyager_workspace",
     description:
-      "Inspect or change this real Voyager workspace. status returns realm/dimension/portal IDs. realm creates a realm and shell; dimension creates a tab and shell; split creates a shell or argv program beside portal id; select-realm, select-dimension, rename, dock, sidebar, hide, show and restart use the matching existing ID. dock id is home, realm:ID, dimension:ID or portal:TERMINAL. Dock changes live context, never owner authority. Only change focus when the human requests it. status returns only current focus. hide only hides a view, never stops it. All effects are limited to this dedicated prototype Core session. Inspect before acting.",
+      "Inspect or change this real Voyager workspace. status returns realm/dimension/portal IDs. realm creates a realm and shell; dimension creates a tab and shell; split creates a shell or argv program beside portal id; select-realm, select-dimension, rename, dock, sidebar, hide, show and restart use the matching existing ID. dock id is home, realm:ID, dimension:ID or portal:TERMINAL. Dock changes live context, never owner authority. Only change focus when the human requests it. status returns only current focus. rename accepts a Voyage, Fleet or Vessel ID. move accepts a source Vessel id and exactly one target Vessel or destination dimension/Fleet, preserving process identity. reorder uses entity realm/dimension, id, target and optional after. Both ends must be inside current focus. hide only hides a view, never stops it. All effects are limited to this dedicated prototype Core session. Inspect before acting.",
     inputSchema: {
       type: "object",
       properties: {
@@ -27,6 +27,7 @@ const tools = [
             "portal",
             "show-portal",
             "move",
+            "reorder",
             "layout-save",
             "layout-load",
             "home",
@@ -39,6 +40,8 @@ const tools = [
         dimension: { type: "string" },
         file: { type: "string" },
         target: { type: "string" },
+        entity: { type: "string", enum: ["realm", "dimension"] },
+        after: { type: "boolean" },
         position: { type: "string", enum: ["left", "right", "top", "bottom"] },
         terminal: { type: "string" },
         axis: { type: "string", enum: ["horizontal", "vertical"] },

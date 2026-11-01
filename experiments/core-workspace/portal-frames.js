@@ -44,6 +44,8 @@
       view = { id: portal.id, type: portal.type };
       views.set(portal.id, view);
     }
+    for (const frame of [view.frame, view.pending].filter(Boolean))
+      frame.title = portal.title;
     if (view.revision === definition.revision) {
       if (view.error) report(view, view.error);
       return;

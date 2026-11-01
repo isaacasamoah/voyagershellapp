@@ -288,7 +288,33 @@ class Workspace {
       allowed =
         focus.kind === "realm" &&
         (input.id || this.state.activeRealm) === focus.realm;
-    if (["select-dimension", "rename"].includes(kind))
+    if (kind === "move" && input.dimension) {
+      const target = this.dimension(input.dimension);
+      allowed =
+        this.containsPortal(input.id) &&
+        ((focus.kind === "realm" && focus.realm === target.realm.id) ||
+          (focus.kind === "dimension" &&
+            focus.dimension === target.dimension.id));
+    }
+    if (kind === "rename") {
+      const realm = this.state.realms.find((item) => item.id === input.id);
+      const place = this.places().find(
+        (item) => item.dimension.id === input.id,
+      );
+      allowed = realm
+        ? focus.kind === "realm" && focus.realm === realm.id
+        : place
+          ? (focus.kind === "realm" && focus.realm === place.realm.id) ||
+            (focus.kind === "dimension" &&
+              focus.dimension === place.dimension.id)
+          : this.containsPortal(input.id);
+    }
+    if (kind === "reorder" && input.entity === "dimension")
+      allowed =
+        focus.kind === "realm" &&
+        this.dimension(input.id).realm.id === focus.realm &&
+        this.dimension(input.target).realm.id === focus.realm;
+    if (kind === "select-dimension")
       allowed =
         input.id === focus.realm ||
         input.id === focus.dimension ||
@@ -492,26 +518,66 @@ class Workspace {
     }
     if (kind === "move") {
       const source = this.portal(id);
-      const target = this.portal(input.target);
-      if (
-        source.hidden ||
-        target.hidden ||
-        source.dimension.id !== target.dimension.id ||
-        id === input.target
-      )
-        throw Error("Move portals within their current dimension.");
-      let root = replace(source.dimension.root, id, null);
       const position = input.position || "right";
+      if (!["left", "right", "top", "bottom"].includes(position))
+        throw Error("Choose left, right, top or bottom.");
+      if (!!input.target === !!input.dimension)
+        throw Error("Choose one destination Fleet or Vessel.");
+      const target = input.target
+        ? this.portal(input.target)
+        : this.dimension(input.dimension);
+      if (source.hidden || target.hidden)
+        throw Error("Reveal the Vessel before moving it.");
+      if (source.portal.id === target.portal?.id) return;
+      const destination = target.portal || target.dimension.root;
+      if (!target.portal && source.dimension.id === target.dimension.id) return;
+      source.dimension.root = replace(
+        source.dimension.root,
+        source.portal.id,
+        null,
+      );
       const before = ["left", "top"].includes(position);
       const children = before
-        ? [source.portal, target.portal]
-        : [target.portal, source.portal];
-      source.dimension.root = replace(root, target.portal.id, {
-        id: randomUUID(),
-        axis: ["top", "bottom"].includes(position) ? "vertical" : "horizontal",
-        ratio: 0.5,
-        children,
-      });
+        ? [source.portal, destination]
+        : [destination, source.portal];
+      const next = destination
+        ? {
+            id: randomUUID(),
+            axis: ["top", "bottom"].includes(position)
+              ? "vertical"
+              : "horizontal",
+            ratio: 0.5,
+            children,
+          }
+        : source.portal;
+      target.dimension.root = target.portal
+        ? replace(target.dimension.root, target.portal.id, next)
+        : next;
+      if (target.dimension.id === "home") this.state.view = "home";
+      else {
+        this.state.activeRealm = target.realm.id;
+        target.realm.activeDimension = target.dimension.id;
+        this.state.view = "dimension";
+      }
+      return;
+    }
+    if (kind === "reorder") {
+      const items =
+        input.entity === "realm"
+          ? this.state.realms
+          : input.entity === "dimension"
+            ? this.dimension(id).realm.dimensions
+            : null;
+      if (!items) throw Error("Choose Voyages or Fleets to reorder.");
+      const source = items.find((item) => item.id === id);
+      const target = items.find((item) => item.id === input.target);
+      if (!source || !target)
+        throw Error("Reorder items within their existing navigation group.");
+      if (input.after !== undefined && typeof input.after !== "boolean")
+        throw Error("Choose before or after the navigation target.");
+      if (source === target) return;
+      items.splice(items.indexOf(source), 1);
+      items.splice(items.indexOf(target) + (input.after ? 1 : 0), 0, source);
       return;
     }
     if (kind === "layout-save") {
@@ -626,8 +692,8 @@ class Workspace {
         this.state.realms
           .flatMap((realm) => realm.dimensions)
           .find((dim) => dim.id === id);
-      if (!target) throw Error("Item no longer exists.");
-      target.name = name.trim();
+      if (target) target.name = name.trim();
+      else this.portal(id).portal.title = name.trim();
       return;
     }
     if (kind === "dock") {

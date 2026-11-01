@@ -31,6 +31,8 @@ parser.add_argument("--request-focus-voice", action="store_true")
 parser.add_argument("--portal-companion", action="store_true")
 parser.add_argument("--portal-boundaries", action="store_true")
 parser.add_argument("--ux", action="store_true")
+parser.add_argument("--organisation", action="store_true")
+parser.add_argument("--organisation-stage", choices=["all", "placement", "finish"], default="all")
 parser.add_argument("--quit", action="store_true")
 parser.add_argument("--startup-failure", action="store_true")
 parser.add_argument("--portals", action="store_true")
@@ -90,6 +92,10 @@ with sync_playwright() as playwright:
         )
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    if args.organisation or args.organisation_stage != "all":
+        from proof_organisation import organisation_journey
+
+        organisation_journey(page, evidence, root, errors, args.organisation_stage)
     if args.ux:
         from proof_ux import chrome_journey
 

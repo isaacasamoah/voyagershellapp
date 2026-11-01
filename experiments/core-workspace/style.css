@@ -714,3 +714,51 @@ dialog header button {
   align-items: center;
   gap: 8px;
 }
+.inline-name {
+  position: fixed;
+  z-index: 150;
+  padding: 4px;
+  border: 1px solid #b3a3db80;
+  border-radius: 4px;
+  background: #191b20;
+  color: #ded8ef;
+  font: inherit;
+  outline: none;
+}
+.realm.drop-before {
+  box-shadow: inset 0 1px #b3a3db;
+}
+.realm.drop-after {
+  box-shadow: inset 0 -1px #b3a3db;
+}
+.dimension.drop-before {
+  box-shadow: inset 1px 0 #b3a3db;
+}
+.dimension.drop-after {
+  box-shadow: inset -1px 0 #b3a3db;
+}
+.dimension.drop-here,
+.drag-fleets .drop-here {
+  background: #b3a3db18;
+}
+.drag-fleets {
+  position: fixed;
+  z-index: 140;
+  width: 218px;
+  padding: 6px;
+  border: 1px solid #b3a3db25;
+  border-radius: 8px;
+  background: #1a1c21f5;
+  box-shadow: 0 8px 24px #0004;
+}
+.drag-fleets small {
+  display: block;
+  padding: 6px 10px;
+  color: #92939d;
+}
+.drag-fleets button {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+}
