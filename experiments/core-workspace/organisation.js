@@ -2,6 +2,7 @@
   let preview;
   let cancelled = false;
   let lastClick;
+  let lifted;
   const vesselDrag = "application/x-voyager-portal";
   const navigationDrag = "application/x-voyager-navigation";
   const refocus = (selector) =>
@@ -13,12 +14,19 @@
   function clear() {
     preview?.remove();
     preview = null;
+    lifted = undefined;
     document
       .querySelectorAll(".drop-before,.drop-after,.drop-here")
       .forEach((node) =>
         node.classList.remove("drop-before", "drop-after", "drop-here"),
       );
     document.body.classList.remove("moving-portal");
+    document
+      .querySelectorAll(".drag-source,[data-drop-position]")
+      .forEach((node) => {
+        node.classList.remove("drag-source");
+        delete node.dataset.dropPosition;
+      });
   }
 
   function edit(label, item, field, kind, selector) {
@@ -80,6 +88,15 @@
   }
 
   function fleetDrop(node, item) {
+    node.addEventListener("keydown", (event) => {
+      if (!lifted || event.shiftKey || !["Enter", " "].includes(event.key))
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const id = lifted;
+      clear();
+      act("move", { id, dimension: item.id }).catch(() => {});
+    });
     node.ondragover = (event) => {
       if (cancelled || !event.dataTransfer.types.includes(vesselDrag)) return;
       event.preventDefault();
@@ -235,6 +252,48 @@
   function vessel(head, title, item) {
     head.draggable = true;
     head.addEventListener("keydown", (event) => {
+      if (
+        event.key === " " &&
+        event.target === head &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        const wasLifted = lifted === item.id;
+        clear();
+        if (!wasLifted) {
+          lifted = item.id;
+          head.closest(".portal").classList.add("drag-source");
+          notify(
+            "Vessel picked up. Focus a Fleet and press Enter to move. Escape cancels.",
+          );
+        }
+      }
+      const direction = { h: "left", j: "bottom", k: "top", l: "right" }[
+        event.key.toLowerCase()
+      ];
+      if (event.altKey && event.shiftKey && direction) {
+        event.preventDefault();
+        event.stopPropagation();
+        const wrapper = head.closest(".portal");
+        const candidates = [...document.querySelectorAll(".portal")]
+          .filter((node) => node !== wrapper)
+          .map((node) => ({
+            id: node.dataset.portal,
+            ...node.getBoundingClientRect().toJSON(),
+          }));
+        const target = window.vesselPlacement.neighbour(
+          wrapper.getBoundingClientRect(),
+          candidates,
+          direction,
+        );
+        if (target)
+          act("move", { id: item.id, target, position: direction }).catch(
+            () => {},
+          );
+      }
       if (event.key === "F2") {
         event.preventDefault();
         edit(
@@ -261,7 +320,10 @@
         return;
       }
       cancelled = false;
+      lifted = undefined;
       event.dataTransfer.setData(vesselDrag, item.id);
+      head.closest(".portal").classList.add("drag-source");
+      event.dataTransfer.setDragImage(head.closest(".portal"), 25, 16);
       document.body.classList.add("moving-portal");
     };
   }
@@ -273,5 +335,31 @@
       clear();
     }
   });
-  window.organisation = { navigation, vessel, canDrop: () => !cancelled };
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      document.querySelectorAll(".portal").forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        node.classList.toggle(
+          "split-near",
+          !event.buttons &&
+            event.clientX >= rect.right - 112 &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.top + 40,
+        );
+      });
+    },
+    true,
+  );
+  window.organisation = {
+    navigation,
+    vessel,
+    clear,
+    cancelDrag() {
+      cancelled = true;
+      clear();
+    },
+    canDrop: () => !cancelled,
+  };
 })();

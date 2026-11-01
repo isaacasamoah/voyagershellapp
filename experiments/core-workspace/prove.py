@@ -32,6 +32,9 @@ parser.add_argument("--portal-companion", action="store_true")
 parser.add_argument("--portal-boundaries", action="store_true")
 parser.add_argument("--ux", action="store_true")
 parser.add_argument("--picker", action="store_true")
+parser.add_argument("--picker-from-catalogue", action="store_true")
+parser.add_argument("--direct-controls", action="store_true")
+parser.add_argument("--direct-from-placement", action="store_true")
 parser.add_argument("--picker-rejection", action="store_true")
 parser.add_argument("--organisation", action="store_true")
 parser.add_argument("--organisation-stage", choices=["all", "placement", "finish"], default="all")
@@ -102,10 +105,14 @@ with sync_playwright() as playwright:
         from proof_picker import picker_rejection
 
         picker_rejection(page, evidence)
-    if args.picker:
+    if args.picker or args.picker_from_catalogue:
         from proof_picker import picker_journey
 
-        picker_journey(page, evidence)
+        picker_journey(page, evidence, reject=not args.direct_controls, resume=args.picker_from_catalogue)
+    if args.direct_controls or args.direct_from_placement:
+        from proof_direct_controls import direct_controls_journey
+
+        direct_controls_journey(page, evidence, resume=args.direct_from_placement)
     if args.ux:
         from proof_ux import chrome_journey
 

@@ -240,29 +240,43 @@ function portalView(portal) {
     button("Split this Vessel top and bottom", "⬒", (opener) =>
       choosePortal(portal.id, "vertical", opener),
     ),
-    button("Move this Vessel", "↗", () => movePortal(portal)),
     button("Hide this Vessel, keep process running", "×", () =>
       act("hide", { id: portal.id }),
     ),
   );
   const title = head.querySelector(".portal-title");
   window.organisation.vessel(head, title, portal);
-  head.ondragover = (event) => {
+  const dropSide = (event) =>
+    window.vesselPlacement.side(
+      wrapper.getBoundingClientRect(),
+      event.clientX,
+      event.clientY,
+    );
+  wrapper.ondragover = (event) => {
     if (
-      window.organisation.canDrop() &&
-      event.dataTransfer.types.includes("application/x-voyager-portal")
-    ) {
-      event.preventDefault();
-      head.classList.add("drop-here");
-    }
-  };
-  head.ondragleave = () => head.classList.remove("drop-here");
-  head.ondrop = (event) => {
+      !window.organisation.canDrop() ||
+      !event.dataTransfer.types.includes("application/x-voyager-portal") ||
+      wrapper.classList.contains("drag-source")
+    )
+      return;
     event.preventDefault();
-    head.classList.remove("drop-here");
+    wrapper.dataset.dropPosition = dropSide(event);
+  };
+  wrapper.ondragleave = (event) => {
+    if (!wrapper.contains(event.relatedTarget))
+      delete wrapper.dataset.dropPosition;
+  };
+  wrapper.ondrop = (event) => {
+    if (!event.dataTransfer.types.includes("application/x-voyager-portal"))
+      return;
+    event.preventDefault();
+    event.stopPropagation();
     const id = event.dataTransfer.getData("application/x-voyager-portal");
-    if (window.organisation.canDrop() && id && id !== portal.id)
-      act("move", { id, target: portal.id, position: "right" }).catch(() => {});
+    const position = dropSide(event);
+    const allowed = window.organisation.canDrop();
+    window.organisation.clear();
+    if (allowed && id && id !== portal.id)
+      act("move", { id, target: portal.id, position }).catch(() => {});
   };
   head.append(actions);
   const anchor = element("div", "portal-avatar-anchor");
@@ -611,7 +625,7 @@ async function showProcesses() {
   $("dialog").showModal();
 }
 
-function choosePortal(id, axis = "horizontal", opener = $("new-portal")) {
+function choosePortal(id, axis = "horizontal", opener) {
   const dimension = active().dimension;
   window.contentPicker.update(portalTypes);
   const selector = opener.id
@@ -632,58 +646,9 @@ function choosePortal(id, axis = "horizontal", opener = $("new-portal")) {
   );
 }
 
-async function movePortal(portal) {
-  const targets = state.realms.flatMap((realm) =>
-    realm.dimensions.flatMap((dimension) => [
-      ...(dimension.id !== active().dimension.id
-        ? [
-            {
-              value: `dimension:${dimension.id}`,
-              label: `${realm.name} / ${dimension.name}`,
-            },
-          ]
-        : []),
-      ...allLeaves(dimension.root)
-        .filter((item) => item.id !== portal.id)
-        .map((item) => ({
-          value: `portal:${item.id}`,
-          label: `${realm.name} / ${dimension.name} / ${item.title}`,
-        })),
-    ]),
-  );
-  if (!targets.length)
-    return notify("Open another Fleet or Vessel to move into.");
-  const values = await ask(
-    "Move this Vessel",
-    [
-      {
-        name: "target",
-        label: "Destination",
-        options: targets,
-      },
-      {
-        name: "position",
-        label: "Place",
-        options: ["left", "right", "top", "bottom"].map((value) => ({
-          value,
-          label: value,
-        })),
-      },
-    ],
-    "Move",
-  );
-  if (values)
-    await act("move", {
-      id: portal.id,
-      ...(values.target.startsWith("dimension:")
-        ? { dimension: values.target.slice(10) }
-        : { target: values.target.slice(7) }),
-      position: values.position,
-    });
-}
-
-$("new-portal").onclick = () => choosePortal();
 api.on("portal-library", (event) => {
+  if (document.body.classList.contains("moving-portal"))
+    window.organisation.cancelDrag();
   portalTypes = event.types;
   window.contentPicker.update(portalTypes);
   window.portalFrames.changed(event);
@@ -732,23 +697,41 @@ $("add-dimension").onclick = () =>
   act("dimension", {
     name: `Fleet ${active().realm.dimensions.length + 1}`,
   }).catch(() => {});
-$("split-horizontal").onclick = () =>
-  focused && choosePortal(focused, "horizontal", $("split-horizontal"));
-$("split-vertical").onclick = () =>
-  focused && choosePortal(focused, "vertical", $("split-vertical"));
+function splitFocused(axis = "horizontal") {
+  const leaves = allLeaves(active().dimension.root);
+  const selected = leaves.find((item) => item.id === focused) || leaves[0];
+  if (!selected)
+    return document
+      .querySelector('.empty-workspace [aria-label="New Vessel"]')
+      ?.click();
+  const label =
+    axis === "horizontal"
+      ? "Split this Vessel side by side"
+      : "Split this Vessel top and bottom";
+  document
+    .querySelector(
+      `.portal[data-portal="${CSS.escape(selected.id)}"] [aria-label="${label}"]`,
+    )
+    ?.click();
+}
 $("shortcuts").onclick = () =>
   notify(
-    "Shift+Enter dock Voyager · Ctrl+B sidebar · Ctrl+J chat · Ctrl+\\ split · Ctrl+1 Home · Ctrl+Shift+C copy",
+    "Ctrl+Shift+O/E split · Ctrl+Shift+T new Fleet · Alt+Shift+H/J/K/L move · Shift+Enter dock · Ctrl+J chat",
   );
 keyboardDock($("home"), "home");
 document.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey || event.metaKey)) return;
+  if (event.shiftKey && ["KeyO", "KeyE", "KeyT"].includes(event.code)) {
+    event.preventDefault();
+    if (event.code === "KeyT") $("add-dimension").click();
+    else splitFocused(event.code === "KeyE" ? "vertical" : "horizontal");
+    return;
+  }
   const actions = {
     KeyB: () => $("toggle-sidebar").click(),
     KeyJ: () => window.voyagerChat?.open(),
     Digit1: () => $("home").click(),
-    Backslash: () =>
-      $(event.shiftKey ? "split-vertical" : "split-horizontal").click(),
+    Backslash: () => splitFocused(event.shiftKey ? "vertical" : "horizontal"),
     KeyK: () => $("shortcuts").click(),
   };
   if (actions[event.code]) {
