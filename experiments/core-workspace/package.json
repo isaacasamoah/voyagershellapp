@@ -5,16 +5,24 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test.cjs portal-test.cjs organisation-test.cjs placement-test.cjs ../../desktop/test/astronaut.test.cjs",
-    "format:check": "prettier --check '*.cjs' '*.js' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
-    "format": "prettier --write '*.cjs' '*.js' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'"
+    "test": "node --test test.cjs portal-test.cjs organisation-test.cjs placement-test.cjs bindings-test.cjs ../../desktop/test/astronaut.test.cjs",
+    "format:check": "prettier --check '*.cjs' '*.js' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "format": "prettier --write '*.cjs' '*.js' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "contract:generate": "node contract-build.cjs --write",
+    "contract:check": "node contract-build.cjs --check",
+    "contract:build": "node contract-build.cjs --build",
+    "pretest": "npm run contract:build"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",
-    "@xterm/xterm": "6.0.0"
+    "@xterm/xterm": "6.0.0",
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "electron": "44.10.0",
-    "prettier": "3.9.9"
+    "esbuild": "0.25.12",
+    "json-schema-to-typescript": "16.0.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3"
   }
 }

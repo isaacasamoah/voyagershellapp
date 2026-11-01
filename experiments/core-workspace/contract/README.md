@@ -20,3 +20,11 @@ Run from experiments/core-workspace:
 Cargo.lock fixes the tested dependencies, including Schemars 1.2.3. The generator explicitly selects Draft 7 rather than a changeable default. Source stays comment-free under the project convention; this document owns the mechanism and limitations.
 
 The [Serde container attributes](https://serde.rs/container-attrs.html) define tagged variants and unknown-field rejection. The [Schemars schema settings](https://docs.rs/schemars/latest/schemars/generate/struct.SchemaSettings.html) describe explicit draft selection. Library unit checks establish serialization behavior, not a working desktop feature or native renderer parity.
+
+## Generated client bindings
+
+The companion Node build runs the locked Rust exporter. `npm run contract:generate` updates the committed TypeScript declarations. `npm run contract:check` rejects declaration drift without writing files. `npm run contract:build` first checks drift, then emits fresh JSON schemas and standalone Ajv validators into ignored generated/. No hand-written wire schema is maintained alongside Rust.
+
+The validator build uses strict validation without type coercion or removing unknown fields. Package state schemas remain a separate application responsibility. Generated validation and declarations describe legal shapes; they do not grant caller authority, bind a frame or prove a write completed. The application integration is still a later increment.
+
+The tooling pins Ajv 8.20.0, json-schema-to-typescript 16.0.0, TypeScript 5.9.3 and esbuild 0.25.12 in package-lock.json. Ajv's [standalone validation](https://ajv.js.org/standalone.html) supports generating validators during the build; the application can bundle that output without compiling the wire schema in the browser. Compiler-generated files are build outputs, not extra authored production counted to enlarge the proving-code budget.
