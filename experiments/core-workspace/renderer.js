@@ -50,7 +50,7 @@ function button(label, text, action, className = "") {
   node.type = "button";
   node.title = label;
   node.setAttribute("aria-label", label);
-  node.onclick = () => Promise.resolve(action()).catch(() => {});
+  node.onclick = () => Promise.resolve(action(node)).catch(() => {});
   return node;
 }
 
@@ -234,11 +234,11 @@ function portalView(portal) {
   );
   const actions = element("div", "portal-actions");
   actions.append(
-    button("Split this Vessel side by side", "◫", () =>
-      choosePortal(portal.id),
+    button("Split this Vessel side by side", "◫", (opener) =>
+      choosePortal(portal.id, "horizontal", opener),
     ),
-    button("Split this Vessel top and bottom", "⬒", () =>
-      choosePortal(portal.id, "vertical"),
+    button("Split this Vessel top and bottom", "⬒", (opener) =>
+      choosePortal(portal.id, "vertical", opener),
     ),
     button("Move this Vessel", "↗", () => movePortal(portal)),
     button("Hide this Vessel, keep process running", "×", () =>
@@ -283,7 +283,9 @@ function layoutView(node, dimensionId) {
     empty.append(
       element("h2", "", "Room for something new."),
       element("p", "", "Your processes keep running when a view closes."),
-      button("New Vessel", "Open a Vessel", () => choosePortal()),
+      button("New Vessel", "Open a Vessel", (opener) =>
+        choosePortal(undefined, "horizontal", opener),
+      ),
       button("Show running processes", "Open a process", showProcesses),
     );
     return empty;
@@ -609,29 +611,25 @@ async function showProcesses() {
   $("dialog").showModal();
 }
 
-async function choosePortal(id, axis = "horizontal") {
-  const values = await ask(
-    "Open a Vessel",
-    [
-      {
-        name: "type",
-        label: "What would you like here?",
-        value: "terminal",
-        options: portalTypes.map((type) => ({
-          value: type.id,
-          label: type.name,
-        })),
-      },
-    ],
-    "Open",
+function choosePortal(id, axis = "horizontal", opener = $("new-portal")) {
+  const dimension = active().dimension;
+  window.contentPicker.update(portalTypes);
+  const selector = opener.id
+    ? `#${CSS.escape(opener.id)}`
+    : id
+      ? `.portal[data-portal="${CSS.escape(id)}"] [aria-label="${opener.getAttribute("aria-label")}"]`
+      : '.empty-workspace [aria-label="New Vessel"]';
+  window.contentPicker.open(
+    () => document.querySelector(selector),
+    `Open in ${dimension.name}`,
+    (type) =>
+      act(id ? "split" : "portal", {
+        id,
+        dimension: dimension.id,
+        type,
+        axis,
+      }),
   );
-  if (values)
-    await act(id ? "split" : "portal", {
-      id,
-      dimension: active().dimension.id,
-      type: values.type,
-      axis,
-    });
 }
 
 async function movePortal(portal) {
@@ -684,17 +682,19 @@ async function movePortal(portal) {
     });
 }
 
-$("new-portal").onclick = () => choosePortal().catch(() => {});
+$("new-portal").onclick = () => choosePortal();
 api.on("portal-library", (event) => {
   portalTypes = event.types;
+  window.contentPicker.update(portalTypes);
   window.portalFrames.changed(event);
   if (!state) return;
   render(state).catch((error) => notify(error.message));
 });
 
-api.on("workspace", (value) =>
-  render(value).catch((error) => notify(error.message)),
-);
+api.on("workspace", (value) => {
+  window.contentPicker.close();
+  render(value).catch((error) => notify(error.message));
+});
 api.on("terminal", (event) => {
   const view = terminals.get(event.terminal);
   if (!view) return;
@@ -733,9 +733,9 @@ $("add-dimension").onclick = () =>
     name: `Fleet ${active().realm.dimensions.length + 1}`,
   }).catch(() => {});
 $("split-horizontal").onclick = () =>
-  focused && act("split", { id: focused }).catch(() => {});
+  focused && choosePortal(focused, "horizontal", $("split-horizontal"));
 $("split-vertical").onclick = () =>
-  focused && act("split", { id: focused, axis: "vertical" }).catch(() => {});
+  focused && choosePortal(focused, "vertical", $("split-vertical"));
 $("shortcuts").onclick = () =>
   notify(
     "Shift+Enter dock Voyager · Ctrl+B sidebar · Ctrl+J chat · Ctrl+\\ split · Ctrl+1 Home · Ctrl+Shift+C copy",

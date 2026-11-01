@@ -762,3 +762,35 @@ dialog header button {
   padding: 10px;
   text-align: left;
 }
+
+#content-picker {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 6px;
+  width: 220px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  color: var(--text);
+  background: var(--sidebar);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 8px 28px #0005;
+}
+#content-picker button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+#content-picker button:focus-visible {
+  background: #c4b5fd0c;
+}
+.picker-title,
+#content-picker p {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}

@@ -6,6 +6,8 @@ The 1 November UX candidate removes duplicate conversation controls, decorative 
 
 The selected vocabulary is Voyage for a space, Fleet for a tab, Vessel for content inside a Fleet, and Portal for content attached across a Voyage. The current implementation still uses the older `realm`, `dimension` and `portal` storage and API names. Voyage-wide Portals and the new typed public contract are not implemented by this UX change.
 
+New Vessel and Split open a compact picker beside the control. It follows the live content catalogue, supports keyboard choice and cancellation, and dismisses when the user changes workspace context or clicks into embedded content. Each opening captures its destination. A stale choice cannot create in a different Fleet.
+
 ## Run and interact
 
 Use Node 24, a Linux desktop and `hc` 0.1.15 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
@@ -77,3 +79,5 @@ The maintained fixture is `prove.py`, extended by focused journey modules. Run `
 The Linux journeys passed on 1 November using Electron 44.10.0 and real Herdr Core. The organisation journey completed in stages within the same corrected instance after browser-driver setup errors; its run-history receipt retains those errors and the explicit drag cancellation used to clear a stuck driver gesture. It verified rename variants, pointer/keyboard placement, live backend and note identity, pinned avatar focus after a renderer reload, and a real stale-document save refusal. The maintained suite now has 16 passing tests. Quit was driven through Electron's `Browser.close` debugging command. OS menu and desktop keyboard activation remain unproved. Startup/uncertain-stop failure scenarios have an isolated boundary test; they are not native failure trials. This establishes neither macOS nor Windows behavior.
 
 Independent review found no remaining Required source issue in this quiet-interface increment. The known quiet-interface proving inventory fits its scoped size rule. The inherited prototype's aggregate acceptance gate remains open. No active demo was replaced, no main-branch integration occurred and no production release is claimed.
+
+The picker journey passed in an isolated Electron/Core session after an owner-approved additional iframe-dismissal correction. Independent review verified focus remained in the embedded Notes field and a missing-close negative control reproduced the defect. The final journey also exercised live type changes, stale controls, a single terminal creation and an actual stale-save rejection without replay. The earlier failed attempts remain recorded. The known scoped picker inventory fits, while the inherited aggregate gate remains open.

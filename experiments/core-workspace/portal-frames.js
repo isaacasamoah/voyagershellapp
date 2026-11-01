@@ -117,6 +117,7 @@
       return;
     }
     if (message.op === "focus") {
+      window.contentPicker?.close();
       focusPortal(view.id);
       return;
     }
