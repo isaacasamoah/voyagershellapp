@@ -24,12 +24,16 @@ fn protocol_refuses_missing_write_revision_and_caller_supplied_authority() {
 }
 
 #[test]
-fn uncertain_response_retains_operation_target_and_revision() {
-    let value = json!({"version":"1","requestId":"r","contentId":"c","status":"uncertain","expectedRevision":"old","message":"readback lost"});
-    let response: ContentResponse =
-        serde_json::from_value(value.clone()).expect("valid uncertain response");
-    assert_eq!(
-        serde_json::to_value(response).expect("response serializes"),
-        value
-    );
+fn write_outcomes_retain_operation_target_and_revision() {
+    for value in [
+        json!({"version":"1","requestId":"r","contentId":"c","status":"uncertain","expectedRevision":"old","message":"readback lost"}),
+        json!({"version":"1","requestId":"r","contentId":"c","status":"rejected","expectedRevision":"old","code":"stale-revision","message":"changed"}),
+    ] {
+        let response: ContentResponse =
+            serde_json::from_value(value.clone()).expect("valid write outcome");
+        assert_eq!(
+            serde_json::to_value(response).expect("response serializes"),
+            value
+        );
+    }
 }

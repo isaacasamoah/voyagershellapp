@@ -99,6 +99,8 @@ pub enum ContentResponse {
         content_id: String,
         code: RejectionCode,
         message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expected_revision: Option<String>,
     },
     #[serde(rename = "uncertain")]
     Uncertain {

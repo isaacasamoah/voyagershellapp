@@ -6,6 +6,8 @@ The named operations are content.describe, content.inspect and content.update. U
 
 Responses distinguish a snapshot or applied update, a known rejection, an uncertain write and a malformed request. An uncertain write retains the request ID, content ID and expected revision. Request IDs correlate an operation; this crate does not implement durable receipts or promise safe retries. A process address is not a content ID.
 
+Rejections have an optional expected revision. The application must include the attempted revision for every rejected update. Describe and inspect requests have no revision to echo. Schema validation establishes the response shape; the application establishes its relationship to the original request.
+
 Content data and its declared schema are JSON values because packages define their own data. The application must validate a declared package schema separately. A schema-less package must remain identifiable as such. These types do not establish application authority or make a declaration a sandbox.
 
 Run from experiments/core-workspace:
